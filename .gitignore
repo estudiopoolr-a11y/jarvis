@@ -1,0 +1,18 @@
+# Entornos virtuales
+.venv/
+__pycache__/
+
+# Variables de entorno y credenciales
+.env
+jarvis-be47a-firebase-adminsdk-fbsvc-c87a300e12.json
+
+# Sesiones
+whatsapp_session/
+
+# Archivos temporales y cachés
+audio_cache/
+temp_audios/
+PyWhatKit_DB.txt
+
+# Bases de datos locales (si la carpeta 'database' tiene archivos .sqlite o similares)
+database/*.sqlite3
