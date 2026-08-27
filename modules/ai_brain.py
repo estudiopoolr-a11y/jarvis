@@ -17,8 +17,11 @@ client = genai.Client()
 
 # Modelo estandarizado
 
-MODEL_NAME = "gemini-2.5-flash"
-# MODEL_NAME = "gemini-3.6-flash"
+# Cambia esto:
+# model = genai.GenerativeModel('gemini-2.5-flash')
+
+# Por esto:
+model = genai.GenerativeModel('gemini-3.6-flash')
 
 SYSTEM_INSTRUCTION = (
     "Eres JARVIS, un asistente personal de inteligencia artificial altamente lógico, "
