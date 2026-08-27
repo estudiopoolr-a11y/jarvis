@@ -90,7 +90,7 @@ def pensar_respuesta(prompt_usuario: str) -> str:
     """Responde preguntas generales usando Google Search para información en tiempo real (CDTs, noticias, etc)."""
     try:
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model="gemini-3.6-flash",
             contents=f"{SYSTEM_INSTRUCTION}\n\nMensaje del usuario: {prompt_usuario}",
             config=types.GenerateContentConfig(
                 tools=[{"google_search": {}}],  # Habilita búsqueda en tiempo real
@@ -129,7 +129,7 @@ def analizar_inversion(ticker: str) -> str:
         )
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model="gemini-3.6-flash",
             contents=prompt_analisis,
             config=types.GenerateContentConfig(
                 tools=[{"google_search": {}}]  # Búsqueda web para contexto actual
@@ -152,7 +152,7 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
         )
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model="gemini-3.6-flash",
             contents=[prompt, imagen_file],
             config=types.GenerateContentConfig(
                 safety_settings=[
@@ -179,7 +179,7 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "") -> str:
     try:
         audio_file = client.files.upload(file=ruta_audio)
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model="gemini-3.6-flash",
             contents=[SYSTEM_INSTRUCTION, audio_file],
             config=types.GenerateContentConfig(
                 safety_settings=[
