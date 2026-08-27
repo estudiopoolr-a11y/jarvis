@@ -1,29 +1,61 @@
 import os
 import glob
+import json
 import firebase_admin
 from firebase_admin import credentials, firestore
 from dotenv import load_dotenv
 
 load_dotenv()
 
-cred_path = os.getenv("FIREBASE_CREDENTIALS")
-if not cred_path:
-    json_files = glob.glob("jarvis*.json") + glob.glob("*.json")
-    for f in json_files:
-        if "firebase" in f.lower() or "adminsdk" in f.lower():
-            cred_path = f
-            break
-if not cred_path:
-    cred_path = "jarvis-be47a-firebase-adminsdk.json"
-
+# --- INICIALIZACIÓN FLEXIBLE DE FIREBASE ---
 if not firebase_admin._apps:
-    try:
-        cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred)
-    except Exception as e:
-        print(f"⚠️ Error al inicializar Firebase: {e}")
+    cred = None
+    firebase_env = os.getenv("FIREBASE_CREDENTIALS")
+
+    # 1. Intentar cargar desde variable de entorno (JSON directo o ruta)
+    if firebase_env:
+        try:
+            firebase_env_str = firebase_env.strip()
+            if firebase_env_str.startswith("{"):
+                # Es un string JSON (Render / Producción)
+                cred_dict = json.loads(firebase_env_str)
+                cred = credentials.Certificate(cred_dict)
+            elif os.path.exists(firebase_env_str):
+                # Es una ruta de archivo existente
+                cred = credentials.Certificate(firebase_env_str)
+        except Exception as e:
+            print(f"⚠️ Error parseando FIREBASE_CREDENTIALS de entorno: {e}")
+
+    # 2. Si no hay variable de entorno válida, buscar archivos .json en el entorno local
+    if not cred:
+        cred_path = None
+        json_files = glob.glob("jarvis*.json") + glob.glob("*.json")
+        for f in json_files:
+            if "firebase" in f.lower() or "adminsdk" in f.lower():
+                cred_path = f
+                break
+        
+        if not cred_path and os.path.exists("jarvis-be47a-firebase-adminsdk.json"):
+            cred_path = "jarvis-be47a-firebase-adminsdk.json"
+
+        if cred_path and os.path.exists(cred_path):
+            try:
+                cred = credentials.Certificate(cred_path)
+            except Exception as e:
+                print(f"⚠️ Error cargando archivo de credenciales local: {e}")
+
+    # 3. Inicializar app en Firebase
+    if cred:
+        try:
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase inicializado correctamente.")
+        except Exception as e:
+            print(f"⚠️ Error al inicializar Firebase App: {e}")
+    else:
+        print("❌ Error: No se encontraron credenciales válidas de Firebase.")
 
 db = firestore.client() if firebase_admin._apps else None
+
 
 def guardar_mensaje(usuario: str, usuario_id: str, mensaje: str, respuesta: str, tiene_audio: bool = False):
     if not db: return
