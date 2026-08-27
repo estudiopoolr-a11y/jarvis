@@ -16,7 +16,9 @@ load_dotenv()
 client = genai.Client()
 
 # Modelo estandarizado
-MODEL_NAME = "gemini-3.6-flash"
+MODEL_NAME = # Puedes usar cualquiera de estas dos opciones válidas:
+MODEL_NAME = "gemini-2.5-flash"
+# MODEL_NAME = "gemini-3.6-flash"
 
 SYSTEM_INSTRUCTION = (
     "Eres JARVIS, un asistente personal de inteligencia artificial altamente lógico, "
