@@ -15,13 +15,8 @@ from modules.database import (
 load_dotenv()
 client = genai.Client()
 
-# Modelo estandarizado
-
-# Cambia esto:
-# model = genai.GenerativeModel('gemini-2.5-flash')
-
-# Por esto:
-model = genai.GenerativeModel('gemini-3.6-flash')
+client = genai.Client()
+MODEL_NAME = "gemini-3.6-flash"
 
 SYSTEM_INSTRUCTION = (
     "Eres JARVIS, un asistente personal de inteligencia artificial altamente lógico, "
