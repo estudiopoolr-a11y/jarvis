@@ -163,7 +163,9 @@ def obtener_balance_financiero(usuario_id: str):
             movimientos.append(f"🔴 -${monto:,.0f} [{cat}]: {desc}")
             
     balance_neto = total_ingresos - total_gastos
-    return balance_neto, total_ingresos, total_gastos, movimientosimport os
+    return balance_neto, total_ingresos, total_gastos, movimientos
+
+import os
 import glob
 import json
 import firebase_admin
