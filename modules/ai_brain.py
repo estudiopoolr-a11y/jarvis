@@ -1,9 +1,15 @@
 import os
 import json
+import yfinance as yf
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
+from typing import Literal, Optional
 from dotenv import load_dotenv
-from modules.database import guardar_tarea, registrar_transaccion, establecer_presupuesto
+from modules.database import (
+    guardar_tarea, registrar_transaccion, establecer_presupuesto, 
+    marcar_tarea_completada
+)
 
 load_dotenv()
 client = genai.Client()
@@ -16,79 +22,45 @@ SYSTEM_INSTRUCTION = (
     "reclamándole con dureza si derrocha dinero o procrastina. Máximo 1800 caracteres."
 )
 
+class ItemIntencion(BaseModel):
+    tipo: Literal["tarea", "gasto", "ingreso", "presupuesto", "completar_tarea", "ninguno"]
+    tarea: Optional[str] = None
+    prioridad: Optional[str] = "Media"
+    fecha_limite: Optional[str] = "Pronto"
+    monto: Optional[float] = 0.0
+    categoria: Optional[str] = "General"
+    descripcion: Optional[str] = None
+    limite: Optional[float] = 0.0
+
 def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
-    """
-    Analiza el mensaje (individual o en listas/bloques masivos) para registrar tareas,
-    gastos, ingresos o presupuestos utilizando Gemini para extraer la estructura exacta.
-    """
     prompt_extractor = (
-        f"Analiza este mensaje del usuario: '{prompt_usuario}'. "
-        "El usuario puede enviarte un solo movimiento o una lista de varios gastos/transacciones en varias líneas. "
-        "Devuelve la respuesta estrictamente en formato JSON plano (sin bloques de markdown como ```json). "
-        "Si es una lista de varios elementos, devuelve una lista JSON de objetos. Si es uno solo, devuelve un solo objeto JSON. "
-        "Estructura para cada elemento según su tipo: "
-        "1. TAREA: {\"tipo\": \"tarea\", \"tarea\": \"...\", \"prioridad\": \"Alta/Media/Baja\", \"fecha_limite\": \"...\"} "
-        "2. GASTO: {\"tipo\": \"gasto\", \"monto\": 0.0, \"categoria\": \"NombreCategoria\", \"descripcion\": \"...\"} "
-        "3. INGRESO: {\"tipo\": \"ingreso\", \"monto\": 0.0, \"categoria\": \"...\", \"descripcion\": \"...\"} "
-        "4. PRESUPUESTO: {\"tipo\": \"presupuesto\", \"categoria\": \"...\", \"limite\": 0.0} "
-        "Si no es ninguna de estas, devuelve: {\"tipo\": \"ninguno\"}"
+        f"Analiza este mensaje: '{prompt_usuario}'. Identifica si el usuario quiere registrar una tarea, "
+        "un gasto, un ingreso, un presupuesto, o si está indicando que ya completó/terminó una tarea."
     )
     
     try:
         response = client.models.generate_content(
             model='gemini-3.6-flash',
             contents=prompt_extractor,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=ItemIntencion,
+            )
         )
-        raw_text = response.text.replace('```json', '').replace('```', '').strip()
-        data = json.loads(raw_text)
-        
-        # Si Gemini detectó una lista de varios registros a la vez
-        if isinstance(data, list):
-            gastos_registrados = 0
-            total_acumulado = 0
-            categorias_dict = {}
-            
-            for item in data:
-                if item.get("tipo") == "gasto":
-                    monto = float(item.get("monto", 0))
-                    cat = item.get("categoria", "Varios").strip().title()
-                    desc = item.get("descripcion", "Gasto masivo")
-                    
-                    registrar_transaccion(usuario_id, "gasto", monto, cat, desc)
-                    gastos_registrados += 1
-                    total_acumulado += monto
-                    
-                    if cat not in categorias_dict:
-                        categorias_dict[cat] = 0
-                    categorias_dict[cat] += monto
-            
-            if gastos_registrados > 0:
-                categorias_ordenadas = sorted(categorias_dict.items(), key=lambda x: x[1], reverse=True)
-                desglose_lineas = []
-                for cat, val in categorias_ordenadas:
-                    pct = (val / total_acumulado) * 100 if total_acumulado > 0 else 0
-                    desglose_lineas.append(f"- **{cat}:** ${val:,.0f} ({pct:.1f}%)")
-                
-                desglose_str = "\n".join(desglose_lineas)
-                return (
-                    f"Gastos de agosto registrados. Total acumulado hasta la fecha: **${total_acumulado:,.0f}**.\n\n"
-                    f"Aquí está el desglose objetivo de tu desastre financiero:\n{desglose_str}\n\n"
-                    "¿Analizamos esto con fría lógica? Tienes compromisos y deudas que demuestran que tu capital ya está "
-                    "comprometido. La ambigüedad en los registros y el despilfarro en categorías innecesarias "
-                    "muestran una falta absoluta de disciplina.\n\n"
-                    "**Instrucciones de optimización inmediata:**\n"
-                    "1. Recorta gastos hormiga o superfluos al mínimo indispensable hasta que los pasivos desaparezcan.\n"
-                    "2. Especifica cada centavo; no voy a procesar negligencias ni categorías mal rotuladas.\n"
-                    "3. Prioriza el pago de deudas antes de seguir regalando tu liquidez."
-                )
-
-        # Si es un solo objeto JSON
+        data = json.loads(response.text)
         tipo = data.get("tipo")
         
         if tipo == "tarea":
             guardar_tarea(usuario_id, data.get("tarea"), data.get("prioridad", "Media"), data.get("fecha_limite", "Pronto"))
-            return f"📌 Tarea registrada con prioridad **{data.get('prioridad', 'Media')}**: *{data.get('tarea')}* (Fecha límite: {data.get('fecha_limite')})."
+            return f"📌 Tarea registrada con prioridad **{data.get('prioridad', 'Media')}**: *{data.get('tarea')}* (Vence: {data.get('fecha_limite')})."
         
+        elif tipo == "completar_tarea":
+            texto_busqueda = data.get("tarea") or prompt_usuario
+            completada = marcar_tarea_completada(usuario_id, texto_busqueda)
+            if completada:
+                return f"✅ Tarea marcada como completada: *'{completada}'*. Avanza con el siguiente pendiente."
+            return "⚠️ No encontré ninguna tarea pendiente que coincida."
+
         elif tipo == "gasto":
             monto = float(data.get("monto", 0))
             cat = data.get("categoria", "General").strip().title()
@@ -101,7 +73,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             cat = data.get("categoria", "Ingreso").strip().title()
             desc = data.get("descripcion", "Pago recibido")
             registrar_transaccion(usuario_id, "ingreso", monto, cat, desc)
-            return f"💰 ¡Ingreso registrado!: **+${monto:,.0f}** en *{cat}* ({desc}). Bien hecho, a capitalizar."
+            return f"💰 ¡Ingreso registrado!: **+${monto:,.0f}** en *{cat}* ({desc}). A capitalizar."
             
         elif tipo == "presupuesto":
             cat = data.get("categoria", "General").strip().title()
@@ -111,9 +83,36 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             
     except Exception as e:
         print(f"Error procesando intención natural: {e}")
-        pass
         
     return None
+
+def analizar_inversion(ticker: str) -> str:
+    """Obtiene datos de yfinance en tiempo real y evalúa el activo objetivamente."""
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="5d")
+        if hist.empty:
+            return f"⚠️ No encontré datos para el activo `{ticker}`. Revisa el símbolo introducido."
+        
+        precio_actual = hist['Close'].iloc[-1]
+        precio_anterior = hist['Close'].iloc[-2]
+        cambio_pct = ((precio_actual - precio_anterior) / precio_anterior) * 100
+        
+        prompt_analisis = (
+            f"{SYSTEM_INSTRUCTION}\n\n"
+            f"El usuario quiere evaluar la inversión en el activo {ticker.upper()}.\n"
+            f"Precio actual: ${precio_actual:,.2f} USD. Variación reciente: {cambio_pct:+.2f}%.\n"
+            "Realiza un análisis frío, objetivo y pragmático sobre este movimiento. "
+            "Advierte los riesgos reales de volatilidad o las oportunidades lógicas sin caer en optimismo ciego."
+        )
+        
+        response = client.models.generate_content(
+            model='gemini-3.6-flash',
+            contents=prompt_analisis
+        )
+        return response.text or "Error analizando el activo."
+    except Exception as e:
+        return f"Error consultando el mercado para {ticker}: {e}"
 
 def pensar_respuesta(prompt_usuario: str) -> str:
     try:

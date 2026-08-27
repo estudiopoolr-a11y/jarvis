@@ -4,3 +4,6 @@ uvicorn
 python-dotenv
 firebase-admin
 discord.py
+yfinance
+gTTS
+pydantic
