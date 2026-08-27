@@ -40,7 +40,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     
     try:
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             contents=prompt_extractor,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -66,7 +66,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             cat = data.get("categoria", "General").strip().title()
             desc = data.get("descripcion", "Compra")
             alerta = registrar_transaccion(usuario_id, "gasto", monto, cat, desc)
-            return f"💸 Gasto registrado: **-${monto:,.0f}** en *{cat}* ({desc}).{alerta}"
+            return f"💸 Gasto registrado: **-${monto:,.0f}** en *{cat}* ({desc}).{alerta or ''}"
             
         elif tipo == "ingreso":
             monto = float(data.get("monto", 0))
@@ -86,20 +86,73 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         
     return None
 
+def pensar_respuesta(prompt_usuario: str) -> str:
+    """Responde preguntas generales usando Google Search para información en tiempo real (CDTs, noticias, etc)."""
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=f"{SYSTEM_INSTRUCTION}\n\nMensaje del usuario: {prompt_usuario}",
+            config=types.GenerateContentConfig(
+                tools=[{"google_search": {}}],  # Habilita búsqueda en tiempo real
+                safety_settings=[
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                ]
+            )
+        )
+        return response.text or "Sin respuesta disponible."
+    except Exception as e:
+        return f"Error en sistemas: {e}"
+
+def analizar_inversion(ticker: str) -> str:
+    """Analiza un activo bursátil combinando datos en vivo de yfinance y búsqueda web de Gemini."""
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="5d")
+        
+        datos_mercado = ""
+        if not hist.empty:
+            precio_actual = hist['Close'].iloc[-1]
+            precio_anterior = hist['Close'].iloc[-2]
+            cambio_pct = ((precio_actual - precio_anterior) / precio_anterior) * 100
+            datos_mercado = f"Precio actual: ${precio_actual:,.2f} USD. Variación reciente: {cambio_pct:+.2f}%."
+        else:
+            datos_mercado = f"No se obtuvieron datos directos de yfinance para `{ticker}`."
+
+        prompt_analisis = (
+            f"{SYSTEM_INSTRUCTION}\n\n"
+            f"El usuario evalúa el activo o instrumento financiero: {ticker.upper()}.\n"
+            f"Datos del mercado: {datos_mercado}\n"
+            "Busca en la web el contexto reciente de este activo o empresa y realiza un análisis frío, objetivo y pragmático."
+        )
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt_analisis,
+            config=types.GenerateContentConfig(
+                tools=[{"google_search": {}}]  # Búsqueda web para contexto actual
+            )
+        )
+        return response.text or "Error analizando el activo."
+    except Exception as e:
+        return f"Error consultando el mercado para {ticker}: {e}"
+
 def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuario_id: str = "default") -> str:
     """Procesa una imagen (factura, recibo, captura) extrayendo transacciones automáticamente."""
     try:
         imagen_file = client.files.upload(file=ruta_imagen)
         prompt = (
             f"{SYSTEM_INSTRUCTION}\n\n"
-            "El usuario te envía esta imagen. Si se trata de un recibo, factura o comrobante de pago: "
+            "El usuario te envía esta imagen. Si se trata de un recibo, factura o comprobante de pago: "
             "1. Extrae el monto total, el establecimiento/comercio y la categoría aproximada. "
             "2. Responde confirmando los datos extraídos y realiza un juicio analítico sobre el gasto.\n\n"
             f"Comentario del usuario: {prompt_adicional}"
         )
         
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             contents=[prompt, imagen_file],
             config=types.GenerateContentConfig(
                 safety_settings=[
@@ -111,7 +164,6 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
             )
         )
         
-        # Procesar intención para guardar automáticamente la transacción detectada
         if response.text:
             procesar_intencion_natural(response.text, usuario_id)
             
@@ -122,55 +174,12 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
     except Exception as e:
         return f"Error analizando imagen: {e}"
 
-def analizar_inversion(ticker: str) -> str:
-    try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="5d")
-        if hist.empty:
-            return f"⚠️ No encontré datos para el activo `{ticker}`."
-        
-        precio_actual = hist['Close'].iloc[-1]
-        precio_anterior = hist['Close'].iloc[-2]
-        cambio_pct = ((precio_actual - precio_anterior) / precio_anterior) * 100
-        
-        prompt_analisis = (
-            f"{SYSTEM_INSTRUCTION}\n\n"
-            f"El usuario evalúa el activo {ticker.upper()}.\n"
-            f"Precio actual: ${precio_actual:,.2f} USD. Variación reciente: {cambio_pct:+.2f}%.\n"
-            "Realiza un análisis frío, objetivo y pragmático sobre este activo."
-        )
-        
-        response = client.models.generate_content(
-            model='gemini-3.6-flash',
-            contents=prompt_analisis
-        )
-        return response.text or "Error analizando el activo."
-    except Exception as e:
-        return f"Error consultando el mercado para {ticker}: {e}"
-
-def pensar_respuesta(prompt_usuario: str) -> str:
-    try:
-        response = client.models.generate_content(
-            model='gemini-3.6-flash',
-            contents=f"{SYSTEM_INSTRUCTION}\n\nMensaje del usuario: {prompt_usuario}",
-            config=types.GenerateContentConfig(
-                safety_settings=[
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                ]
-            )
-        )
-        return response.text or ""
-    except Exception as e:
-        return f"Error en sistemas: {e}"
-
 def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "") -> str:
+    """Procesa archivos de audio recibidos por el bot."""
     try:
         audio_file = client.files.upload(file=ruta_audio)
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-2.5-flash',
             contents=[SYSTEM_INSTRUCTION, audio_file],
             config=types.GenerateContentConfig(
                 safety_settings=[
