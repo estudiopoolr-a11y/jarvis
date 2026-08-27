@@ -24,14 +24,14 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 TEMP_DIR = "temp_audios"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
-# Estado de usuarios: silenciados temporalmente y preferencia de respuesta por voz
-usuarios_silenciados = {} # {usuario_id: datetime_hasta}
-usuarios_modo_voz = set()  # {usuario_id}
-canales_activos = set()     # Guardar canales para notificaciones periódicas
+# Estado de usuarios
+usuarios_silenciados = {}
+usuarios_modo_voz = set()
+canales_activos = set()
 
 def generar_audio_respuesta(texto: str, output_path: str) -> str:
     texto_limpio = texto.replace("**", "").replace("*", "").replace("#", "").replace("`", "")
-    tts = gTTS(text=texto_limpio[:500], lang='es', slow=False) # Límite para evitar audios extensos
+    tts = gTTS(text=texto_limpio[:500], lang='es', slow=False)
     tts.save(output_path)
     return output_path
 
@@ -50,17 +50,18 @@ async def bucle_notificaciones():
     for canal_id in list(canales_activos):
         canal = bot.get_channel(canal_id)
         if canal:
-            # Notificación de control de estado básica
             print(f"[JARVIS Auto-Check {ahora.strftime('%H:%M')}]: Canal {canal_id} activo.")
 
 @bot.event
 async def on_message(message):
-    if message.author == bot.user: return
+    # IGNORAR A CUALQUIER BOT (Evita bucles y consumo masivo de cuota)
+    if message.author.bot:
+        return
     
     canales_activos.add(message.channel.id)
     usuario_id = str(message.author.id)
 
-    # Verificar si el usuario tiene las notificaciones pausadas/dormidas
+    # Verificar si el usuario está silenciado
     if usuario_id in usuarios_silenciados:
         if datetime.now() < usuarios_silenciados[usuario_id]:
             if message.content.startswith("!"):
@@ -86,7 +87,7 @@ async def on_message(message):
         await message.channel.send(msg)
         return
 
-    # 2. Detección automática de intenciones (Gastos, Ingresos, Tareas, Presupuestos)
+    # 2. Detección de intenciones (Solo si coincide con palabras clave)
     respuesta_intencion = procesar_intencion_natural(message.content, usuario_id)
     if respuesta_intencion:
         await message.channel.send(respuesta_intencion)
@@ -105,7 +106,7 @@ async def on_message(message):
         else:
             respuesta_ia = pensar_respuesta(message.content)
 
-    # Enviar texto o nota de voz según la preferencia activa del usuario
+    # Enviar texto o nota de voz
     await message.channel.send(respuesta_ia)
     
     if usuario_id in usuarios_modo_voz or adjunto:

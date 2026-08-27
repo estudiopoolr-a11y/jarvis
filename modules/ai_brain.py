@@ -3,6 +3,7 @@ import json
 import yfinance as yf
 from google import genai
 from google.genai import types
+from google.genai.errors import APIError
 from pydantic import BaseModel
 from typing import Literal, Optional
 from dotenv import load_dotenv
@@ -14,6 +15,9 @@ from modules.database import (
 load_dotenv()
 client = genai.Client()
 
+# Modelo estandarizado
+MODEL_NAME = "gemini-3.6-flash"
+
 SYSTEM_INSTRUCTION = (
     "Eres JARVIS, un asistente personal de inteligencia artificial altamente lógico, "
     "financieramente estricto y analítico. "
@@ -21,6 +25,13 @@ SYSTEM_INSTRUCTION = (
     "Tu objetivo es optimizar el tiempo, el rendimiento y la salud financiera del usuario, "
     "reclamándole con dureza si derrocha dinero o procrastina. Máximo 1800 caracteres."
 )
+
+# Palabras clave para pre-filtrar y no consumir peticiones innecesarias
+PALABRAS_CLAVE_INTENCION = [
+    "gasto", "gasté", "compré", "pagué", "compra", "ingreso", "gané", "recibí", 
+    "pago", "tarea", "pendiente", "recordar", "presupuesto", "límite", "completé", 
+    "terminé", "hecho", "debo", "cuota"
+]
 
 class ItemIntencion(BaseModel):
     tipo: Literal["tarea", "gasto", "ingreso", "presupuesto", "completar_tarea", "ninguno"]
@@ -33,6 +44,11 @@ class ItemIntencion(BaseModel):
     limite: Optional[float] = 0.0
 
 def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
+    # Pre-filtro local: Si no contiene palabras clave, evitar llamada a la API
+    texto_lc = prompt_usuario.lower()
+    if not any(kw in texto_lc for kw in PALABRAS_CLAVE_INTENCION):
+        return None
+
     prompt_extractor = (
         f"Analiza este mensaje: '{prompt_usuario}'. Identifica si el usuario quiere registrar una tarea, "
         "un gasto, un ingreso, un presupuesto, o si está indicando que ya completó/terminó una tarea."
@@ -40,7 +56,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     
     try:
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model=MODEL_NAME,
             contents=prompt_extractor,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -50,7 +66,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         data = json.loads(response.text)
         tipo = data.get("tipo")
         
-        if tipo == "tarea":
+        if tipo == "tarea" and data.get("tarea"):
             guardar_tarea(usuario_id, data.get("tarea"), data.get("prioridad", "Media"), data.get("fecha_limite", "Pronto"))
             return f"📌 Tarea registrada con prioridad **{data.get('prioridad', 'Media')}**: *{data.get('tarea')}* (Vence: {data.get('fecha_limite')})."
         
@@ -61,39 +77,43 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
                 return f"✅ Tarea marcada como completada: *'{completada}'*. Avanza con el siguiente pendiente."
             return "⚠️ No encontré ninguna tarea pendiente que coincida."
 
-        elif tipo == "gasto":
+        elif tipo == "gasto" and data.get("monto", 0) > 0:
             monto = float(data.get("monto", 0))
             cat = data.get("categoria", "General").strip().title()
             desc = data.get("descripcion", "Compra")
             alerta = registrar_transaccion(usuario_id, "gasto", monto, cat, desc)
             return f"💸 Gasto registrado: **-${monto:,.0f}** en *{cat}* ({desc}).{alerta or ''}"
             
-        elif tipo == "ingreso":
+        elif tipo == "ingreso" and data.get("monto", 0) > 0:
             monto = float(data.get("monto", 0))
             cat = data.get("categoria", "Ingreso").strip().title()
             desc = data.get("descripcion", "Pago recibido")
             registrar_transaccion(usuario_id, "ingreso", monto, cat, desc)
             return f"💰 ¡Ingreso registrado!: **+${monto:,.0f}** en *{cat}* ({desc}). A capitalizar."
             
-        elif tipo == "presupuesto":
+        elif tipo == "presupuesto" and data.get("limite", 0) > 0:
             cat = data.get("categoria", "General").strip().title()
             limite = float(data.get("limite", 0))
             establecer_presupuesto(usuario_id, cat, limite)
             return f"🎯 Presupuesto fijado: Máximo **${limite:,.0f}** para la categoría *{cat}*."
             
+    except APIError as e:
+        if e.code == 429:
+            return "⚠️ Se ha alcanzado el límite de cuota de la API de Gemini. Intenta de nuevo en un minuto."
+        print(f"Error de API en intención natural: {e}")
     except Exception as e:
         print(f"Error procesando intención natural: {e}")
         
     return None
 
 def pensar_respuesta(prompt_usuario: str) -> str:
-    """Responde preguntas generales usando Google Search para información en tiempo real (CDTs, noticias, etc)."""
+    """Responde preguntas generales usando Google Search para información en tiempo real."""
     try:
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model=MODEL_NAME,
             contents=f"{SYSTEM_INSTRUCTION}\n\nMensaje del usuario: {prompt_usuario}",
             config=types.GenerateContentConfig(
-                tools=[{"google_search": {}}],  # Habilita búsqueda en tiempo real
+                tools=[{"google_search": {}}],
                 safety_settings=[
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
@@ -103,11 +123,15 @@ def pensar_respuesta(prompt_usuario: str) -> str:
             )
         )
         return response.text or "Sin respuesta disponible."
+    except APIError as e:
+        if e.code == 429:
+            return "⚠️ Limite de peticiones de Gemini excedido (Error 429). Espera 60 segundos."
+        return f"Error en la API de Gemini: {e.message}"
     except Exception as e:
         return f"Error en sistemas: {e}"
 
 def analizar_inversion(ticker: str) -> str:
-    """Analiza un activo bursátil combinando datos en vivo de yfinance y búsqueda web de Gemini."""
+    """Analiza un activo bursátil combinando datos en vivo de yfinance y búsqueda web."""
     try:
         stock = yf.Ticker(ticker)
         hist = stock.history(period="5d")
@@ -129,13 +153,17 @@ def analizar_inversion(ticker: str) -> str:
         )
         
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model=MODEL_NAME,
             contents=prompt_analisis,
             config=types.GenerateContentConfig(
-                tools=[{"google_search": {}}]  # Búsqueda web para contexto actual
+                tools=[{"google_search": {}}]
             )
         )
         return response.text or "Error analizando el activo."
+    except APIError as e:
+        if e.code == 429:
+            return "⚠️ Limite de peticiones de Gemini excedido (Error 429). Espera unos momentos."
+        return f"Error de API: {e.message}"
     except Exception as e:
         return f"Error consultando el mercado para {ticker}: {e}"
 
@@ -152,7 +180,7 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
         )
         
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model=MODEL_NAME,
             contents=[prompt, imagen_file],
             config=types.GenerateContentConfig(
                 safety_settings=[
@@ -171,6 +199,10 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
         except: pass
         
         return response.text or "Imagen procesada sin texto resultante."
+    except APIError as e:
+        if e.code == 429:
+            return "⚠️ Límite de peticiones de Gemini excedido (Error 429)."
+        return f"Error de API al analizar imagen: {e.message}"
     except Exception as e:
         return f"Error analizando imagen: {e}"
 
@@ -179,7 +211,7 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "") -> str:
     try:
         audio_file = client.files.upload(file=ruta_audio)
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model=MODEL_NAME,
             contents=[SYSTEM_INSTRUCTION, audio_file],
             config=types.GenerateContentConfig(
                 safety_settings=[
@@ -193,5 +225,9 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "") -> str:
         try: client.files.delete(name=audio_file.name)
         except: pass
         return response.text or ""
+    except APIError as e:
+        if e.code == 429:
+            return "⚠️ Límite de peticiones de Gemini excedido (Error 429)."
+        return f"Error de API al procesar audio: {e.message}"
     except Exception as e:
         return f"Error al procesar audio: {e}"
