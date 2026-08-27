@@ -40,7 +40,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     
     try:
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model='gemini-3.6-flash',
             contents=prompt_extractor,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
