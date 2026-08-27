@@ -16,7 +16,7 @@ load_dotenv()
 client = genai.Client()
 
 client = genai.Client()
-MODEL_NAME = "gemini-3.6-flash"
+MODEL_NAME = "gemini-3.1-flash-lite"
 
 SYSTEM_INSTRUCTION = (
     "Eres JARVIS, un asistente personal de inteligencia artificial altamente lógico, "

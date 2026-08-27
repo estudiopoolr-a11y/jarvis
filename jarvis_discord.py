@@ -41,8 +41,9 @@ async def on_ready():
     print("Sistemas en línea. JARVIS v3.0 Operativo.")
     print(f"Conectado como: {bot.user}")
     print("==================================================")
-    if not bucle_notificaciones.is_running():
-        bucle_notificaciones.start()
+    # Bucle en segundo plano desactivado para optimizar cuotas y evitar peticiones fantasma
+    # if not bucle_notificaciones.is_running():
+    #     bucle_notificaciones.start()
 
 @tasks.loop(minutes=30)
 async def bucle_notificaciones():
@@ -74,7 +75,7 @@ async def on_message(message):
         await bot.process_commands(message)
         return
 
-    # 1. Saludo inteligente con resumen matutino
+    # 1. Saludo inteligente con resumen matutino (Sin consumo de API)
     if any(s in message.content.lower() for s in ["hola", "buenos días", "jarvis"]):
         tareas = obtener_tareas_pendientes(usuario_id)
         balance, _, _, _ = obtener_balance_financiero(usuario_id)
@@ -91,20 +92,23 @@ async def on_message(message):
     respuesta_intencion = procesar_intencion_natural(message.content, usuario_id)
     if respuesta_intencion:
         await message.channel.send(respuesta_intencion)
-        return
+        return  # Sale inmediatamente para NO realizar una segunda llamada a la API
 
     # 3. Procesamiento de Audios o Texto Normal
     formatos_audio = ('.ogg', '.mp3', '.wav', '.m4a', '.aac', '.flac')
     adjunto = next((a for a in message.attachments if a.filename.lower().endswith(formatos_audio) or 'audio' in (a.content_type or '')), None)
 
     async with message.channel.typing():
-        if adjunto:
-            ruta = os.path.join(TEMP_DIR, adjunto.filename)
-            await adjunto.save(ruta)
-            respuesta_ia = pensar_respuesta_audio(ruta, message.content)
-            if os.path.exists(ruta): os.remove(ruta)
-        else:
-            respuesta_ia = pensar_respuesta(message.content)
+        try:
+            if adjunto:
+                ruta = os.path.join(TEMP_DIR, adjunto.filename)
+                await adjunto.save(ruta)
+                respuesta_ia = pensar_respuesta_audio(ruta, message.content)
+                if os.path.exists(ruta): os.remove(ruta)
+            else:
+                respuesta_ia = pensar_respuesta(message.content)
+        except Exception as e:
+            respuesta_ia = f"⚠️ Error al procesar la solicitud: {e}"
 
     # Enviar texto o nota de voz
     await message.channel.send(respuesta_ia)
