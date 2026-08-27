@@ -340,3 +340,37 @@ def obtener_balance_financiero(usuario_id: str = "default"):
             
     balance_neto = total_ingresos - total_gastos
     return balance_neto, total_ingresos, total_gastos, movimientos
+
+def obtener_resumen_presupuestos(usuario_id: str = "default"):
+    if not db: return []
+    
+    # Obtener presupuestos configurados
+    query_p = db.collection("presupuestos")
+    if usuario_id not in ["default", "all", None]:
+        query_p = query_p.where("usuario_id", "==", str(usuario_id))
+    
+    presupuestos = query_p.stream()
+    resumen = []
+
+    for p in presupuestos:
+        data_p = p.to_dict()
+        cat = data_p.get("categoria", "General")
+        limite = data_p.get("limite", 0.0)
+        
+        # Calcular gastos acumulados en esa categoría
+        query_g = db.collection("finanzas").where("tipo", "==", "gasto").where("categoria", "==", cat)
+        if usuario_id not in ["default", "all", None]:
+            query_g = query_g.where("usuario_id", "==", str(usuario_id))
+            
+        total_gastado = sum([g.to_dict().get("monto", 0.0) for g in query_g.stream()])
+        restante = limite - total_gastado
+        
+        resumen.append({
+            "categoria": cat,
+            "limite": limite,
+            "gastado": total_gastado,
+            "restante": restante,
+            "excedido": restante < 0
+        })
+        
+    return resumen
