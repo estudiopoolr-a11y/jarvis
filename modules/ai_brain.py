@@ -86,13 +86,48 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         
     return None
 
+def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuario_id: str = "default") -> str:
+    """Procesa una imagen (factura, recibo, captura) extrayendo transacciones automáticamente."""
+    try:
+        imagen_file = client.files.upload(file=ruta_imagen)
+        prompt = (
+            f"{SYSTEM_INSTRUCTION}\n\n"
+            "El usuario te envía esta imagen. Si se trata de un recibo, factura o comrobante de pago: "
+            "1. Extrae el monto total, el establecimiento/comercio y la categoría aproximada. "
+            "2. Responde confirmando los datos extraídos y realiza un juicio analítico sobre el gasto.\n\n"
+            f"Comentario del usuario: {prompt_adicional}"
+        )
+        
+        response = client.models.generate_content(
+            model='gemini-3.6-flash',
+            contents=[prompt, imagen_file],
+            config=types.GenerateContentConfig(
+                safety_settings=[
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                ]
+            )
+        )
+        
+        # Procesar intención para guardar automáticamente la transacción detectada
+        if response.text:
+            procesar_intencion_natural(response.text, usuario_id)
+            
+        try: client.files.delete(name=imagen_file.name)
+        except: pass
+        
+        return response.text or "Imagen procesada sin texto resultante."
+    except Exception as e:
+        return f"Error analizando imagen: {e}"
+
 def analizar_inversion(ticker: str) -> str:
-    """Obtiene datos de yfinance en tiempo real y evalúa el activo objetivamente."""
     try:
         stock = yf.Ticker(ticker)
         hist = stock.history(period="5d")
         if hist.empty:
-            return f"⚠️ No encontré datos para el activo `{ticker}`. Revisa el símbolo introducido."
+            return f"⚠️ No encontré datos para el activo `{ticker}`."
         
         precio_actual = hist['Close'].iloc[-1]
         precio_anterior = hist['Close'].iloc[-2]
@@ -100,10 +135,9 @@ def analizar_inversion(ticker: str) -> str:
         
         prompt_analisis = (
             f"{SYSTEM_INSTRUCTION}\n\n"
-            f"El usuario quiere evaluar la inversión en el activo {ticker.upper()}.\n"
+            f"El usuario evalúa el activo {ticker.upper()}.\n"
             f"Precio actual: ${precio_actual:,.2f} USD. Variación reciente: {cambio_pct:+.2f}%.\n"
-            "Realiza un análisis frío, objetivo y pragmático sobre este movimiento. "
-            "Advierte los riesgos reales de volatilidad o las oportunidades lógicas sin caer en optimismo ciego."
+            "Realiza un análisis frío, objetivo y pragmático sobre este activo."
         )
         
         response = client.models.generate_content(

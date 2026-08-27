@@ -7,3 +7,6 @@ discord.py
 yfinance
 gTTS
 pydantic
+python-multipart
+pillow
+jinja2
