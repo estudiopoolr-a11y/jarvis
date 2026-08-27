@@ -16,7 +16,7 @@ load_dotenv()
 client = genai.Client()
 
 # Modelo estandarizado
-MODEL_NAME = # Puedes usar cualquiera de estas dos opciones válidas:
+
 MODEL_NAME = "gemini-2.5-flash"
 # MODEL_NAME = "gemini-3.6-flash"
 
