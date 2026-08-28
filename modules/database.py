@@ -331,13 +331,24 @@ def obtener_balance_financiero(usuario_id: str = "default"):
         cat = data.get("categoria", "General")
         desc = data.get("descripcion", "")
         
+        # Extraer la fecha del timestamp guardado en Firestore
+        timestamp = data.get("timestamp")
+        fecha_str = "Sin fecha"
+        if timestamp:
+            try:
+                # Intenta formatear si es un objeto datetime de Firebase
+                fecha_str = timestamp.strftime("%Y-%m-%d")
+            except AttributeError:
+                # Si viene en otro formato, toma los primeros caracteres
+                fecha_str = str(timestamp)[:10]
+
         if tipo == "ingreso":
             total_ingresos += monto
-            movimientos.append(f"🟢 +${monto:,.0f} [{cat}]: {desc}")
+            movimientos.append(f"🟢 [{fecha_str}] +${monto:,.0f} [{cat}]: {desc}")
         else:
             total_gastos += monto
-            movimientos.append(f"🔴 -${monto:,.0f} [{cat}]: {desc}")
-            
+            movimientos.append(f"🔴 [{fecha_str}] -${monto:,.0f} [{cat}]: {desc}")
+                   
     balance_neto = total_ingresos - total_gastos
     return balance_neto, total_ingresos, total_gastos, movimientos
 
