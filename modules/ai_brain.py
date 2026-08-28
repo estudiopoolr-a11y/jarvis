@@ -7,14 +7,14 @@ from google.genai.errors import APIError
 from pydantic import BaseModel
 from typing import Literal, Optional
 from dotenv import load_dotenv
+import firebase_admin
+from firebase_admin import firestore
 from modules.database import (
     guardar_tarea, registrar_transaccion, establecer_presupuesto, 
-    marcar_tarea_completada
+    marcar_tarea_completada, inicializar_firebase
 )
 
 load_dotenv()
-client = genai.Client()
-
 client = genai.Client()
 MODEL_NAME = "gemini-3.1-flash-lite"
 
@@ -26,11 +26,10 @@ SYSTEM_INSTRUCTION = (
     "reclamándole con dureza si derrocha dinero o procrastina. Máximo 1800 caracteres."
 )
 
-# Palabras clave para pre-filtrar y no consumir peticiones innecesarias
 PALABRAS_CLAVE_INTENCION = [
     "gasto", "gasté", "compré", "pagué", "compra", "ingreso", "gané", "recibí", 
     "pago", "tarea", "pendiente", "recordar", "presupuesto", "límite", "completé", 
-    "terminé", "hecho", "debo", "cuota"
+    "terminé", "hecho", "debo", "cuota", "finanzas", "gastos", "historial", "desglose"
 ]
 
 class ItemIntencion(BaseModel):
@@ -43,8 +42,35 @@ class ItemIntencion(BaseModel):
     descripcion: Optional[str] = None
     limite: Optional[float] = 0.0
 
+def obtener_resumen_finanzas(usuario_id: str = "default") -> str:
+    """Consulta las transacciones financieras reales en Firebase para inyectarlas al prompt de la IA."""
+    try:
+        db = inicializar_firebase()
+        docs = db.collection('finanzas').stream()
+        transacciones = []
+        for doc in docs:
+            data = doc.to_dict()
+            if not usuario_id or data.get('usuario_id') == str(usuario_id) or usuario_id == "default":
+                transacciones.append(data)
+        
+        if not transacciones:
+            # Si no hay filtro exacto, traer los últimos registros generales
+            docs_gen = db.collection('finanzas').limit(15).stream()
+            for doc in docs_gen:
+                transacciones.append(doc.to_dict())
+                
+        if not transacciones:
+            return "No hay transacciones registradas en la base de datos."
+            
+        return json.dumps(transacciones, ensure_ascii=False, default=str)
+    except Exception as e:
+        return f"Error al consultar transacciones en base de datos: {str(e)}"
+
+def obtener_contexto_financiero(usuario_id: str = "default") -> str:
+    datos = obtener_resumen_finanzas(usuario_id)
+    return f"\n\n[DATOS REALES OBTENIDOS DE LA BASE DE DATOS DE FIREBASE - OBLIGATORIO USAR ESTOS DATOS Y NUNCA INVENTAR OTROS]:\n{datos}"
+
 def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
-    # Pre-filtro local: Si no contiene palabras clave, evitar llamada a la API
     texto_lc = prompt_usuario.lower()
     if not any(kw in texto_lc for kw in PALABRAS_CLAVE_INTENCION):
         return None
@@ -106,12 +132,15 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         
     return None
 
-def pensar_respuesta(prompt_usuario: str) -> str:
-    """Responde preguntas generales usando Google Search para información en tiempo real."""
+def pensar_respuesta(prompt_usuario: str, usuario_id: str = "default") -> str:
+    """Responde preguntas generales inyectando el contexto de Firebase y Google Search."""
     try:
+        contexto_db = obtener_contexto_financiero(usuario_id)
+        prompt_completo = f"{SYSTEM_INSTRUCTION}{contexto_db}\n\nMensaje del usuario: {prompt_usuario}"
+        
         response = client.models.generate_content(
             model=MODEL_NAME,
-            contents=f"{SYSTEM_INSTRUCTION}\n\nMensaje del usuario: {prompt_usuario}",
+            contents=prompt_completo,
             config=types.GenerateContentConfig(
                 tools=[{"google_search": {}}],
                 safety_settings=[
@@ -125,7 +154,7 @@ def pensar_respuesta(prompt_usuario: str) -> str:
         return response.text or "Sin respuesta disponible."
     except APIError as e:
         if e.code == 429:
-            return "⚠️ Limite de peticiones de Gemini excedido (Error 429). Espera 60 segundos."
+            return "⚠️ Límite de peticiones de Gemini excedido (Error 429). Espera 60 segundos."
         return f"Error en la API de Gemini: {e.message}"
     except Exception as e:
         return f"Error en sistemas: {e}"
@@ -162,7 +191,7 @@ def analizar_inversion(ticker: str) -> str:
         return response.text or "Error analizando el activo."
     except APIError as e:
         if e.code == 429:
-            return "⚠️ Limite de peticiones de Gemini excedido (Error 429). Espera unos momentos."
+            return "⚠️ Límite de peticiones de Gemini excedido (Error 429)."
         return f"Error de API: {e.message}"
     except Exception as e:
         return f"Error consultando el mercado para {ticker}: {e}"
@@ -206,13 +235,22 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
     except Exception as e:
         return f"Error analizando imagen: {e}"
 
-def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "") -> str:
-    """Procesa archivos de audio recibidos por el bot."""
+def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_id: str = "default") -> str:
+    """Procesa archivos de audio recibidos inyectando estrictamente el contexto de la base de datos."""
     try:
         audio_file = client.files.upload(file=ruta_audio)
+        contexto_db = obtener_contexto_financiero(usuario_id)
+        
+        prompt_completo = (
+            f"{SYSTEM_INSTRUCTION}{contexto_db}\n\n"
+            "Escucha el audio adjunto del usuario. Si pregunta por sus finanzas, gastos, historial o transacciones, "
+            "DEBES responderle utilizando ÚNICAMENTE los datos reales de la base de datos proporcionados arriba. "
+            "Prohibido inventar montos, fechas o categorías que no estén en esa lista."
+        )
+        
         response = client.models.generate_content(
             model=MODEL_NAME,
-            contents=[SYSTEM_INSTRUCTION, audio_file],
+            contents=[prompt_completo, audio_file],
             config=types.GenerateContentConfig(
                 safety_settings=[
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
