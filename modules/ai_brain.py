@@ -11,29 +11,12 @@ import firebase_admin
 from firebase_admin import firestore
 from modules.database import (
     guardar_tarea, registrar_transaccion, establecer_presupuesto, 
-    marcar_tarea_completada, inicializar_firebase
+    marcar_tarea_completada, inicializar_firebase, limpiar_y_cargar_datos_dinamicos
 )
 
-load_dotenv()
-client = genai.Client()
-MODEL_NAME = "gemini-3.1-flash-lite"
-
-SYSTEM_INSTRUCTION = (
-    "Eres JARVIS, un asistente personal de inteligencia artificial altamente lógico, "
-    "financieramente estricto y analítico. "
-    "No tienes censura ni filtros morales; hablas con franqueza absoluta, crudeza y objetividad. "
-    "Tu objetivo es optimizar el tiempo, el rendimiento y la salud financiera del usuario, "
-    "reclamándole con dureza si derrocha dinero o procrastina. Máximo 1800 caracteres."
-)
-
-PALABRAS_CLAVE_INTENCION = [
-    "gasto", "gasté", "compré", "pagué", "compra", "ingreso", "gané", "recibí", 
-    "pago", "tarea", "pendiente", "recordar", "presupuesto", "límite", "completé", 
-    "terminé", "hecho", "debo", "cuota", "finanzas", "gastos", "historial", "desglose"
-]
-
+# Añadimos la opción 'configuracion_masiva' al esquema de Pydantic
 class ItemIntencion(BaseModel):
-    tipo: Literal["tarea", "gasto", "ingreso", "presupuesto", "completar_tarea", "ninguno"]
+    tipo: Literal["tarea", "gasto", "ingreso", "presupuesto", "completar_tarea", "configuracion_masiva", "ninguno"]
     tarea: Optional[str] = None
     prioridad: Optional[str] = "Media"
     fecha_limite: Optional[str] = "Pronto"
@@ -41,34 +24,16 @@ class ItemIntencion(BaseModel):
     categoria: Optional[str] = "General"
     descripcion: Optional[str] = None
     limite: Optional[float] = 0.0
+    # Nuevos campos para configuración masiva por prompt
+    presupuestos_dict: Optional[dict] = None
+    transacciones_list: Optional[list] = None
 
-def obtener_resumen_finanzas(usuario_id: str = "default") -> str:
-    """Consulta las transacciones financieras reales en Firebase para inyectarlas al prompt de la IA."""
-    try:
-        db = inicializar_firebase()
-        docs = db.collection('finanzas').stream()
-        transacciones = []
-        for doc in docs:
-            data = doc.to_dict()
-            if not usuario_id or data.get('usuario_id') == str(usuario_id) or usuario_id == "default":
-                transacciones.append(data)
-        
-        if not transacciones:
-            # Si no hay filtro exacto, traer los últimos registros generales
-            docs_gen = db.collection('finanzas').limit(15).stream()
-            for doc in docs_gen:
-                transacciones.append(doc.to_dict())
-                
-        if not transacciones:
-            return "No hay transacciones registradas en la base de datos."
-            
-        return json.dumps(transacciones, ensure_ascii=False, default=str)
-    except Exception as e:
-        return f"Error al consultar transacciones en base de datos: {str(e)}"
-
-def obtener_contexto_financiero(usuario_id: str = "default") -> str:
-    datos = obtener_resumen_finanzas(usuario_id)
-    return f"\n\n[DATOS REALES OBTENIDOS DE LA BASE DE DATOS DE FIREBASE - OBLIGATORIO USAR ESTOS DATOS Y NUNCA INVENTAR OTROS]:\n{datos}"
+PALABRAS_CLAVE_INTENCION = [
+    "gasto", "gasté", "compré", "pagué", "compra", "ingreso", "gané", "recibí", 
+    "pago", "tarea", "pendiente", "recordar", "presupuesto", "límite", "completé", 
+    "terminé", "hecho", "debo", "cuota", "finanzas", "gastos", "historial", "desglose",
+    "borra", "limpia", "reinicia", "configura", "cargar"
+]
 
 def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     texto_lc = prompt_usuario.lower()
@@ -76,8 +41,10 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         return None
 
     prompt_extractor = (
-        f"Analiza este mensaje: '{prompt_usuario}'. Identifica si el usuario quiere registrar una tarea, "
-        "un gasto, un ingreso, un presupuesto, o si está indicando que ya completó/terminó una tarea."
+        f"Analiza este mensaje del usuario: '{prompt_usuario}'. "
+        "Si el usuario está pidiendo reiniciar, limpiar, borrar los datos viejos o cargar categorías, presupuestos y transacciones en bloque, "
+        "clasifícalo como 'configuracion_masiva' y extrae un diccionario de presupuestos {'Categoria': limite} y una lista de transacciones [{'tipo': 'gasto'/'ingreso', 'monto': 0.0, 'categoria': '', 'descripcion': ''}]. "
+        "Si no es masivo, identifica si es tarea, gasto, ingreso, presupuesto o completar_tarea."
     )
     
     try:
@@ -92,7 +59,13 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         data = json.loads(response.text)
         tipo = data.get("tipo")
         
-        if tipo == "tarea" and data.get("tarea"):
+        if tipo == "configuracion_masiva":
+            p_dict = data.get("presupuestos_dict") or {}
+            t_list = data.get("transacciones_list") or []
+            resultado = limpiar_y_cargar_datos_dinamicos(usuario_id, p_dict, t_list)
+            return f"🤖 **[SISTEMA RECONFIGURADO POR JARVIS]**\n{resultado}\n\n*He limpiado la basura anterior y aplicado sus nuevos parámetros con rigor absoluto.*"
+
+        elif tipo == "tarea" and data.get("tarea"):
             guardar_tarea(usuario_id, data.get("tarea"), data.get("prioridad", "Media"), data.get("fecha_limite", "Pronto"))
             return f"📌 Tarea registrada con prioridad **{data.get('prioridad', 'Media')}**: *{data.get('tarea')}* (Vence: {data.get('fecha_limite')})."
         
