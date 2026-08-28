@@ -105,7 +105,11 @@ async def on_message(message):
     # 7. Procesamiento seguro con Gemini + Firebase
     async with message.channel.typing():
         try:
-            prompt_con_contexto = texto_limpio
+            # Si es audio y no hay texto escrito, le damos una instrucción base a la IA
+            if adjunto and not texto_limpio:
+                prompt_con_contexto = "El usuario ha enviado una nota de voz consultando sus finanzas o tareas."
+            else:
+                prompt_con_contexto = texto_limpio
 
             # Palabras clave para texto escrito
             palabras_finanzas = ["gasto", "gastos", "finanzas", "balance", "movimiento", "dinero", "registre", "presupuesto"]
@@ -125,7 +129,7 @@ async def on_message(message):
                     f"- Gastos Totales: ${gastos:,.0f}\n"
                     f"- Historial completo de movimientos reales: {movimientos}\n"
                     f"- Presupuestos: {presupuestos}\n"
-                    f"NOTA IMPORTANTE: Utiliza ÚNICAMENTE los movimientos reales listados arriba para responder al usuario. No inventes gastos ni categorías."
+                    f"INSTRUCCIÓN CRÍTICA: Escucha la nota de voz del usuario y respóndele basándote en los datos reales de arriba (con sus fechas y categorías). Está estrictamente prohibido inventar datos, estadísticas de servidores o decir que no tienes acceso a la base de datos."
                 )
 
             if es_consulta_tareas:
