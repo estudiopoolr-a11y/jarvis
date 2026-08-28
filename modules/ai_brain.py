@@ -11,10 +11,19 @@ import firebase_admin
 from firebase_admin import firestore
 from modules.database import (
     guardar_tarea, registrar_transaccion, establecer_presupuesto, 
-    marcar_tarea_completada, inicializar_firebase, limpiar_y_cargar_datos_dinamicos
+    marcar_tarea_completada, inicializar_firebase, limpiar_y_cargar_datos_dinamicos,
+    obtener_contexto_financiero
 )
 
-# Añadimos la opción 'configuracion_masiva' al esquema de Pydantic
+load_dotenv()
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+SYSTEM_INSTRUCTION = """
+Eres JARVIS, un asistente personal de inteligencia artificial de nivel ejecutivo, frío, analítico, eficiente, directo y sin filtros.
+Ayudas al usuario a gestionar sus finanzas personales, presupuestos, tareas y análisis de inversiones con rigor absoluto.
+"""
+
 class ItemIntencion(BaseModel):
     tipo: Literal["tarea", "gasto", "ingreso", "presupuesto", "completar_tarea", "configuracion_masiva", "ninguno"]
     tarea: Optional[str] = None
@@ -24,7 +33,6 @@ class ItemIntencion(BaseModel):
     categoria: Optional[str] = "General"
     descripcion: Optional[str] = None
     limite: Optional[float] = 0.0
-    # Nuevos campos para configuración masiva por prompt
     presupuestos_dict: Optional[dict] = None
     transacciones_list: Optional[list] = None
 
@@ -189,7 +197,7 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_COST, threshold=types.HarmBlockThreshold.BLOCK_NONE) if hasattr(types.HarmCategory, 'HARM_CATEGORY_DANGEROUS_COST') else types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                 ]
             )
         )
@@ -229,7 +237,7 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROus_CONTENT if hasattr(types.HarmCategory, 'HARM_CATEGORY_DANGEROUS_CONTENT') else types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                 ]
             )
         )
