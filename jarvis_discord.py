@@ -107,27 +107,32 @@ async def on_message(message):
         try:
             prompt_con_contexto = texto_limpio
 
-            # Inyección de contexto de Firebase según la pregunta
+            # Palabras clave para texto escrito
             palabras_finanzas = ["gasto", "gastos", "finanzas", "balance", "movimiento", "dinero", "registre", "presupuesto"]
             palabras_tareas = ["tarea", "tareas", "pendiente", "pendientes", "recordatorio"]
 
-            if any(k in texto_lower for k in palabras_finanzas):
+            # SI ES AUDIO (adjunto) O SI TIENE PALABRAS CLAVE: Inyectar contexto real de Firebase
+            es_consulta_finanzas = any(k in texto_lower for k in palabras_finanzas) or bool(adjunto)
+            es_consulta_tareas = any(k in texto_lower for k in palabras_tareas) or bool(adjunto)
+
+            if es_consulta_finanzas:
                 balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
                 presupuestos = obtener_resumen_presupuestos(usuario_id)
                 prompt_con_contexto += (
-                    f"\n\n[CONTEXTO REAL FIREBASE FINANZAS]:\n"
+                    f"\n\n[INFORMACIÓN REAL OBLIGATORIA DE FIREBASE - FINANZAS DEL USUARIO]:\n"
                     f"- Balance Neto: ${balance:,.0f}\n"
                     f"- Ingresos Totales: ${ingresos:,.0f}\n"
                     f"- Gastos Totales: ${gastos:,.0f}\n"
-                    f"- Historial de movimientos: {movimientos}\n"
-                    f"- Presupuestos: {presupuestos}"
+                    f"- Historial completo de movimientos reales: {movimientos}\n"
+                    f"- Presupuestos: {presupuestos}\n"
+                    f"NOTA IMPORTANTE: Utiliza ÚNICAMENTE los movimientos reales listados arriba para responder al usuario. No inventes gastos ni categorías."
                 )
 
-            if any(k in texto_lower for k in palabras_tareas):
+            if es_consulta_tareas:
                 tareas = obtener_tareas_pendientes(usuario_id)
-                prompt_con_contexto += f"\n\n[CONTEXTO REAL FIREBASE TAREAS]: {tareas}"
+                prompt_con_contexto += f"\n\n[INFORMACIÓN REAL DE FIREBASE - TAREAS DEL USUARIO]: {tareas}"
 
-            # Consulta a la IA
+            # Consulta a la IA con el contexto inyectado
             if adjunto:
                 ruta = os.path.join(TEMP_DIR, adjunto.filename)
                 await adjunto.save(ruta)
