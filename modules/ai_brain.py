@@ -17,7 +17,7 @@ from modules.database import (
 
 load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
 SYSTEM_INSTRUCTION = """
 Eres JARVIS, un asistente personal de inteligencia artificial de nivel ejecutivo, frío, analítico, eficiente, directo y sin filtros.

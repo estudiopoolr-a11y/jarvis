@@ -2,6 +2,7 @@ import os
 import json
 import firebase_admin
 from firebase_admin import credentials, initialize_app, firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 db = None
 
@@ -64,7 +65,7 @@ def obtener_balance_financiero(usuario_id: str = "default"):
     if not db: return 0.0, 0.0, 0.0, []
 
     try:
-        docs = db.collection("finanzas").where("usuario_id", "==", str(usuario_id)).stream()
+        docs = db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", str(usuario_id))).stream()
         ingresos = 0.0
         gastos = 0.0
         transacciones = []
@@ -89,7 +90,7 @@ def obtener_resumen_presupuestos(usuario_id: str = "default"):
     if not db: return {}
 
     try:
-        p_docs = db.collection("presupuestos").where("usuario_id", "==", str(usuario_id)).stream()
+        p_docs = db.collection("presupuestos").where(filter=FieldFilter("usuario_id", "==", str(usuario_id))).stream()
         presupuestos = {}
         for doc in p_docs:
             d = doc.to_dict()
@@ -105,7 +106,7 @@ def obtener_tareas_pendientes(usuario_id: str = "default"):
     if not db: return []
 
     try:
-        docs = db.collection("tareas").where("usuario_id", "==", str(usuario_id)).where("completada", "==", False).stream()
+        docs = db.collection("tareas").where(filter=FieldFilter("usuario_id", "==", str(usuario_id))).where(filter=FieldFilter("completada", "==", False)).stream()
         tareas = []
         for doc in docs:
             t = doc.to_dict()
@@ -137,7 +138,7 @@ def marcar_tarea_completada(usuario_id: str, texto_busqueda: str):
     if not db: db = inicializar_firebase()
     if not db: return None
     try:
-        docs = db.collection("tareas").where("usuario_id", "==", str(usuario_id)).where("completada", "==", False).stream()
+        docs = db.collection("tareas").where(filter=FieldFilter("usuario_id", "==", str(usuario_id))).where(filter=FieldFilter("completada", "==", False)).stream()
         for doc in docs:
             data = doc.to_dict()
             if texto_busqueda.lower() in data.get("tarea", "").lower():
