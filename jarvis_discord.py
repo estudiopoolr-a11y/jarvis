@@ -55,14 +55,14 @@ async def bucle_notificaciones():
 
 @bot.event
 async def on_message(message):
-    # 1. Ignorar a cualquier bot (evita bucles)
+    # 1. Ignorar a cualquier bot
     if message.author.bot:
         return
 
     canales_activos.add(message.channel.id)
     usuario_id = str(message.author.id)
 
-    # 2. Verificar si el usuario está silenciado
+    # 2. Control de usuarios silenciados
     if usuario_id in usuarios_silenciados:
         if datetime.now() < usuarios_silenciados[usuario_id]:
             if message.content.startswith("!"):
@@ -71,41 +71,44 @@ async def on_message(message):
         else:
             del usuarios_silenciados[usuario_id]
 
-    # 3. Procesar comandos prefijados con ! (Sin consumo directo de IA salvo que el comando la invoque)
+    # 3. Comandos con !
     if message.content.startswith("!"):
         await bot.process_commands(message)
         return
 
-    # Detectar si hay audios adjuntos
+    # Limpiar la mención (<@ID>) y obtener el texto limpio
+    texto_limpio = message.content.replace(f"<@{bot.user.id}>", "").strip()
+    texto_lower = texto_limpio.lower()
+
+    # Detectar archivos de audio
     formatos_audio = ('.ogg', '.mp3', '.wav', '.m4a', '.aac', '.flac')
     adjunto = next((a for a in message.attachments if a.filename.lower().endswith(formatos_audio) or 'audio' in (a.content_type or '')), None)
 
-    # 4. FILTRO ANTI-CONSUMO: Ignorar mensajes que no sean audios ni mencionen al bot
-    es_mencion = bot.user.mentioned_in(message)
-    if not es_mencion and not adjunto:
-        # 4.1 Saludo local (sin consumo de API)
-        if any(s in message.content.lower() for s in ["hola", "buenos días", "jarvis"]):
-            tareas = obtener_tareas_pendientes(usuario_id)
-            balance, _, _, _ = obtener_balance_financiero(usuario_id)
-            saludo_extra = f" Balance actual: ${balance:,.0f}."
-            if tareas:
-                lista = "\n".join([f"• [{t['prioridad']}] {t['tarea']} (Vence: {t['fecha_limite']})" for t in tareas])
-                msg = f"Sistemas activos.{saludo_extra}\nTareas pendientes:\n{lista}"
-            else:
-                msg = f"Sistemas activos.{saludo_extra} Sin tareas críticas pendientes."
-            await message.channel.send(msg)
+    # 4. SALUDO LOCAL: Solo si el mensaje es ÚNICAMENTE un saludo (sin preguntas adicionales)
+    if texto_lower in ["hola", "buenos dias", "buenos días", "buenas tardes", "buenas noches"]:
+        tareas = obtener_tareas_pendientes(usuario_id)
+        balance, _, _, _ = obtener_balance_financiero(usuario_id)
+        saludo_extra = f" Balance actual: ${balance:,.0f}."
+        if tareas:
+            lista = "\n".join([f"• [{t['prioridad']}] {t['tarea']} (Vence: {t['fecha_limite']})" for t in tareas])
+            msg = f"Sistemas activos.{saludo_extra}\nTareas pendientes:\n{lista}"
+        else:
+            msg = f"Sistemas activos.{saludo_extra} Sin tareas críticas pendientes."
+        await message.channel.send(msg)
         return
 
-    # Limpiar el texto quitando la etiqueta del bot (<@ID>)
-    texto_limpio = message.content.replace(f"<@{bot.user.id}>", "").strip()
+    # 5. FILTRO DE ATENCIÓN: Solo procesar si lo mencionan (@Jarvis) o envían audio
+    es_mencion = bot.user.mentioned_in(message)
+    if not es_mencion and not adjunto:
+        return
 
-    # 5. Detección de intenciones financieras/tareas
+    # 6. Intentar registrar intención (gasto, ingreso, tarea)
     respuesta_intencion = procesar_intencion_natural(texto_limpio, usuario_id)
     if respuesta_intencion:
         await message.channel.send(respuesta_intencion)
         return
 
-    # 6. Procesamiento principal con Gemini (Solo ejecuta con @mención o audio)
+    # 7. Si no es registro, enviar la consulta a Gemini (pensar_respuesta)
     async with message.channel.typing():
         try:
             if adjunto:
@@ -118,7 +121,6 @@ async def on_message(message):
         except Exception as e:
             respuesta_ia = f"⚠️ Error al procesar la solicitud: {e}"
 
-    # Enviar respuesta en texto y audio TTS opcional
     await message.channel.send(respuesta_ia)
     
     if usuario_id in usuarios_modo_voz or adjunto:
