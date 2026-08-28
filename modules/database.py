@@ -6,10 +6,19 @@ from firebase_admin import credentials, initialize_app, firestore
 db = None
 
 def inicializar_firebase():
-    """Inicializa Firebase Firestore soportando variables de entorno o archivo local."""
+    """Inicializa Firebase Firestore soportando variables de entorno, creación automática de archivo temporal o archivo local."""
     global db
     if not firebase_admin._apps:
-        firebase_json_str = os.getenv("FIREBASE_CREDENTIALS_JSON")
+        # Buscar en múltiples nombres posibles de variables de entorno en Render (incluyendo FIREBASE_CREDENTIALS)
+        firebase_json_str = (
+            os.getenv("FIREBASE_CREDENTIALS") or
+            os.getenv("FIREBASE_CREDENTIALS_JSON") or 
+            os.getenv("FIREBASE_KEY") or 
+            os.getenv("FIREBASE_SERVICE_ACCOUNT")
+        )
+        
+        cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "serviceAccountKey.json")
+        
         if firebase_json_str:
             try:
                 firebase_json_str = firebase_json_str.strip()
@@ -17,20 +26,33 @@ def inicializar_firebase():
                    (firebase_json_str.startswith('"') and firebase_json_str.endswith('"')):
                     firebase_json_str = firebase_json_str[1:-1].strip()
                 
-                cred_dict = json.loads(firebase_json_str)
-                cred = credentials.Certificate(cred_dict)
-                initialize_app(cred)
-                print("✅ Firebase inicializado con éxito desde FIREBASE_CREDENTIALS_JSON en Render.")
-            except Exception as e:
-                print(f"❌ Error crítico cargando credenciales de la variable de entorno: {e}")
-        else:
-            cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "serviceAccountKey.json")
-            if os.path.exists(cred_path):
+                # Escribir el JSON de la variable de entorno directamente al archivo de credenciales
+                with open(cred_path, "w", encoding="utf-8") as f:
+                    f.write(firebase_json_str)
+                
                 cred = credentials.Certificate(cred_path)
                 initialize_app(cred)
-                print("✅ Firebase inicializado desde archivo local.")
+                print("✅ Firebase inicializado con éxito creando archivo de credenciales desde la variable de entorno de Render.")
+            except Exception as e:
+                print(f"❌ Error crítico procesando credenciales desde la variable de entorno: {e}")
+                try:
+                    cred_dict = json.loads(firebase_json_str)
+                    cred = credentials.Certificate(cred_dict)
+                    initialize_app(cred)
+                    print("✅ Firebase inicializado con éxito desde diccionario JSON directo.")
+                except Exception as e2:
+                    print(f"❌ Error secundario al inicializar con diccionario: {e2}")
+        
+        if not firebase_admin._apps:
+            if os.path.exists(cred_path):
+                try:
+                    cred = credentials.Certificate(cred_path)
+                    initialize_app(cred)
+                    print(f"✅ Firebase inicializado desde archivo local '{cred_path}'.")
+                except Exception as e:
+                    print(f"❌ Error cargando archivo local '{cred_path}': {e}")
             else:
-                print("⚠️ Advertencia: No se encontró archivo de credenciales de Firebase ni variable de entorno en Render.")
+                print("⚠️ Advertencia CRÍTICA: No se encontró la variable de entorno FIREBASE_CREDENTIALS ni el archivo de credenciales en Render.")
     
     if firebase_admin._apps:
         db = firestore.client()
@@ -139,13 +161,11 @@ def registrar_transaccion(usuario_id: str, tipo: str, monto: float, categoria: s
             "timestamp": firestore.SERVER_TIMESTAMP
         })
         
-        # Verificar presupuestos si es gasto
         if tipo.lower() == "gasto":
             presupuestos = obtener_resumen_presupuestos(usuario_id)
             limite = presupuestos.get(categoria.capitalize(), 0)
             if limite > 0:
                 _, _, total_gastado_cat, _ = obtener_balance_financiero(usuario_id)
-                # Alerta si supera el 80% o el 100%
                 if total_gastado_cat >= limite:
                     return f" 🚨 ¡ALERTA CRÍTICA! Has superado el presupuesto para '{categoria}' (${limite:,.0f}). ¡Deja de gastar!"
     except Exception as e:
@@ -166,19 +186,16 @@ def establecer_presupuesto(usuario_id: str, categoria: str, limite: float):
         print(f"Error estableciendo presupuesto: {e}")
 
 def limpiar_y_cargar_datos_dinamicos(usuario_id: str, presupuestos: dict, transacciones: list):
-    """Limpia la base de datos y carga masivamente los presupuestos y transacciones indicados por prompt."""
     global db
     if not db: db = inicializar_firebase()
     if not db: return "Error de conexión a Firebase"
 
     try:
-        # 1. Borrar colecciones antiguas
         for col_name in ["finanzas", "presupuestos", "tareas"]:
             docs = db.collection(col_name).stream()
             for doc in docs:
                 doc.reference.delete()
 
-        # 2. Cargar Presupuestos
         for cat, limite in presupuestos.items():
             db.collection("presupuestos").document(f"{usuario_id}_{cat.lower()}").set({
                 "usuario_id": str(usuario_id),
@@ -186,7 +203,6 @@ def limpiar_y_cargar_datos_dinamicos(usuario_id: str, presupuestos: dict, transa
                 "limite": float(limite)
             })
 
-        # 3. Cargar Transacciones
         for t in transacciones:
             db.collection("finanzas").add({
                 "usuario_id": str(usuario_id),

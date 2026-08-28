@@ -4,7 +4,7 @@ __pycache__/
 
 # Variables de entorno y credenciales
 .env
-jarvis-be47a-firebase-adminsdk-fbsvc-c87a300e12.json
+serviceAccountKey.json.json
 
 # Sesiones
 whatsapp_session/
