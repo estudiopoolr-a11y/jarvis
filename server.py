@@ -6,12 +6,11 @@ from fastapi.responses import HTMLResponse
 from modules.database import (
     obtener_balance_financiero,
     obtener_tareas_pendientes,
-    obtener_resumen_presupuestos
+    obtener_detalle_presupuestos
 )
 from pydantic import BaseModel
 import uvicorn
 
-from modules.database import obtener_balance_financiero, obtener_tareas_pendientes
 from modules.ai_brain import procesar_intencion_natural, pensar_respuesta, pensar_respuesta_imagen
 
 app = FastAPI(title="JARVIS Control Center")
@@ -25,7 +24,7 @@ class ComandoPayload(BaseModel):
 def render_dashboard(usuario_id: str = "default"):
     balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
     tareas = obtener_tareas_pendientes(usuario_id)
-    presupuestos = obtener_resumen_presupuestos(usuario_id)
+    presupuestos = obtener_detalle_presupuestos(usuario_id)
 
     # Generar HTML de Presupuestos
     html_presupuestos = ""

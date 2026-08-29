@@ -100,6 +100,32 @@ def obtener_resumen_presupuestos(usuario_id: str = "default"):
         print(f"Error obteniendo presupuestos: {e}")
         return {}
 
+def obtener_detalle_presupuestos(usuario_id: str = "default"):
+    """Devuelve una lista de presupuestos con lo gastado, restante y si está excedido por categoría."""
+    presupuestos = obtener_resumen_presupuestos(usuario_id)
+    if not presupuestos:
+        return []
+
+    _, _, _, transacciones = obtener_balance_financiero(usuario_id)
+    gastos_por_categoria = {}
+    for t in transacciones:
+        if t.get("tipo", "gasto") == "gasto":
+            cat = t.get("categoria", "General")
+            gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0.0) + float(t.get("monto", 0))
+
+    detalle = []
+    for categoria, limite in presupuestos.items():
+        gastado = gastos_por_categoria.get(categoria, 0.0)
+        restante = limite - gastado
+        detalle.append({
+            "categoria": categoria,
+            "limite": float(limite),
+            "gastado": float(gastado),
+            "restante": float(restante),
+            "excedido": gastado > limite,
+        })
+    return detalle
+
 def obtener_tareas_pendientes(usuario_id: str = "default"):
     global db
     if not db: db = inicializar_firebase()

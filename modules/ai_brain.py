@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import yfinance as yf
 from google import genai
 from google.genai import types
@@ -17,7 +18,34 @@ from modules.database import (
 
 load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+# gemini-2.0-flash tiene los límites de cuota gratuitos más altos y soporta texto, imagen y audio.
+# Para eliminar límites por completo, activa la facturación en tu proyecto de Google AI Studio.
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+# Configuración de seguridad reutilizable (evita bloqueos de contenido).
+SAFETY_SETTINGS = [
+    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+]
+
+
+def _generar_con_reintento(**kwargs):
+    """Llama a Gemini reintentando ante errores 429 (cuota) con espera exponencial."""
+    intentos = 3
+    espera = 5
+    for intento in range(intentos):
+        try:
+            return client.models.generate_content(**kwargs)
+        except APIError as e:
+            if getattr(e, "code", None) == 429 and intento < intentos - 1:
+                print(f"⚠️ Cuota de Gemini excedida (429). Reintentando en {espera}s... ({intento + 1}/{intentos})")
+                time.sleep(espera)
+                espera *= 2
+                continue
+            raise
+
 
 SYSTEM_INSTRUCTION = """
 Eres JARVIS, un asistente personal de inteligencia artificial de nivel ejecutivo, frío, analítico, eficiente, directo y sin filtros.
@@ -56,7 +84,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     )
     
     try:
-        response = client.models.generate_content(
+        response = _generar_con_reintento(
             model=MODEL_NAME,
             contents=prompt_extractor,
             config=types.GenerateContentConfig(
@@ -119,17 +147,12 @@ def pensar_respuesta(prompt_usuario: str, usuario_id: str = "default") -> str:
         contexto_db = obtener_contexto_financiero(usuario_id)
         prompt_completo = f"{SYSTEM_INSTRUCTION}{contexto_db}\n\nMensaje del usuario: {prompt_usuario}"
         
-        response = client.models.generate_content(
+        response = _generar_con_reintento(
             model=MODEL_NAME,
             contents=prompt_completo,
             config=types.GenerateContentConfig(
                 tools=[{"google_search": {}}],
-                safety_settings=[
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                ]
+                safety_settings=SAFETY_SETTINGS,
             )
         )
         return response.text or "Sin respuesta disponible."
@@ -162,7 +185,7 @@ def analizar_inversion(ticker: str) -> str:
             "Busca en la web el contexto reciente de este activo o empresa y realiza un análisis frío, objetivo y pragmático."
         )
         
-        response = client.models.generate_content(
+        response = _generar_con_reintento(
             model=MODEL_NAME,
             contents=prompt_analisis,
             config=types.GenerateContentConfig(
@@ -189,16 +212,11 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
             f"Comentario del usuario: {prompt_adicional}"
         )
         
-        response = client.models.generate_content(
+        response = _generar_con_reintento(
             model=MODEL_NAME,
             contents=[prompt, imagen_file],
             config=types.GenerateContentConfig(
-                safety_settings=[
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_COST, threshold=types.HarmBlockThreshold.BLOCK_NONE) if hasattr(types.HarmCategory, 'HARM_CATEGORY_DANGEROUS_COST') else types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                ]
+                safety_settings=SAFETY_SETTINGS,
             )
         )
         
@@ -229,16 +247,11 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
             "Prohibido inventar montos, fechas o categorías que no estén en esa lista."
         )
         
-        response = client.models.generate_content(
+        response = _generar_con_reintento(
             model=MODEL_NAME,
             contents=[prompt_completo, audio_file],
             config=types.GenerateContentConfig(
-                safety_settings=[
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROus_CONTENT if hasattr(types.HarmCategory, 'HARM_CATEGORY_DANGEROUS_CONTENT') else types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                ]
+                safety_settings=SAFETY_SETTINGS,
             )
         )
         try: client.files.delete(name=audio_file.name)

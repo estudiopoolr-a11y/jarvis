@@ -163,9 +163,11 @@ async def on_message(message):
         finally:
             if os.path.exists(ruta_tts): os.remove(ruta_tts)
 
-    # Guardar en Firestore
+    # Guardar en Firestore (memoria de corto plazo: mensaje del usuario y respuesta de JARVIS)
     try:
-        guardar_mensaje(str(message.author), usuario_id, texto_limpio, respuesta_ia, tiene_audio=bool(adjunto))
+        entrada_usuario = texto_limpio or ("[Nota de voz]" if adjunto else "")
+        guardar_mensaje(usuario_id, str(message.author), entrada_usuario)
+        guardar_mensaje(usuario_id, "JARVIS", respuesta_ia)
     except Exception as e:
         print(f"Error guardando mensaje en Firestore: {e}")
 
@@ -240,7 +242,13 @@ async def ver_finanzas(ctx):
         reporte += f"• **Gastos Totales:** -${gastos:,.0f}\n"
         reporte += f"• **Balance Neto:** ${balance:,.0f}\n\n"
         if movimientos:
-            reporte += "Últimos movimientos:\n" + "\n".join(movimientos[-10:])
+            lineas = []
+            for m in movimientos[-10:]:
+                signo = "+" if m.get("tipo") == "ingreso" else "-"
+                lineas.append(
+                    f"• {signo}${float(m.get('monto', 0)):,.0f} | {m.get('categoria', 'General')} — {m.get('descripcion', '')}"
+                )
+            reporte += "Últimos movimientos:\n" + "\n".join(lineas)
         else:
             reporte += "Sin movimientos registrados."
         await ctx.send(reporte)
