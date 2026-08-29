@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import yfinance as yf
@@ -31,20 +32,78 @@ SAFETY_SETTINGS = [
 ]
 
 
+def _analizar_error_cuota(e: APIError):
+    """Extrae de un error 429 el tiempo de espera sugerido y si es un límite diario.
+
+    Devuelve (es_limite_diario: bool, segundos_espera: int | None).
+    """
+    segundos = None
+    es_diario = False
+
+    # 1) Intentar leer los 'details' estructurados que devuelve Google.
+    detalles = getattr(e, "details", None)
+    try:
+        error_obj = detalles.get("error", detalles) if isinstance(detalles, dict) else {}
+        lista = error_obj.get("details", []) if isinstance(error_obj, dict) else []
+        for d in lista:
+            if not isinstance(d, dict):
+                continue
+            tipo = d.get("@type", "")
+            if "RetryInfo" in tipo and d.get("retryDelay"):
+                rd = str(d["retryDelay"]).replace("s", "").strip()
+                try:
+                    segundos = int(float(rd))
+                except ValueError:
+                    pass
+            if "QuotaFailure" in tipo:
+                for v in d.get("violations", []):
+                    identificador = (v.get("quotaId", "") + v.get("quotaMetric", "")).lower()
+                    if "perday" in identificador or "per_day" in identificador:
+                        es_diario = True
+    except Exception:
+        pass
+
+    # 2) Respaldo: buscar pistas en el texto del error.
+    texto = str(getattr(e, "message", "") or e)
+    if segundos is None:
+        m = re.search(r"retryDelay['\"]?:?\s*['\"]?(\d+)\s*s", texto)
+        if m:
+            segundos = int(m.group(1))
+    if not es_diario and ("perday" in texto.lower().replace(" ", "") or "per day" in texto.lower()):
+        es_diario = True
+
+    return es_diario, segundos
+
+
+def _mensaje_429(e: APIError) -> str:
+    """Genera un mensaje claro para el usuario según el tipo de límite alcanzado."""
+    es_diario, segundos = _analizar_error_cuota(e)
+    if es_diario:
+        return (
+            "⚠️ **Cuota diaria gratuita de Gemini agotada.** No se soluciona esperando unos segundos: "
+            "el límite diario del plan gratuito solo se reinicia a medianoche (hora del Pacífico, UTC-8). "
+            "Para operar sin límites, activa la facturación de tu proyecto en Google AI Studio."
+        )
+    espera = segundos or 60
+    return f"⚠️ Límite de peticiones por minuto de Gemini alcanzado (Error 429). Reintenta en {espera} segundos."
+
+
 def _generar_con_reintento(**kwargs):
-    """Llama a Gemini reintentando ante errores 429 (cuota) con espera exponencial."""
+    """Llama a Gemini reintentando ante 429 por minuto; no reintenta si es límite diario."""
     intentos = 3
-    espera = 5
     for intento in range(intentos):
         try:
             return client.models.generate_content(**kwargs)
         except APIError as e:
-            if getattr(e, "code", None) == 429 and intento < intentos - 1:
-                print(f"⚠️ Cuota de Gemini excedida (429). Reintentando en {espera}s... ({intento + 1}/{intentos})")
-                time.sleep(espera)
-                espera *= 2
-                continue
-            raise
+            if getattr(e, "code", None) != 429:
+                raise
+            es_diario, segundos = _analizar_error_cuota(e)
+            # Un límite diario no se recupera esperando segundos: fallar de inmediato.
+            if es_diario or intento == intentos - 1:
+                raise
+            espera = min(segundos or (5 * (intento + 1)), 30)
+            print(f"⚠️ Cuota de Gemini excedida (429). Reintentando en {espera}s... ({intento + 1}/{intentos})")
+            time.sleep(espera)
 
 
 SYSTEM_INSTRUCTION = """
@@ -134,7 +193,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             
     except APIError as e:
         if e.code == 429:
-            return "⚠️ Se ha alcanzado el límite de cuota de la API de Gemini. Intenta de nuevo en un minuto."
+            return _mensaje_429(e)
         print(f"Error de API en intención natural: {e}")
     except Exception as e:
         print(f"Error procesando intención natural: {e}")
