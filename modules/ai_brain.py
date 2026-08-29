@@ -10,9 +10,10 @@ from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import firestore
 from modules.database import (
-    guardar_tarea, registrar_transaccion, establecer_presupuesto, 
+    guardar_tarea, registrar_transaccion, establecer_presupuesto,
     marcar_tarea_completada, inicializar_firebase, limpiar_y_cargar_datos_dinamicos,
-    obtener_contexto_financiero
+    obtener_contexto_financiero,
+    obtener_tareas_pendientes, obtener_balance_financiero, obtener_resumen_presupuestos
 )
 
 load_dotenv()
@@ -37,14 +38,43 @@ class ItemIntencion(BaseModel):
     transacciones_list: Optional[list] = None
 
 PALABRAS_CLAVE_INTENCION = [
-    "gasto", "gasté", "compré", "pagué", "compra", "ingreso", "gané", "recibí", 
-    "pago", "tarea", "pendiente", "recordar", "presupuesto", "límite", "completé", 
+    "gasto", "gasté", "compré", "pagué", "compra", "ingreso", "gané", "recibí",
+    "pago", "tarea", "pendiente", "recordar", "presupuesto", "límite", "completé",
     "terminé", "hecho", "debo", "cuota", "finanzas", "gastos", "historial", "desglose",
     "borra", "limpia", "reinicia", "configura", "cargar"
 ]
 
 def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
-    texto_lc = prompt_usuario.lower()
+    texto_lc = prompt_usuario.lower().strip()
+
+    # Deterministic shortcuts to avoid unnecessary Gemini calls
+    # Clear or reload data
+    if any(k in texto_lc for k in ["borra", "limpia", "reinicia"]) and any(k in texto_lc for k in ["datos", "base", "historial"]):
+        result = limpiar_y_cargar_datos_dinamicos(usuario_id, {}, [])
+        return f"🤖 **[SISTEMA REINICIADO POR JARVIS]**\n{result}\n\n*He limpiado la basura anterior.*"
+    if "cargar" in texto_lc and ("config" in texto_lc or "presupuestos" in texto_lc or "transacciones" in texto_lc):
+        # For now just clear and ask user to provide details via structured input later
+        result = limpiar_y_cargar_datos_dinamicos(usuario_id, {}, [])
+        return f"🤖 **[SISTEMA LIMPIADO]**\n{result}\n\n*Para cargar nueva configuración, proporciona los presupuestos y transacciones en formato estructurado.*"
+    # List pending tasks
+    if "tarea" in texto_lc and any(k in texto_lc for k in ["listar", "mostrar", "ver", "pendientes"]):
+        tareas = obtener_tareas_pendientes(usuario_id)
+        if not tareas:
+            return "📋 No tienes tareas pendientes."
+        lista = "\n".join([f"• [{t['prioridad']}] {t['tarea']} (Vence: {t['fecha_limite']})" for t in tareas])
+        return f"📋 **Tareas pendientes:**\n{lista}"
+    # Check balance/finances
+    if any(k in texto_lc for k in ["balance", "finanzas", "ingresos", "gastos"]) and any(k in texto_lc for k in ["cual", "cúal", "cuanto", "cuánto", "ver", "mostrar", "consultar", "cuesta", "cuánto"]):
+        balance, ingresos, gastos, _ = obtener_balance_financiero(usuario_id)
+        presupuestos = obtener_resumen_presupuestos(usuario_id)
+        msg = f"💰 **Balance financiero:**\n- Ingresos: +${ingresos:,.0f}\n- Gastos: -${gastos:,.0f}\n- Neto: ${balance:,.0f}\n"
+        if presupuestos:
+            msg += "- Presupuestos: " + ", ".join([f"{k}: ${v:,.0f}" for k, v in presupuestos.items()])
+        else:
+            msg += "- No hay presupuestos establecidos."
+        return msg
+
+    # If no intention keywords, return None to let pensar_respuesta handle general queries
     if not any(kw in texto_lc for kw in PALABRAS_CLAVE_INTENCION):
         return None
 
@@ -54,7 +84,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         "clasifícalo como 'configuracion_masiva' y extrae un diccionario de presupuestos {'Categoria': limite} y una lista de transacciones [{'tipo': 'gasto'/'ingreso', 'monto': 0.0, 'categoria': '', 'descripcion': ''}]. "
         "Si no es masivo, identifica si es tarea, gasto, ingreso, presupuesto o completar_tarea."
     )
-    
+
     try:
         response = client.models.generate_content(
             model=MODEL_NAME,
@@ -66,7 +96,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         )
         data = json.loads(response.text)
         tipo = data.get("tipo")
-        
+
         if tipo == "configuracion_masiva":
             p_dict = data.get("presupuestos_dict") or {}
             t_list = data.get("transacciones_list") or []
@@ -76,7 +106,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         elif tipo == "tarea" and data.get("tarea"):
             guardar_tarea(usuario_id, data.get("tarea"), data.get("prioridad", "Media"), data.get("fecha_limite", "Pronto"))
             return f"📌 Tarea registrada con prioridad **{data.get('prioridad', 'Media')}**: *{data.get('tarea')}* (Vence: {data.get('fecha_limite')})."
-        
+
         elif tipo == "completar_tarea":
             texto_busqueda = data.get("tarea") or prompt_usuario
             completada = marcar_tarea_completada(usuario_id, texto_busqueda)
@@ -90,27 +120,71 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             desc = data.get("descripcion", "Compra")
             alerta = registrar_transaccion(usuario_id, "gasto", monto, cat, desc)
             return f"💸 Gasto registrado: **-${monto:,.0f}** en *{cat}* ({desc}).{alerta or ''}"
-            
+
         elif tipo == "ingreso" and data.get("monto", 0) > 0:
             monto = float(data.get("monto", 0))
             cat = data.get("categoria", "Ingreso").strip().title()
             desc = data.get("descripcion", "Pago recibido")
             registrar_transaccion(usuario_id, "ingreso", monto, cat, desc)
             return f"💰 ¡Ingreso registrado!: **+${monto:,.0f}** en *{cat}* ({desc}). A capitalizar."
-            
+
         elif tipo == "presupuesto" and data.get("limite", 0) > 0:
             cat = data.get("categoria", "General").strip().title()
             limite = float(data.get("limite", 0))
             establecer_presupuesto(usuario_id, cat, limite)
             return f"🎯 Presupuesto fijado: Máximo **${limite:,.0f}** para la categoría *{cat}*."
-            
+
     except APIError as e:
         if e.code == 429:
-            return "⚠️ Se ha alcanzado el límite de cuota de la API de Gemini. Intenta de nuevo en un minuto."
+            retry_delay_seconds = None
+            try:
+                # Try to extract retry delay from error details
+                if hasattr(e, 'details') and e.details:
+                    import json
+                    if isinstance(e.details, str):
+                        try:
+                            details = json.loads(e.details)
+                        except:
+                            details = {}
+                    elif isinstance(e.details, dict):
+                        details = e.details
+                    else:
+                        details = {}
+
+                    if isinstance(details, dict) and 'retryDelay' in details:
+                        delay_str = details['retryDelay']
+                        if isinstance(delay_str, str) and delay_str.endswith('s'):
+                            try:
+                                retry_delay_seconds = int(delay_str[:-1])
+                            except ValueError:
+                                pass
+
+                # Fallback: check error message for retry delay patterns
+                if retry_delay_seconds is None and hasattr(e, 'message'):
+                    msg = str(e.message)
+                    import re
+                    # Look for patterns like "retry after 60 seconds" or "60s"
+                    match = re.search(r'(?:retry.*?|after\s*)?(\d+)\s*second', msg, re.IGNORECASE)
+                    if match:
+                        retry_delay_seconds = int(match.group(1))
+                    else:
+                        match = re.search(r'(\d+)s', msg)
+                        if match:
+                            retry_delay_seconds = int(match.group(1))
+
+                # Determine appropriate response based on delay
+                if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
+                    return f"⚠️ Límite de tasa alcanzado. Por favor, espera {retry_delay_seconds} segundos antes de intentarlo nuevamente."
+                else:
+                    return "⚠️ Se ha agotado la cuota diaria gratuita de la API de Gemini. La cuota se reinicia a medianoche (hora del Pacífico). Por favor, intenta nuevamente mañana."
+            except Exception as parse_error:
+                # If parsing fails, fall back to safe message
+                print(f"Error parsing 429 details in intención natural: {parse_error}")
+                return "⚠️ Se ha alcanzado el límite de la API de Gemini. Verifica tu consumo y vuelve a intentar en unos minutos."
         print(f"Error de API en intención natural: {e}")
     except Exception as e:
         print(f"Error procesando intención natural: {e}")
-        
+
     return None
 
 def pensar_respuesta(prompt_usuario: str, usuario_id: str = "default") -> str:
@@ -118,7 +192,7 @@ def pensar_respuesta(prompt_usuario: str, usuario_id: str = "default") -> str:
     try:
         contexto_db = obtener_contexto_financiero(usuario_id)
         prompt_completo = f"{SYSTEM_INSTRUCTION}{contexto_db}\n\nMensaje del usuario: {prompt_usuario}"
-        
+
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=prompt_completo,
@@ -135,7 +209,51 @@ def pensar_respuesta(prompt_usuario: str, usuario_id: str = "default") -> str:
         return response.text or "Sin respuesta disponible."
     except APIError as e:
         if e.code == 429:
-            return "⚠️ Límite de peticiones de Gemini excedido (Error 429). Espera 60 segundos."
+            retry_delay_seconds = None
+            try:
+                # Try to extract retry delay from error details
+                if hasattr(e, 'details') and e.details:
+                    import json
+                    if isinstance(e.details, str):
+                        try:
+                            details = json.loads(e.details)
+                        except:
+                            details = {}
+                    elif isinstance(e.details, dict):
+                        details = e.details
+                    else:
+                        details = {}
+
+                    if isinstance(details, dict) and 'retryDelay' in details:
+                        delay_str = details['retryDelay']
+                        if isinstance(delay_str, str) and delay_str.endswith('s'):
+                            try:
+                                retry_delay_seconds = int(delay_str[:-1])
+                            except ValueError:
+                                pass
+
+                # Fallback: check error message for retry delay patterns
+                if retry_delay_seconds is None and hasattr(e, 'message'):
+                    msg = str(e.message)
+                    import re
+                    # Look for patterns like "retry after 60 seconds" or "60s"
+                    match = re.search(r'(?:retry.*?|after\s*)?(\d+)\s*second', msg, re.IGNORECASE)
+                    if match:
+                        retry_delay_seconds = int(match.group(1))
+                    else:
+                        match = re.search(r'(\d+)s', msg)
+                        if match:
+                            retry_delay_seconds = int(match.group(1))
+
+                # Determine appropriate response based on delay
+                if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
+                    return f"⚠️ Límite de tasa alcanzado. Por favor, espera {retry_delay_seconds} segundos antes de intentarlo nuevamente."
+                else:
+                    return "⚠️ Se ha agotado la cuota diaria gratuita de la API de Gemini. La cuota se reinicia a medianoche (hora del Pacífico). Por favor, intenta nuevamente mañana."
+            except Exception as parse_error:
+                # If parsing fails, fall back to safe message
+                print(f"Error parsing 429 details in pensar_respuesta: {parse_error}")
+                return "⚠️ Se ha alcanzado el límite de la API de Gemini. Verifica tu consumo y vuelve a intentar en unos minutos."
         return f"Error en la API de Gemini: {e.message}"
     except Exception as e:
         return f"Error en sistemas: {e}"
@@ -145,7 +263,7 @@ def analizar_inversion(ticker: str) -> str:
     try:
         stock = yf.Ticker(ticker)
         hist = stock.history(period="5d")
-        
+
         datos_mercado = ""
         if not hist.empty:
             precio_actual = hist['Close'].iloc[-1]
@@ -161,7 +279,7 @@ def analizar_inversion(ticker: str) -> str:
             f"Datos del mercado: {datos_mercado}\n"
             "Busca en la web el contexto reciente de este activo o empresa y realiza un análisis frío, objetivo y pragmático."
         )
-        
+
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=prompt_analisis,
@@ -172,7 +290,51 @@ def analizar_inversion(ticker: str) -> str:
         return response.text or "Error analizando el activo."
     except APIError as e:
         if e.code == 429:
-            return "⚠️ Límite de peticiones de Gemini excedido (Error 429)."
+            retry_delay_seconds = None
+            try:
+                # Try to extract retry delay from error details
+                if hasattr(e, 'details') and e.details:
+                    import json
+                    if isinstance(e.details, str):
+                        try:
+                            details = json.loads(e.details)
+                        except:
+                            details = {}
+                    elif isinstance(e.details, dict):
+                        details = e.details
+                    else:
+                        details = {}
+
+                    if isinstance(details, dict) and 'retryDelay' in details:
+                        delay_str = details['retryDelay']
+                        if isinstance(delay_str, str) and delay_str.endswith('s'):
+                            try:
+                                retry_delay_seconds = int(delay_str[:-1])
+                            except ValueError:
+                                pass
+
+                # Fallback: check error message for retry delay patterns
+                if retry_delay_seconds is None and hasattr(e, 'message'):
+                    msg = str(e.message)
+                    import re
+                    # Look for patterns like "retry after 60 seconds" or "60s"
+                    match = re.search(r'(?:retry.*?|after\s*)?(\d+)\s*second', msg, re.IGNORECASE)
+                    if match:
+                        retry_delay_seconds = int(match.group(1))
+                    else:
+                        match = re.search(r'(\d+)s', msg)
+                        if match:
+                            retry_delay_seconds = int(match.group(1))
+
+                # Determine appropriate response based on delay
+                if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
+                    return f"⚠️ Límite de tasa alcanzado. Por favor, espera {retry_delay_seconds} segundos antes de intentarlo nuevamente."
+                else:
+                    return "⚠️ Se ha agotado la cuota diaria gratuita de la API de Gemini. La cuota se reinicia a medianoche (hora del Pacífico). Por favor, intenta nuevamente mañana."
+            except Exception as parse_error:
+                # If parsing fails, fall back to safe message
+                print(f"Error parsing 429 details in analizar_inversion: {parse_error}")
+                return "⚠️ Se ha alcanzado el límite de la API de Gemini. Verifica tu consumo y vuelve a intentar en unos minutos."
         return f"Error de API: {e.message}"
     except Exception as e:
         return f"Error consultando el mercado para {ticker}: {e}"
@@ -188,7 +350,7 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
             "2. Responde confirmando los datos extraídos y realiza un juicio analítico sobre el gasto.\n\n"
             f"Comentario del usuario: {prompt_adicional}"
         )
-        
+
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=[prompt, imagen_file],
@@ -197,21 +359,65 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_COST, threshold=types.HarmBlockThreshold.BLOCK_NONE) if hasattr(types.HarmCategory, 'HARM_CATEGORY_DANGEROUS_COST') else types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                 ]
             )
         )
-        
+
         if response.text:
             procesar_intencion_natural(response.text, usuario_id)
-            
+
         try: client.files.delete(name=imagen_file.name)
         except: pass
-        
+
         return response.text or "Imagen procesada sin texto resultante."
     except APIError as e:
         if e.code == 429:
-            return "⚠️ Límite de peticiones de Gemini excedido (Error 429)."
+            retry_delay_seconds = None
+            try:
+                # Try to extract retry delay from error details
+                if hasattr(e, 'details') and e.details:
+                    import json
+                    if isinstance(e.details, str):
+                        try:
+                            details = json.loads(e.details)
+                        except:
+                            details = {}
+                    elif isinstance(e.details, dict):
+                        details = e.details
+                    else:
+                        details = {}
+
+                    if isinstance(details, dict) and 'retryDelay' in details:
+                        delay_str = details['retryDelay']
+                        if isinstance(delay_str, str) and delay_str.endswith('s'):
+                            try:
+                                retry_delay_seconds = int(delay_str[:-1])
+                            except ValueError:
+                                pass
+
+                # Fallback: check error message for retry delay patterns
+                if retry_delay_seconds is None and hasattr(e, 'message'):
+                    msg = str(e.message)
+                    import re
+                    # Look for patterns like "retry after 60 seconds" or "60s"
+                    match = re.search(r'(?:retry.*?|after\s*)?(\d+)\s*second', msg, re.IGNORECASE)
+                    if match:
+                        retry_delay_seconds = int(match.group(1))
+                    else:
+                        match = re.search(r'(\d+)s', msg)
+                        if match:
+                            retry_delay_seconds = int(match.group(1))
+
+                # Determine appropriate response based on delay
+                if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
+                    return f"⚠️ Límite de tasa alcanzado. Por favor, espera {retry_delay_seconds} segundos antes de intentarlo nuevamente."
+                else:
+                    return "⚠️ Se ha agotado la cuota diaria gratuita de la API de Gemini. La cuota se reinicia a medianoche (hora del Pacífico). Por favor, intenta nuevamente mañana."
+            except Exception as parse_error:
+                # If parsing fails, fall back to safe message
+                print(f"Error parsing 429 details in pensar_respuesta_imagen: {parse_error}")
+                return "⚠️ Se ha alcanzado el límite de la API de Gemini. Verifica tu consumo y vuelve a intentar en unos minutos."
         return f"Error de API al analizar imagen: {e.message}"
     except Exception as e:
         return f"Error analizando imagen: {e}"
@@ -221,14 +427,14 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
     try:
         audio_file = client.files.upload(file=ruta_audio)
         contexto_db = obtener_contexto_financiero(usuario_id)
-        
+
         prompt_completo = (
             f"{SYSTEM_INSTRUCTION}{contexto_db}\n\n"
             "Escucha el audio adjunto del usuario. Si pregunta por sus finanzas, gastos, historial o transacciones, "
             "DEBES responderle utilizando ÚNICAMENTE los datos reales de la base de datos proporcionados arriba. "
             "Prohibido inventar montos, fechas o categorías que no estén en esa lista."
         )
-        
+
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=[prompt_completo, audio_file],
@@ -237,7 +443,7 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROus_CONTENT if hasattr(types.HarmCategory, 'HARM_CATEGORY_DANGEROUS_CONTENT') else types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                 ]
             )
         )
@@ -246,7 +452,51 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
         return response.text or ""
     except APIError as e:
         if e.code == 429:
-            return "⚠️ Límite de peticiones de Gemini excedido (Error 429)."
+            retry_delay_seconds = None
+            try:
+                # Try to extract retry delay from error details
+                if hasattr(e, 'details') and e.details:
+                    import json
+                    if isinstance(e.details, str):
+                        try:
+                            details = json.loads(e.details)
+                        except:
+                            details = {}
+                    elif isinstance(e.details, dict):
+                        details = e.details
+                    else:
+                        details = {}
+
+                    if isinstance(details, dict) and 'retryDelay' in details:
+                        delay_str = details['retryDelay']
+                        if isinstance(delay_str, str) and delay_str.endswith('s'):
+                            try:
+                                retry_delay_seconds = int(delay_str[:-1])
+                            except ValueError:
+                                pass
+
+                # Fallback: check error message for retry delay patterns
+                if retry_delay_seconds is None and hasattr(e, 'message'):
+                    msg = str(e.message)
+                    import re
+                    # Look for patterns like "retry after 60 seconds" or "60s"
+                    match = re.search(r'(?:retry.*?|after\s*)?(\d+)\s*second', msg, re.IGNORECASE)
+                    if match:
+                        retry_delay_seconds = int(match.group(1))
+                    else:
+                        match = re.search(r'(\d+)s', msg)
+                        if match:
+                            retry_delay_seconds = int(match.group(1))
+
+                # Determine appropriate response based on delay
+                if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
+                    return f"⚠️ Límite de tasa alcanzado. Por favor, espera {retry_delay_seconds} segundos antes de intentarlo nuevamente."
+                else:
+                    return "⚠️ Se ha agotado la cuota diaria gratuita de la API de Gemini. La cuota se reinicia a medianoche (hora del Pacífico). Por favor, intenta nuevamente mañana."
+            except Exception as parse_error:
+                # If parsing fails, fall back to safe message
+                print(f"Error parsing 429 details in pensar_respuesta_audio: {parse_error}")
+                return "⚠️ Se ha alcanzado el límite de la API de Gemini. Verifica tu consumo y vuelve a intentar en unos minutos."
         return f"Error de API al procesar audio: {e.message}"
     except Exception as e:
         return f"Error al procesar audio: {e}"
