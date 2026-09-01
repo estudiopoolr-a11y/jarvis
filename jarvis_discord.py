@@ -111,8 +111,11 @@ async def on_message(message):
     if not es_mencion_usuario and not es_mencion_rol and not adjunto:
         return
 
-    # 6. Limpiar menciones (<@ID> y <@!ID>)
-    texto_limpio = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+    # 6. Limpiar menciones de usuarios y roles (<@ID>, <@!ID>, <@&ID>)
+    import re
+    texto_limpio = re.sub(r'<@!?\d+>', '', message.content)
+    texto_limpio = re.sub(r'<@&\d+>', '', texto_limpio)
+    texto_limpio = texto_limpio.strip()
     texto_lower = texto_limpio.lower()
 
     # 7. Saludo local rápido
