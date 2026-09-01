@@ -145,35 +145,179 @@ def _parse_configuracion_masiva(texto: str) -> tuple[dict, list] | None:
     return None
 
 
+# ============================================================
+# PARSERS DETERMINÍSTICOS (evitan llamadas a Gemini)
+# ============================================================
+
+import re
+
+
+def _parse_tarea(texto: str) -> dict | None:
+    """Extrae tarea, prioridad y fecha de un mensaje de tarea."""
+    texto_lower = texto.lower()
+
+    # Detectar prioridad
+    prioridad = "Media"
+    if any(w in texto_lower for w in ["urgente", "crítica", "crítico"]):
+        prioridad = "Alta"
+    elif any(w in texto_lower for w in ["baja", "cuando pueda"]):
+        prioridad = "Baja"
+
+    # Detectar fecha límite
+    fecha = "Pronto"
+    if any(w in texto_lower for w in ["mañana", "manana"]):
+        fecha = "Mañana"
+    elif "hoy" in texto_lower:
+        fecha = "Hoy"
+    elif "semana" in texto_lower:
+        fecha = "Esta semana"
+
+    # Extraer descripción de la tarea
+    patrones = [
+        r'(?:agrega?|crea?|nueva?)?\s*tarea\s+(.+?)(?:\s+(?:prioridad|prioridad|alt[ao]|baja|urgente|mañana|manana|manana|hoy|esta semana))?$',
+        r'(?:agrega?|crea?)?\s*(.+?)\s+(?:como\s+)?(?:tarea|pendiente|recordar)',
+        r'(?:recordar|recuerdame|recordame)\s+(.+?)$',
+    ]
+    for patron in patrones:
+        match = re.search(patron, texto_lower)
+        if match:
+            tarea = match.group(1).strip()
+            if len(tarea) > 2:
+                return {"tarea": tarea.title(), "prioridad": prioridad, "fecha_limite": fecha}
+
+    # Si no matcheó ningún patrón pero dice "tarea"
+    if "tarea" in texto_lower:
+        # Tomar todo después de "tarea" o "nueva tarea"
+        tarea = re.sub(r'^.*?tarea\s+', '', texto_lower).strip()
+        tarea = re.sub(r'\s*(prioridad|alt[ao]|baja|urgente|mañana|manana|manana|hoy|esta semana).*$', '', tarea).strip()
+        if len(tarea) > 2:
+            return {"tarea": tarea.title(), "prioridad": prioridad, "fecha_limite": fecha}
+
+    return None
+
+
+def _parse_transaccion(texto: str) -> dict | None:
+    """Extrae tipo (gasto/ingreso), monto y categoría de un mensaje."""
+    texto_lower = texto.lower()
+
+    # Patrones de gasto: "gasto 5000 en comida", "gasté 5000 supermercado", "compré 5000"
+    gasto_patterns = [
+        r'gast[oáé]\s+([\d,.]+)\s*(?:en\s+)?(.+?)(?:\s*$|$)',
+        r'compr[oóé]\s+([\d,.]+)\s*(?:en\s+)?(.+?)(?:\s*$|$)',
+        r'pag[uú][oóé]\s+([\d,.]+)\s*(?:en\s+)?(.+?)(?:\s*$|$)',
+        r'compr[oóé]\s+([\d,.]+)\s*(?:en\s+)?(.+?)(?:\s*$|$)',
+    ]
+    for patron in gasto_patterns:
+        match = re.search(patron, texto_lower)
+        if match:
+            monto = float(match.group(1).replace(',', ''))
+            cat = match.group(2).strip() or "General"
+            # Limpiar categoría
+            cat = re.sub(r'^(en|del|de|la|el|los|las)\s+', '', cat).strip()
+            cat = cat.title() if cat else "General"
+            return {"tipo": "gasto", "monto": monto, "categoria": cat}
+
+    # Patrones de ingreso: "ingreso 50000", "gané 50000", "recibí 50000", "salario +50000"
+    ingreso_patterns = [
+        r'ingreso\s+([\d,.]+)',
+        r'gan[oé]\s+([\d,.]+)',
+        r'recib[oí]\s+([\d,.]+)',
+        r'salario\s*\+?\s*([\d,.]+)',
+        r'\+\s*([\d,.]+)\s*(?:pesos?|cop)?',
+    ]
+    for patron in ingreso_patterns:
+        match = re.search(patron, texto_lower)
+        if match:
+            monto = float(match.group(1).replace(',', ''))
+            return {"tipo": "ingreso", "monto": monto, "categoria": "Ingreso"}
+
+    return None
+
+
+def _parse_presupuesto(texto: str) -> dict | None:
+    """Extrae categoría y límite de presupuesto."""
+    texto_lower = texto.lower()
+
+    # Patrones: "presupuesto Comida 50000", "límite Comida 50000", "presupuesto para Comida 50000"
+    patrones = [
+        r'presupuesto\s+(?:para\s+)?(\w+)\s+([\d,.]+)',
+        r'l[íi]mite\s+(\w+)\s+([\d,.]+)',
+        r'(\w+)\s+(?:presupuesto\s+)?([\d,.]+)',
+    ]
+    for patron in patrones:
+        match = re.search(patron, texto_lower)
+        if match:
+            cat = match.group(1).strip()
+            limite = float(match.group(2).replace(',', ''))
+            # Filtrar palabras que no son categorías
+            if cat not in ["el", "la", "los", "las", "de", "del", "en", "un", "una"]:
+                return {"categoria": cat.title(), "limite": limite}
+
+    return None
+
+
+def _parse_completar_tarea(texto: str) -> str | None:
+    """Extrae el nombre de la tarea a completar."""
+    texto_lower = texto.lower()
+
+    patrones = [
+        r'complet[oéé]\s+(.+)',
+        r'hecho\s+(.+)',
+        r'termin[oé]\s+(.+)',
+        r'borrar\s+(.+)',
+        r'eliminar\s+(.+)',
+        r'done\s+(.+)',
+    ]
+    for patron in patrones:
+        match = re.search(patron, texto_lower)
+        if match:
+            tarea = match.group(1).strip()
+            if len(tarea) > 1:
+                return tarea
+
+    return None
+
+
+# ============================================================
+# PROCESAMIENTO PRINCIPAL
+# ============================================================
+
 def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     texto_lc = prompt_usuario.lower().strip()
 
-    # Deterministic shortcuts to avoid unnecessary Gemini calls
-    # Clear or reload data
+    # =========================================
+    # 1. LIMPIAR BASE DE DATOS
+    # =========================================
     if any(k in texto_lc for k in ["borra", "limpia", "reinicia"]) and any(k in texto_lc for k in ["datos", "base", "historial"]):
         result = limpiar_y_cargar_datos_dinamicos(usuario_id, {}, [])
         return f"🤖 **[SISTEMA REINICIADO POR JARVIS]**\n{result}\n\n*He limpiado la basura anterior.*"
 
-    # Parser directo para configuración masiva (evita llamada a Gemini)
+    # =========================================
+    # 2. CONFIGURACIÓN MASIVA
+    # =========================================
     if "configura" in texto_lc or ("presupuestos" in texto_lc and "transacciones" in texto_lc):
         parsed = _parse_configuracion_masiva(prompt_usuario)
         if parsed:
             presupuestos, transacciones = parsed
             result = limpiar_y_cargar_datos_dinamicos(usuario_id, presupuestos, transacciones)
             return f"🤖 **[CONFIGURACIÓN MASIVA CARGADA]**\n{result}"
+        return "⚠️ No pude parsear la configuración. Verifica el formato."
 
-    if "cargar" in texto_lc and ("config" in texto_lc or "presupuestos" in texto_lc or "transacciones" in texto_lc):
-        result = limpiar_y_cargar_datos_dinamicos(usuario_id, {}, [])
-        return f"🤖 **[SISTEMA LIMPIADO]**\n{result}\n\n*Para cargar nueva configuración, proporciona los presupuestos y transacciones en formato estructurado.*"
-    # List pending tasks
-    if "tarea" in texto_lc and any(k in texto_lc for k in ["listar", "mostrar", "ver", "pendientes"]):
+    # =========================================
+    # 3. VER TAREAS PENDIENTES
+    # =========================================
+    if any(k in texto_lc for k in ["tarea", "tareas"]) and any(k in texto_lc for k in ["listar", "mostrar", "ver", "pendientes"]):
         tareas = obtener_tareas_pendientes(usuario_id)
         if not tareas:
             return "📋 No tienes tareas pendientes."
         lista = "\n".join([f"• [{t['prioridad']}] {t['tarea']} (Vence: {t['fecha_limite']})" for t in tareas])
-        return f"📋 **Tareas pendientes:**\n{lista}"
-    # Check balance/finances
-    if any(k in texto_lc for k in ["balance", "finanzas", "ingresos", "gastos"]) and any(k in texto_lc for k in ["cual", "cúal", "cuanto", "cuánto", "ver", "mostrar", "consultar", "cuesta", "cuánto"]):
+        return f"📋 **Tareas pendientes ({len(tareas)}):**\n{lista}"
+
+    # =========================================
+    # 4. VER BALANCE/FINANZAS
+    # =========================================
+    if any(k in texto_lc for k in ["balance", "finanzas", "ingresos", "gastos"]) and \
+       any(k in texto_lc for k in ["cual", "cúal", "cuanto", "cuánto", "ver", "mostrar", "consultar", "cuánto"]):
         balance, ingresos, gastos, _ = obtener_balance_financiero(usuario_id)
         presupuestos = obtener_resumen_presupuestos(usuario_id)
         msg = f"💰 **Balance financiero:**\n- Ingresos: +${ingresos:,.0f}\n- Gastos: -${gastos:,.0f}\n- Neto: ${balance:,.0f}\n"
@@ -183,120 +327,47 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             msg += "- No hay presupuestos establecidos."
         return msg
 
-    # If no intention keywords, return None to let pensar_respuesta handle general queries
-    if not any(kw in texto_lc for kw in PALABRAS_CLAVE_INTENCION):
-        return None
+    # =========================================
+    # 5. PARSERS DETERMINÍSTICOS
+    # =========================================
 
-    prompt_extractor = (
-        f"Analiza este mensaje del usuario: '{prompt_usuario}'. "
-        "Si el usuario está pidiendo reiniciar, limpiar, borrar los datos viejos o cargar categorías, presupuestos y transacciones en bloque, "
-        "clasifícalo como 'configuracion_masiva' y extrae un diccionario de presupuestos {'Categoria': limite} y una lista de transacciones [{'tipo': 'gasto'/'ingreso', 'monto': 0.0, 'categoria': '', 'descripcion': ''}]. "
-        "Si no es masivo, identifica si es tarea, gasto, ingreso, presupuesto o completar_tarea."
-    )
+    # 5a. Completar tarea
+    completada_texto = _parse_completar_tarea(texto_lc)
+    if completada_texto:
+        completada = marcar_tarea_completada(usuario_id, completada_texto)
+        if completada:
+            return f"✅ Tarea completada: *'{completada}'*. Avanza con el siguiente pendiente."
+        return "⚠️ No encontré tarea que coincida."
 
-    try:
-        data = _gemini_call_with_fallback(
-            lambda c: json.loads(
-                c.models.generate_content(
-                    model=MODEL_NAME,
-                    contents=prompt_extractor,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=ItemIntencion,
-                    )
-                ).text
-            )
-        )
-        tipo = data.get("tipo")
+    # 5b. Nueva tarea
+    tarea_data = _parse_tarea(texto_lc)
+    if tarea_data:
+        guardar_tarea(usuario_id, tarea_data["tarea"], tarea_data["prioridad"], tarea_data["fecha_limite"])
+        return f"📌 Tarea registrada: *{tarea_data['tarea']}* [Prioridad: {tarea_data['prioridad']}, Vence: {tarea_data['fecha_limite']}]"
 
-        if tipo == "configuracion_masiva":
-            p_dict = data.get("presupuestos_dict") or {}
-            t_list = data.get("transacciones_list") or []
-            resultado = limpiar_y_cargar_datos_dinamicos(usuario_id, p_dict, t_list)
-            return f"🤖 **[SISTEMA RECONFIGURADO POR JARVIS]**\n{resultado}\n\n*He limpiado la basura anterior y aplicado sus nuevos parámetros con rigor absoluto.*"
+    # 5c. Transacción (gasto/ingreso)
+    transaccion = _parse_transaccion(texto_lc)
+    if transaccion:
+        monto = transaccion["monto"]
+        cat = transaccion["categoria"]
+        tipo = transaccion["tipo"]
+        if tipo == "gasto":
+            alerta = registrar_transaccion(usuario_id, "gasto", monto, cat, "Registro directo")
+            return f"💸 Gasto registrado: **-${monto:,.0f}** en *{cat}*.{alerta or ''}"
+        else:
+            registrar_transaccion(usuario_id, "ingreso", monto, cat, "Registro directo")
+            return f"💰 Ingreso registrado: **+${monto:,.0f}** en *{cat}*."
 
-        elif tipo == "tarea" and data.get("tarea"):
-            guardar_tarea(usuario_id, data.get("tarea"), data.get("prioridad", "Media"), data.get("fecha_limite", "Pronto"))
-            return f"📌 Tarea registrada con prioridad **{data.get('prioridad', 'Media')}**: *{data.get('tarea')}* (Vence: {data.get('fecha_limite')})."
+    # 5d. Presupuesto
+    presupuesto_data = _parse_presupuesto(texto_lc)
+    if presupuesto_data:
+        establecer_presupuesto(usuario_id, presupuesto_data["categoria"], presupuesto_data["limite"])
+        return f"🎯 Presupuesto: *{presupuesto_data['categoria']}* = **${presupuesto_data['limite']:,.0f}**"
 
-        elif tipo == "completar_tarea":
-            texto_busqueda = data.get("tarea") or prompt_usuario
-            completada = marcar_tarea_completada(usuario_id, texto_busqueda)
-            if completada:
-                return f"✅ Tarea marcada como completada: *'{completada}'*. Avanza con el siguiente pendiente."
-            return "⚠️ No encontré ninguna tarea pendiente que coincida."
-
-        elif tipo == "gasto" and data.get("monto", 0) > 0:
-            monto = float(data.get("monto", 0))
-            cat = data.get("categoria", "General").strip().title()
-            desc = data.get("descripcion", "Compra")
-            alerta = registrar_transaccion(usuario_id, "gasto", monto, cat, desc)
-            return f"💸 Gasto registrado: **-${monto:,.0f}** en *{cat}* ({desc}).{alerta or ''}"
-
-        elif tipo == "ingreso" and data.get("monto", 0) > 0:
-            monto = float(data.get("monto", 0))
-            cat = data.get("categoria", "Ingreso").strip().title()
-            desc = data.get("descripcion", "Pago recibido")
-            registrar_transaccion(usuario_id, "ingreso", monto, cat, desc)
-            return f"💰 ¡Ingreso registrado!: **+${monto:,.0f}** en *{cat}* ({desc}). A capitalizar."
-
-        elif tipo == "presupuesto" and data.get("limite", 0) > 0:
-            cat = data.get("categoria", "General").strip().title()
-            limite = float(data.get("limite", 0))
-            establecer_presupuesto(usuario_id, cat, limite)
-            return f"🎯 Presupuesto fijado: Máximo **${limite:,.0f}** para la categoría *{cat}*."
-
-    except APIError as e:
-        if e.code == 429:
-            retry_delay_seconds = None
-            try:
-                # Try to extract retry delay from error details
-                if hasattr(e, 'details') and e.details:
-                    import json
-                    if isinstance(e.details, str):
-                        try:
-                            details = json.loads(e.details)
-                        except:
-                            details = {}
-                    elif isinstance(e.details, dict):
-                        details = e.details
-                    else:
-                        details = {}
-
-                    if isinstance(details, dict) and 'retryDelay' in details:
-                        delay_str = details['retryDelay']
-                        if isinstance(delay_str, str) and delay_str.endswith('s'):
-                            try:
-                                retry_delay_seconds = int(delay_str[:-1])
-                            except ValueError:
-                                pass
-
-                # Fallback: check error message for retry delay patterns
-                if retry_delay_seconds is None and hasattr(e, 'message'):
-                    msg = str(e.message)
-                    import re
-                    # Look for patterns like "retry after 60 seconds" or "60s"
-                    match = re.search(r'(?:retry.*?|after\s*)?(\d+)\s*second', msg, re.IGNORECASE)
-                    if match:
-                        retry_delay_seconds = int(match.group(1))
-                    else:
-                        match = re.search(r'(\d+)s', msg)
-                        if match:
-                            retry_delay_seconds = int(match.group(1))
-
-                # Determine appropriate response based on delay
-                if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
-                    return f"⚠️ Límite de tasa alcanzado. Por favor, espera {retry_delay_seconds} segundos antes de intentarlo nuevamente."
-                else:
-                    return "⚠️ Se ha agotado la cuota diaria gratuita de la API de Gemini. La cuota se reinicia a medianoche (hora del Pacífico). Por favor, intenta nuevamente mañana."
-            except Exception as parse_error:
-                # If parsing fails, fall back to safe message
-                print(f"Error parsing 429 details in intención natural: {parse_error}")
-                return "⚠️ Se ha alcanzado el límite de la API de Gemini. Verifica tu consumo y vuelve a intentar en unos minutos."
-        print(f"Error de API en intención natural: {e}")
-    except Exception as e:
-        print(f"Error procesando intención natural: {e}")
-
+    # =========================================
+    # 6. NADA MATCHEÓ → USAR GEMINI
+    # =========================================
+    # Solo para preguntas complejas que no matchearon ningún parser
     return None
 
 def pensar_respuesta(prompt_usuario: str, usuario_id: str = "default") -> str:
