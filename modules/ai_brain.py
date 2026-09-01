@@ -86,6 +86,65 @@ PALABRAS_CLAVE_INTENCION = [
     "borra", "limpia", "reinicia", "configura", "cargar"
 ]
 
+def _parse_configuracion_masiva(texto: str) -> tuple[dict, list] | None:
+    """
+    Parser directo para el formato de configuración masiva.
+    Formato esperado:
+      Presupuestos: Women: 300000, Deudas: 200000...
+      Transacciones: Salario +806199.03, Gasto Women 332540...
+    Retorna (presupuestos_dict, transacciones_list) o None si no coincide.
+    """
+    import re
+
+    presupuestos = {}
+    transacciones = []
+
+    # Buscar sección de presupuestos
+    match_pres = re.search(r'presupuestos?[:\s]+(.+?)(?=transacciones?[:\s]|$)', texto, re.IGNORECASE | re.DOTALL)
+    if match_pres:
+        pres_text = match_pres.group(1)
+        for cat_match in re.finditer(r'(\w+)\s*:\s*([\d,.]+)', pres_text):
+            cat = cat_match.group(1).strip()
+            try:
+                monto = float(cat_match.group(2).replace(',', ''))
+                if monto > 0:
+                    presupuestos[cat] = monto
+            except ValueError:
+                pass
+
+    # Buscar sección de transacciones
+    match_trans = re.search(r'transacciones?[:\s]+(.+?)(?=$)', texto, re.IGNORECASE | re.DOTALL)
+    if match_trans:
+        trans_text = match_trans.group(1)
+        # Patrones: "Palabra +/-Monto" o "Tipo Palabra Monto"
+        for t_match in re.finditer(r'([\w\s]+?)\s*([+-])?\s*\$?\s*([\d,.]+)', trans_text):
+            desc = t_match.group(1).strip()
+            try:
+                monto = float(t_match.group(3).replace(',', ''))
+                if monto > 0:
+                    # Determinar tipo: si empieza con "gasto" es gasto, sino es ingreso
+                    desc_lower = desc.lower()
+                    if desc_lower.startswith('gasto'):
+                        tipo = 'gasto'
+                        # Extraer categoria despues de "gasto"
+                        cat = desc[5:].strip() if len(desc) > 5 else 'General'
+                    else:
+                        tipo = 'ingreso'
+                        cat = 'General'
+                    transacciones.append({
+                        'tipo': tipo,
+                        'monto': monto,
+                        'categoria': cat.title() if cat else 'General',
+                        'descripcion': desc
+                    })
+            except ValueError:
+                pass
+
+    if presupuestos or transacciones:
+        return presupuestos, transacciones
+    return None
+
+
 def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     texto_lc = prompt_usuario.lower().strip()
 
@@ -94,8 +153,16 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     if any(k in texto_lc for k in ["borra", "limpia", "reinicia"]) and any(k in texto_lc for k in ["datos", "base", "historial"]):
         result = limpiar_y_cargar_datos_dinamicos(usuario_id, {}, [])
         return f"🤖 **[SISTEMA REINICIADO POR JARVIS]**\n{result}\n\n*He limpiado la basura anterior.*"
+
+    # Parser directo para configuración masiva (evita llamada a Gemini)
+    if "configura" in texto_lc or ("presupuestos" in texto_lc and "transacciones" in texto_lc):
+        parsed = _parse_configuracion_masiva(prompt_usuario)
+        if parsed:
+            presupuestos, transacciones = parsed
+            result = limpiar_y_cargar_datos_dinamicos(usuario_id, presupuestos, transacciones)
+            return f"🤖 **[CONFIGURACIÓN MASIVA CARGADA]**\n{result}"
+
     if "cargar" in texto_lc and ("config" in texto_lc or "presupuestos" in texto_lc or "transacciones" in texto_lc):
-        # For now just clear and ask user to provide details via structured input later
         result = limpiar_y_cargar_datos_dinamicos(usuario_id, {}, [])
         return f"🤖 **[SISTEMA LIMPIADO]**\n{result}\n\n*Para cargar nueva configuración, proporciona los presupuestos y transacciones en formato estructurado.*"
     # List pending tasks
