@@ -197,7 +197,7 @@ async def on_message(message):
 
     # Guardar en Firestore
     try:
-        guardar_mensaje(str(message.author), usuario_id, texto_limpio, respuesta_ia, tiene_audio=bool(adjunto))
+        guardar_mensaje(usuario_id, str(message.author), texto_limpio)
     except Exception as e:
         print(f"Error guardando mensaje en Firestore: {e}")
 
