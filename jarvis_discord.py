@@ -66,6 +66,8 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
+    print(f"[ON_MESSAGE] Recibido: {message.content[:50] if message.content else 'sin texto'}")
+
     # 1. Ignorar a cualquier bot
     if message.author.bot:
         return
