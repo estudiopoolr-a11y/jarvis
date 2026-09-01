@@ -54,7 +54,7 @@ jarvis/
 │
 └── modules/              # 🧩 Módulos de lógica separada
     ├── database.py       # 🗃️ Integración con Firebase Firestore
-    └── ai_brain.py       # 🧠 Lógica de IA y procesamiento de intenciones con rotación de API Keys
+    └── ai_brain.py       # 🧠 Lógica de IA y procesamiento con rotación de API Keys
 ```
 
 ## 🚀 Inicio Rápido
@@ -65,7 +65,7 @@ jarvis/
 - Proyecto de [Firebase](https://firebase.google.com/) con Firestore API habilitada
 - Bot de [Discord](https://discord.com/developers/applications) con token y privilegios de mensaje de contenido
 - Cuenta de [Google Cloud Text-to-Speech](https://cloud.google.com/text-to-speech) (opcional, para modo voz)
-- **Una o más API Keys de Gemini** (puedes definir una sola con `GEMINI_API_KEY` o múltiples separadas por comas con `GEMINI_API_KEYS`)
+- **Una o más API Keys de Gemini** (configuradas en tu `.env`)
 
 ### Configuración
 1. Clona el repositorio:
@@ -85,12 +85,11 @@ jarvis/
      GEMINI_API_KEY=tu_api_key_de_gemini
      DISCORD_TOKEN=tu_token_de_bot_de_discord
      ```
-   - **Múltiples API Keys** (rotación automática, recomendado para mayor disponibilidad):
+   - **Múltiples API Keys** (rotación automática, recomendado):
      ```
      GEMINI_API_KEYS=key1,key2,key3
      DISCORD_TOKEN=tu_token_de_bot_de_discord
      ```
-   - Puedes combinar con `GEMINI_MODEL` para especificar el modelo (por defecto: `gemini-3.1-flash-lite`).
 
 4. Coloca tu archivo de credenciales de Firebase:
    - Descarga el JSON de servicio desde Firebase Console > Configuración de proyecto > Cuentas de servicio
@@ -98,14 +97,11 @@ jarvis/
 
 5. Inicia el sistema:
    ```bash
-   # Opción 1: Iniciar solo el servidor web (que también inicia el bot Discord)
+   # Servidor web (que también inicia el bot Discord)
    python server.py
    
-   # Opción 2: Iniciar solo el bot Discord
+   # Solo el bot Discord
    python jarvis_discord.py
-   
-   # Opción 3: Para desarrollo (también funciona)
-   python iniciar_jarvis.bat
    ```
 
 ## 💬 Uso en Discord
@@ -123,27 +119,26 @@ Una vez que el bot esté en línea, mencionalo con `@Jarvis` seguido de tu coman
 - `@Jarvis tarea llamar al médico mañana Alta` - Crea tarea con prioridad
 - `@Jarvis tareas` - Lista tareas pendientes
 - `@Jarvis hecho llamar al médico` - Marca tarea como completada
-- `@Jarvis borra todos los datos` - Reinicia la base de datos (útil para testing)
+- `@Jarvis borra todos los datos` - Reinicia la base de datos
 
 ### Análisis y Consultas
-- `@Jarvis inversion AAPL` - Analiza acción de Apple
-- `@Jarvis buscar últimas noticias sobre inflation` - Búsqueda web con contexto financiero
+- `@Jarvis inversión AAPL` - Analiza acción de Apple
+- `@Jarvis buscar últimas noticias sobre inflación` - Búsqueda web con contexto financiero
 - `@Jarvis voz` - Alterna modo de respuesta de audio
 
 ### Comandos de Control
 - `@Jarvis dormir 8` - Silencia notificaciones por 8 horas
-- `@Jarvis voz` - Activa/desactiva respuestas de audio
-- `@Jarvis pulsar 2` - Pausa notificaciones por 2 horas
+- `@Jarvis pausar 2` - Pausa notificaciones por 2 horas
 
 ## 🌐 Dashboard Web
 
-Accede a `http://localhost:10000` (o puerto configurado) para ver:
+Accede a `http://localhost:10000` para ver:
 - **Balance neto** con ingresos vs gastos visualizados
 - **Presupuestos por categoría** con barras de progreso y alertas de exceso
 - **Lista de tareas pendientes** organizada por prioridad
 - **Historial reciente de transacciones**
 
-## 🔧 Arquitectura Técnica
+## 🔧 Optimización y Arquitectura
 
 ### Flujo de Procesamiento
 1. **Entrada** (Texto, Imagen, Audio) → Discord/Web/API
@@ -152,34 +147,48 @@ Accede a `http://localhost:10000` (o puerto configurado) para ver:
 4. **Fundamentación** → Inyección de datos reales de Firebase para evitar alucinaciones
 5. **Ejecución** → Operaciones en Firebase (guardar transacción, crear tarea, etc.)
 6. **Respuesta** → Formateo y envío al usuario
-7. **Modalidades adicionales** → Generación de audio TTS si está activado
 
 ### Optimización de Costos de API
 - **Atajos determinísticos** para comandos comunes (borrar, listar tareas, etc.) evitan llamadas a Gemini
-- **Manejo inteligente de errores 429** que distingue entre límites de tasa temporales y agotamiento de cuota diaria
-- **Extracción de retry delay** de los detalles de la API cuando está disponible
-- **Mensajes de error específicos** que indican exactamente cuándo reintentar
-- **Rotación automática de API Keys**: si una llave agota su cuota o obtiene error 429, el sistema cambia instantáneamente a una llave de respaldo sin interrupción perceptible para el usuario (configurable mediante `GEMINI_API_KEYS`).
+- **Historial limitado a 10 movimientos** en cada inyección de contexto (reduce tokens ~80%)
+- **Cache de contexto financiero** (30 segundos) para evitar consultas redundantes a Firebase
+- **Cooldown anti-spam** (3 segundos) para evitar mensajes duplicados
+- **Rotación automática de API Keys**: si una key obtiene error 429, cambia instantáneamente a otra
 
-## 📈 Mejoras Recientes
-
-### Manejo Avanzado de Límites de API (Agosto 2026)
-- Detección precisa entre límites por minuto (retryable) y límites diarios (requieren espera hasta mañana)
+### Manejo de Errores 429
+- Detección precisa entre límites por minuto (retryable) y límites diarios (espera hasta mañana)
 - Extracción automática de `retryDelay` de los detalles de error de Gemini
 - Mensajes de error contextuales y útiles para el usuario
-- Aplicado a todos los puntos de entrada de Gemini (texto, imagen, audio, análisis de inversiones)
 
-### Rotación de API Keys (Agosto 2026)
-- Soporte para múltiples API Keys mediante la variable de entorno `GEMINI_API_KEYS` (lista separada por comas)
+### Rotación de API Keys
+- Soporte para múltiples API Keys mediante `GEMINI_API_KEYS` (lista separada por comas)
 - Algoritmo round-robin que cambia a la siguiente key al detectar error 429
 - Transparente para el usuario: no se pierde la conversación ni se requiere nueva solicitud
 - Mayor disponibilidad y tolerancia a fallos de cuota o límites de tasa
+
+## 📈 Mejoras Implementadas
+
+### Optimización de Consumo de API (Agosto 2026)
+- Historial limitado a últimos 10 movimientos en prompts (antes: historial completo)
+- Cache de contexto financiero con TTL de 30 segundos
+- Cooldown anti-spam de 3 segundos entre mensajes por usuario
+- Instrucciones más concisas para reducir tokens por consulta
+- Solo TTS bajo demanda explícita (no automático por enviar audio)
+
+### Manejo Avanzado de Límites de API (Agosto 2026)
+- Detección entre límites por minuto y límites diarios
+- Extracción automática de retry delay de errores
+- Mensajes de error específicos según el tipo de límite
+
+### Rotación de API Keys (Agosto 2026)
+- Soporte para múltiples keys en distintos proyectos Google Cloud
+- Fallback automático sin interrupción perceptible para el usuario
 
 ## 🤝 Contribuir
 
 ¡Las contribuciones son bienvenidas! Por favor:
 1. Haz fork del repositorio
-2. Crea una rama para tu feature (`feature/nueva-funcionalidad`)
+2. Crea una rama para tu feature
 3. Haz commit de tus cambios
 4. Abre un Pull Request
 
@@ -187,20 +196,17 @@ Accede a `http://localhost:10000` (o puerto configurado) para ver:
 - Nuevos comandos de Discord
 - Mejoras al dashboard web (gráficos, visualizaciones)
 - Optimizaciones adicionales de Firestore
-- Soporte para más plataformas (Slack, Teams, etc.)
 - Tests unitarios y de integración
-- Documentación y ejemplos de uso
 
 ## 📄 Licencia
 
-Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para detalles.
+Este proyecto está bajo la Licencia MIT.
 
 ## ☎️ Soporte
 
 Para preguntas y soporte:
 - Issues de GitHub
 - Documentación en el código (docstrings y comentarios)
-- Comunidad de desarrolladores de assistants de IA
 
 ---
 

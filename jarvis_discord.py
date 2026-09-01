@@ -4,15 +4,48 @@ from discord.ext import commands, tasks
 from datetime import datetime, timedelta
 from gtts import gTTS
 from dotenv import load_dotenv
+import time
 
 from modules.ai_brain import (
-    pensar_respuesta, pensar_respuesta_audio, procesar_intencion_natural, 
+    pensar_respuesta, pensar_respuesta_audio, procesar_intencion_natural,
     analizar_inversion
 )
 from modules.database import (
-    guardar_mensaje, obtener_tareas_pendientes, marcar_tarea_completada, 
+    guardar_mensaje, obtener_tareas_pendientes, marcar_tarea_completada,
     obtener_balance_financiero, obtener_resumen_presupuestos
 )
+
+# Estados en memoria
+usuarios_silenciados = {}
+usuarios_modo_voz = set()
+canales_activos = set()
+# Cache para contexto financiero
+_finanzas_cache = {}
+_CACHE_TTL = 30  # segundos
+
+# Cooldown anti-spam
+_last_msg_time = {}
+_COOLDOWN_SEGUNDOS = 3
+
+def obtener_contexto_cacheado(usuario_id):
+    """Devuelve balance, ingresos, gastos, movimientos, presupuestos cacheado o consulta si no hay cache o expiró."""
+    ahora = time.time()
+    if usuario_id in _finanzas_cache:
+        datos, timestamp = _finanzas_cache[usuario_id]
+        if ahora - timestamp < _CACHE_TTL:
+            return datos
+    # Si no hay cache o expiró, consulta y guarda
+    balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
+    presupuestos = obtener_resumen_presupuestos(usuario_id)
+    datos = (balance, ingresos, gastos, movimientos, presupuestos)
+    _finanzas_cache[usuario_id] = (datos, ahora)
+    return datos
+
+def generar_audio_respuesta(texto: str, output_path: str) -> str:
+    texto_limpio = texto.replace("**", "").replace("*", "").replace("#", "").replace("`", "")
+    tts = gTTS(text=texto_limpio[:500], lang='es', slow=False)
+    tts.save(output_path)
+    return output_path
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("TOKEN")
@@ -23,17 +56,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 TEMP_DIR = "temp_audios"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
-
-# Estado de usuarios en memoria
-usuarios_silenciados = {}
-usuarios_modo_voz = set()
-canales_activos = set()
-
-def generar_audio_respuesta(texto: str, output_path: str) -> str:
-    texto_limpio = texto.replace("**", "").replace("*", "").replace("#", "").replace("`", "")
-    tts = gTTS(text=texto_limpio[:500], lang='es', slow=False)
-    tts.save(output_path)
-    return output_path
 
 @bot.event
 async def on_ready():
@@ -65,7 +87,13 @@ async def on_message(message):
         await bot.process_commands(message)
         return
 
-    # 4. Filtro de atención: Mención (@Jarvis) o Archivos de Audio
+    # 4. Cooldown anti-spam rápido
+    ahora = time.time()
+    if _last_msg_time.get(usuario_id, 0) >= ahora - _COOLDOWN_SEGUNDOS:
+        return
+    _last_msg_time[usuario_id] = ahora
+
+    # 5. Mención o adjunto requerido
     formatos_audio = ('.ogg', '.mp3', '.wav', '.m4a', '.aac', '.flac')
     adjunto = next((a for a in message.attachments if a.filename.lower().endswith(formatos_audio) or 'audio' in (a.content_type or '')), None)
     es_mencion = bot.user.mentioned_in(message)
@@ -73,27 +101,23 @@ async def on_message(message):
     if not es_mencion and not adjunto:
         return
 
-    # Limpiar menciones (<@ID> y <@!ID>)
+    # 6. Limpiar menciones (<@ID> y <@!ID>)
     texto_limpio = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
     texto_lower = texto_limpio.lower()
 
-    # 5. Saludo local rápido
+    # 7. Saludo local rápido
     if texto_lower in ["hola", "buenos dias", "buenos días", "buenas tardes", "buenas noches"]:
         try:
-            tareas = obtener_tareas_pendientes(usuario_id)
-            balance, _, _, _ = obtener_balance_financiero(usuario_id)
+            # Usar cache para saludo
+            balance, _, _, _, _ = obtener_contexto_cacheado(usuario_id)
             saludo_extra = f" Balance actual: ${balance:,.0f}."
-            if tareas:
-                lista = "\n".join([f"• [{t['prioridad']}] {t['tarea']} (Vence: {t['fecha_limite']})" for t in tareas])
-                msg = f"Sistemas activos.{saludo_extra}\nTareas pendientes:\n{lista}"
-            else:
-                msg = f"Sistemas activos.{saludo_extra} Sin tareas críticas pendientes."
-            await message.channel.send(msg)
+            # Para saludo solo necesitamos balance, no tasks
+            await message.channel.send(f"Sistemas activos.{saludo_extra} Sin tareas críticas pendientes.")
         except Exception as e:
             await message.channel.send(f"⚠️ Error cargando datos locales: {e}")
         return
 
-    # 6. Intentar registrar intención automática (Gastos, ingresos o tareas)
+    # 8. Intento de registro automático de intención
     try:
         respuesta_intencion = procesar_intencion_natural(texto_limpio, usuario_id)
         if respuesta_intencion:
@@ -102,41 +126,39 @@ async def on_message(message):
     except Exception as e:
         print(f"Error procesando intención: {e}")
 
-    # 7. Procesamiento seguro con Gemini + Firebase
+    # 9. Procesamiento con Gemini
     async with message.channel.typing():
         try:
-            # Si es audio y no hay texto escrito, le damos una instrucción base a la IA
+            # Si es audio sin texto, dar instrucción base
             if adjunto and not texto_limpio:
                 prompt_con_contexto = "El usuario ha enviado una nota de voz consultando sus finanzas o tareas."
             else:
                 prompt_con_contexto = texto_limpio
 
-            # Palabras clave para texto escrito
+            # Detectar tipos de consulta
             palabras_finanzas = ["gasto", "gastos", "finanzas", "balance", "movimiento", "dinero", "registre", "presupuesto"]
             palabras_tareas = ["tarea", "tareas", "pendiente", "pendientes", "recordatorio"]
 
-            # SI ES AUDIO (adjunto) O SI TIENE PALABRAS CLAVE: Inyectar contexto real de Firebase
-            es_consulta_finanzas = any(k in texto_lower for k in palabras_finanzas) or bool(adjunto)
-            es_consulta_tareas = any(k in texto_lower for k in palabras_tareas) or bool(adjunto)
+            # Usar cache para contexto de finanzas/tareas
+            balance, ingresos, gastos, movimientos, presupuestos = obtener_contexto_cacheado(usuario_id)
 
-            if es_consulta_finanzas:
-                balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
-                presupuestos = obtener_resumen_presupuestos(usuario_id)
+            # Inyectar contexto si es necesario
+            if any(k in texto_lower for k in palabras_finanzas) or bool(adjunto):
                 prompt_con_contexto += (
-                    f"\n\n[INFORMACIÓN REAL OBLIGATORIA DE FIREBASE - FINANZAS DEL USUARIO]:\n"
+                    f"\n\n[INFORMACIÓN REAL DE FIREBASE - FINANZAS DEL USUARIO]:\n"
                     f"- Balance Neto: ${balance:,.0f}\n"
                     f"- Ingresos Totales: ${ingresos:,.0f}\n"
                     f"- Gastos Totales: ${gastos:,.0f}\n"
-                    f"- Historial completo de movimientos reales: {movimientos}\n"
+                    f"- Movimientos (últimos 10): {movimientos[-10:] if movimientos else []}\n"
                     f"- Presupuestos: {presupuestos}\n"
-                    f"INSTRUCCIÓN CRÍTICA: Escucha la nota de voz del usuario y respóndele basándote en los datos reales de arriba (con sus fechas y categorías). Está estrictamente prohibido inventar datos, estadísticas de servidores o decir que no tienes acceso a la base de datos."
+                    f"INSTRUCCIÓN CRÍTICA: RESPONDE ÚNICAMENTE con datos de la lista anterior. NO inventes montos, categorías ni fechas."
                 )
 
-            if es_consulta_tareas:
+            if any(k in texto_lower for k in palabras_tareas) or bool(adjunto):
                 tareas = obtener_tareas_pendientes(usuario_id)
                 prompt_con_contexto += f"\n\n[INFORMACIÓN REAL DE FIREBASE - TAREAS DEL USUARIO]: {tareas}"
 
-            # Consulta a la IA con el contexto inyectado
+            # Llamada a la IA con contexto limitado
             if adjunto:
                 ruta = os.path.join(TEMP_DIR, adjunto.filename)
                 await adjunto.save(ruta)
@@ -149,11 +171,11 @@ async def on_message(message):
             print(f"🔥 Error en el procesamiento: {e}")
             respuesta_ia = f"⚠️ Ocurrió un error al procesar tu solicitud: `{e}`"
 
-    # Enviar respuesta al canal de Discord
+    # Enviar respuesta
     await message.channel.send(respuesta_ia)
-    
-    # Generar audio TTS si el usuario lo activó o si envió un audio
-    if usuario_id in usuarios_modo_voz or adjunto:
+
+    # Solo TTS si el usuario activó modo voz específicamente, no si solo envió audio
+    if usuario_id in usuarios_modo_voz:
         ruta_tts = os.path.join(TEMP_DIR, f"tts_{usuario_id}.mp3")
         try:
             generar_audio_respuesta(respuesta_ia, ruta_tts)
