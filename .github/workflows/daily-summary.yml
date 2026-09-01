@@ -1,0 +1,22 @@
+name: JARVIS Daily Summary
+
+on:
+  # Ejecutar cada 30 minutos entre 7am-12pm y 7pm-11pm (hora Colombia UTC-5)
+  # UTC times: 12:00-17:00 y 00:00-04:00
+  schedule:
+    - cron: '0,30 12-17,0-4 * * *'
+  # También permite ejecutarse manualmente desde GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  send-summary:
+    runs-on: ubuntu-latest
+    name: Enviar resumen de JARVIS
+    steps:
+      - name: Llamar endpoint de resumen
+        run: |
+          echo "Ejecutando resumen de JARVIS..."
+          response=$(curl -s -w "\n%{http_code}" https://jarvis-h20g.onrender.com/api/cron/daily-summary)
+          echo "Respuesta: $response"
+        env:
+          FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
