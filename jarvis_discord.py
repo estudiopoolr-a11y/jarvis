@@ -57,6 +57,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 TEMP_DIR = "temp_audios"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
+# IDs de roles que pueden invocar al bot (configurable aqui)
+ALLOWED_ROLE_IDS = [1537704466407497738]  # ID del rol "App" u otro que mencionas
+
 @bot.event
 async def on_ready():
     print("==================================================")
@@ -98,11 +101,14 @@ async def on_message(message):
     # 5. Mención o adjunto requerido
     formatos_audio = ('.ogg', '.mp3', '.wav', '.m4a', '.aac', '.flac')
     adjunto = next((a for a in message.attachments if a.filename.lower().endswith(formatos_audio) or 'audio' in (a.content_type or '')), None)
-    es_mencion = bot.user.mentioned_in(message)
 
-    print(f"[DEBUG] Mencion detectada: {es_mencion}, Contenido: {message.content[:50]}")
+    # Detectar menciones de usuario o de roles permitidos
+    es_mencion_usuario = bot.user.mentioned_in(message)
+    es_mencion_rol = any(role.id in ALLOWED_ROLE_IDS for role in message.role_mentions)
 
-    if not es_mencion and not adjunto:
+    print(f"[DEBUG] Mencion usuario: {es_mencion_usuario}, Mencion rol: {es_mencion_rol}, Contenido: {message.content[:50]}")
+
+    if not es_mencion_usuario and not es_mencion_rol and not adjunto:
         return
 
     # 6. Limpiar menciones (<@ID> y <@!ID>)
