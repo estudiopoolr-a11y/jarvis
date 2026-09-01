@@ -112,10 +112,21 @@ async def subir_recibo_shortcut(file: UploadFile = File(...), usuario_id: str = 
     temp_path = f"temp_{file.filename}"
     with open(temp_path, "wb") as buffer:
         buffer.write(await file.read())
-        
+
     resultado = pensar_respuesta_imagen(temp_path, "Extrae el recibo y registra la transacción", usuario_id)
     if os.path.exists(temp_path): os.remove(temp_path)
     return {"status": "ok", "resultado": resultado}
+
+@app.get("/api/cron/daily-summary")
+def cron_daily_summary():
+    """Endpoint para Render Cron Job - envía resumen diario al canal de Discord."""
+    try:
+        from daily_summary import main as daily_main
+        daily_main()
+        return {"status": "ok", "message": "Resumen enviado"}
+    except Exception as e:
+        print(f"Error en cron daily-summary: {e}")
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     bot_process = subprocess.Popen([sys.executable, "jarvis_discord.py"])
