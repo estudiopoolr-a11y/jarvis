@@ -17,7 +17,49 @@ from modules.database import (
 )
 
 load_dotenv()
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+# ---------- API Key Rotation Setup ----------
+# Support multiple API keys via GEMINI_API_KEYS (comma-separated) or fallback to single GEMINI_API_KEY
+_api_keys_str = os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY")
+if not _api_keys_str:
+    raise ValueError("No Gemini API key found. Set GEMINI_API_KEY or GEMINI_API_KEYS environment variable.")
+_API_KEYS = [k.strip() for k in _api_keys_str.split(',') if k.strip()]
+if not _API_KEYS:
+    raise ValueError("API key list is empty after parsing.")
+_key_index = 0  # index of the current key in use
+
+def _get_current_client() -> genai.Client:
+    """Return a genai.Client configured with the current API key."""
+    return genai.Client(api_key=_API_KEYS[_key_index])
+
+def _rotate_key() -> None:
+    """Rotate to the next API key (round-robin)."""
+    global _key_index
+    _key_index = (_key_index + 1) % len(_API_KEYS)
+
+def _gemini_call_with_fallback(callable):
+    """
+    Execute a callable that takes a genai.Client and makes a Gemini API request.
+    On APIError 429, rotate API key and retry (up to number of keys times).
+    Propagates other APIError immediately.
+    Returns the callable's result.
+    """
+    retries = len(_API_KEYS)
+    for _ in range(retries):
+        try:
+            return callable(_get_current_client())
+        except APIError as e:
+            if e.code == 429:
+                # Rotate key and try again
+                _rotate_key()
+                continue
+            # For non-429 errors, re-raise immediately
+            raise
+    # If we exhausted all keys due to 429
+    raise Exception("All Gemini API keys exhausted due to 429 errors (quota or rate limit).")
+
+# -------------------------------------------
+
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
 SYSTEM_INSTRUCTION = """
@@ -86,15 +128,18 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     )
 
     try:
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=prompt_extractor,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=ItemIntencion,
+        data = _gemini_call_with_fallback(
+            lambda c: json.loads(
+                c.models.generate_content(
+                    model=MODEL_NAME,
+                    contents=prompt_extractor,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=ItemIntencion,
+                    )
+                ).text
             )
         )
-        data = json.loads(response.text)
         tipo = data.get("tipo")
 
         if tipo == "configuracion_masiva":
@@ -193,20 +238,22 @@ def pensar_respuesta(prompt_usuario: str, usuario_id: str = "default") -> str:
         contexto_db = obtener_contexto_financiero(usuario_id)
         prompt_completo = f"{SYSTEM_INSTRUCTION}{contexto_db}\n\nMensaje del usuario: {prompt_usuario}"
 
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=prompt_completo,
-            config=types.GenerateContentConfig(
-                tools=[{"google_search": {}}],
-                safety_settings=[
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                ]
-            )
+        response_text = _gemini_call_with_fallback(
+            lambda c: c.models.generate_content(
+                model=MODEL_NAME,
+                contents=prompt_completo,
+                config=types.GenerateContentConfig(
+                    tools=[{"google_search": {}}],
+                    safety_settings=[
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    ]
+                )
+            ).text
         )
-        return response.text or "Sin respuesta disponible."
+        return response_text or "Sin respuesta disponible."
     except APIError as e:
         if e.code == 429:
             retry_delay_seconds = None
@@ -280,14 +327,16 @@ def analizar_inversion(ticker: str) -> str:
             "Busca en la web el contexto reciente de este activo o empresa y realiza un análisis frío, objetivo y pragmático."
         )
 
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=prompt_analisis,
-            config=types.GenerateContentConfig(
-                tools=[{"google_search": {}}]
-            )
+        response_text = _gemini_call_with_fallback(
+            lambda c: c.models.generate_content(
+                model=MODEL_NAME,
+                contents=prompt_analisis,
+                config=types.GenerateContentConfig(
+                    tools=[{"google_search": {}}]
+                )
+            ).text
         )
-        return response.text or "Error analizando el activo."
+        return response_text or "Error analizando el activo."
     except APIError as e:
         if e.code == 429:
             retry_delay_seconds = None
@@ -342,7 +391,7 @@ def analizar_inversion(ticker: str) -> str:
 def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuario_id: str = "default") -> str:
     """Procesa una imagen (factura, recibo, captura) extrayendo transacciones automáticamente."""
     try:
-        imagen_file = client.files.upload(file=ruta_imagen)
+        imagen_file = _gemini_call_with_fallback(lambda c: c.files.upload(file=ruta_imagen))
         prompt = (
             f"{SYSTEM_INSTRUCTION}\n\n"
             "El usuario te envía esta imagen. Si se trata de un recibo, factura o comprobante de pago: "
@@ -351,26 +400,30 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
             f"Comentario del usuario: {prompt_adicional}"
         )
 
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=[prompt, imagen_file],
-            config=types.GenerateContentConfig(
-                safety_settings=[
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                ]
-            )
+        response_text = _gemini_call_with_fallback(
+            lambda c: c.models.generate_content(
+                model=MODEL_NAME,
+                contents=[prompt, imagen_file],
+                config=types.GenerateContentConfig(
+                    safety_settings=[
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    ]
+                )
+            ).text
         )
 
-        if response.text:
-            procesar_intencion_natural(response.text, usuario_id)
+        if response_text:
+            procesar_intencion_natural(response_text, usuario_id)
 
-        try: client.files.delete(name=imagen_file.name)
-        except: pass
+        try:
+            imagen_file.delete()  # Assuming the file object has a delete method; if not, fallback
+        except Exception:
+            pass
 
-        return response.text or "Imagen procesada sin texto resultante."
+        return response_text or "Imagen procesada sin texto resultante."
     except APIError as e:
         if e.code == 429:
             retry_delay_seconds = None
@@ -425,7 +478,7 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
 def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_id: str = "default") -> str:
     """Procesa archivos de audio recibidos inyectando estrictamente el contexto de la base de datos."""
     try:
-        audio_file = client.files.upload(file=ruta_audio)
+        audio_file = _gemini_call_with_fallback(lambda c: c.files.upload(file=ruta_audio))
         contexto_db = obtener_contexto_financiero(usuario_id)
 
         prompt_completo = (
@@ -435,21 +488,25 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
             "Prohibido inventar montos, fechas o categorías que no estén en esa lista."
         )
 
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=[prompt_completo, audio_file],
-            config=types.GenerateContentConfig(
-                safety_settings=[
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                ]
-            )
+        response_text = _gemini_call_with_fallback(
+            lambda c: c.models.generate_content(
+                model=MODEL_NAME,
+                contents=[prompt_completo, audio_file],
+                config=types.GenerateContentConfig(
+                    safety_settings=[
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    ]
+                )
+            ).text
         )
-        try: client.files.delete(name=audio_file.name)
-        except: pass
-        return response.text or ""
+        try:
+            audio_file.delete()
+        except Exception:
+            pass
+        return response_text or ""
     except APIError as e:
         if e.code == 429:
             retry_delay_seconds = None
