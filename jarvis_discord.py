@@ -98,6 +98,8 @@ async def on_message(message):
     adjunto = next((a for a in message.attachments if a.filename.lower().endswith(formatos_audio) or 'audio' in (a.content_type or '')), None)
     es_mencion = bot.user.mentioned_in(message)
 
+    print(f"[DEBUG] Mencion detectada: {es_mencion}, Contenido: {message.content[:50]}")
+
     if not es_mencion and not adjunto:
         return
 
