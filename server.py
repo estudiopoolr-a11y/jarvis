@@ -129,6 +129,31 @@ def cron_daily_summary():
         print(f"Error en cron daily-summary: {e}")
         return {"status": "error", "message": str(e)}
 
+@app.get("/api/cron/weekly-summary")
+def cron_weekly_summary():
+    """Endpoint para Render Cron Job - envía resumen semanal al canal de Discord."""
+    try:
+        from modules.alertas import enviar_resumen_semanal_discord
+        exito = enviar_resumen_semanal_discord()
+        if exito:
+            return {"status": "ok", "message": "Resumen semanal enviado"}
+        else:
+            return {"status": "error", "message": "Error enviando resumen semanal"}
+    except Exception as e:
+        print(f"Error en cron weekly-summary: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/cron/alertas")
+def cron_alertas():
+    """Endpoint para Render Cron Job - verifica y envía alertas proactivas."""
+    try:
+        from modules.alertas import verificar_y_enviar_alertas
+        resultado = verificar_y_enviar_alertas()
+        return resultado
+    except Exception as e:
+        print(f"Error en cron alertas: {e}")
+        return {"status": "error", "message": str(e)}
+
 if __name__ == "__main__":
     # NOTA: El bot de Discord se ejecuta LOCALMENTE (jarvis_discord.py).
     # Render solo ejecuta el dashboard web y API.

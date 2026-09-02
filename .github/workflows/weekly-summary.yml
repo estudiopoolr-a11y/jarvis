@@ -1,0 +1,39 @@
+name: JARVIS Weekly Summary
+
+on:
+  # Ejecutar cada domingo a las 8am (hora Colombia UTC-5)
+  # UTC: 13:00
+  schedule:
+    - cron: '0 13 * * 0'
+  # También permite ejecutarse manualmente desde GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  weekly-summary:
+    runs-on: ubuntu-latest
+    name: Enviar resumen semanal de JARVIS
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install firebase-admin requests python-dotenv
+
+      - name: Despertar Render
+        run: |
+          echo "Despertando Render..."
+          curl -s --max-time 90 https://jarvis-h20g.onrender.com/ || true
+          echo "Render despierto, esperando..."
+          sleep 5
+
+      - name: Llamar endpoint de resumen semanal
+        run: |
+          echo "Ejecutando resumen semanal de JARVIS..."
+          response=$(curl -s --max-time 60 -w "\n%{http_code}" https://jarvis-h20g.onrender.com/api/cron/weekly-summary)
+          echo "Respuesta: $response"
