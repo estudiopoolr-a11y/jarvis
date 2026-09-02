@@ -403,3 +403,115 @@ def proyectar_meta(meta: dict, capacidad_ahorro_mensual: float) -> dict:
         "meses_proyectados": meses_proyectados,
         "atrasado": atrasado
     }
+
+
+# ============== MODIFICAR PRESUPUESTOS ==============
+
+def modificar_presupuesto(usuario_id: str, categoria: str, nuevo_limite: float):
+    """Modifica o crea un presupuesto."""
+    global db
+    if not db: db = inicializar_firebase()
+    if not db: return False
+    try:
+        doc_id = f"{usuario_id}_{categoria.lower()}"
+        db.collection("presupuestos").document(doc_id).set({
+            "usuario_id": str(usuario_id),
+            "categoria": categoria.capitalize(),
+            "limite": float(nuevo_limite),
+            "actualizado": firestore.SERVER_TIMESTAMP
+        }, merge=True)
+        return True
+    except Exception as e:
+        print(f"Error modificando presupuesto: {e}")
+        return False
+
+
+# ============== PAGOS FIJOS MENSUALES ==============
+
+def guardar_pago_fijo(usuario_id: str, nombre: str, monto: float, dia_mes: int, categoria: str = "General"):
+    """Guarda un pago fijo mensual."""
+    global db
+    if not db: db = inicializar_firebase()
+    if not db: return
+    try:
+        doc_id = f"{usuario_id}_{nombre.lower().replace(' ', '_')[:30]}"
+        db.collection("pagos_fijos").document(doc_id).set({
+            "usuario_id": str(usuario_id),
+            "nombre": nombre.title(),
+            "monto": float(monto),
+            "dia_mes": int(dia_mes),
+            "categoria": categoria.capitalize(),
+            "activo": True,
+            "timestamp": firestore.SERVER_TIMESTAMP
+        })
+    except Exception as e:
+        print(f"Error guardando pago fijo: {e}")
+
+
+def obtener_pagos_fijos(usuario_id: str = "default"):
+    """Obtiene todos los pagos fijos del usuario."""
+    global db
+    if not db: db = inicializar_firebase()
+    if not db: return []
+    try:
+        docs = db.collection("pagos_fijos").where(filter=FieldFilter("usuario_id", "==", str(usuario_id))).stream()
+        pagos = []
+        for doc in docs:
+            p = doc.to_dict()
+            p["id"] = doc.id
+            pagos.append(p)
+        return pagos
+    except Exception as e:
+        print(f"Error obteniendo pagos fijos: {e}")
+        return []
+
+
+def eliminar_pago_fijo(usuario_id: str, nombre: str):
+    """Elimina un pago fijo por nombre."""
+    global db
+    if not db: db = inicializar_firebase()
+    if not db: return False
+    try:
+        nombre_norm = nombre.lower().strip()
+        docs = db.collection("pagos_fijos").where(filter=FieldFilter("usuario_id", "==", str(usuario_id))).stream()
+        for doc in docs:
+            data = doc.to_dict()
+            if nombre_norm in data.get("nombre", "").lower():
+                doc.reference.delete()
+                return True
+    except Exception as e:
+        print(f"Error eliminando pago fijo: {e}")
+    return False
+
+
+def obtener_pagos_del_dia(usuario_id: str, dia: int):
+    """Obtiene pagos fijos que vencen un día específico."""
+    pagos = obtener_pagos_fijos(usuario_id)
+    return [p for p in pagos if p.get("dia_mes") == dia and p.get("activo")]
+
+
+# ============== PERFIL DE USUARIO ==============
+
+def guardar_perfil(usuario_id: str, **datos):
+    """Guarda o actualiza datos del perfil del usuario."""
+    global db
+    if not db: db = inicializar_firebase()
+    if not db: return
+    try:
+        db.collection("perfiles").document(str(usuario_id)).set(datos, merge=True)
+    except Exception as e:
+        print(f"Error guardando perfil: {e}")
+
+
+def obtener_perfil(usuario_id: str = "default") -> dict:
+    """Obtiene el perfil del usuario."""
+    global db
+    if not db: db = inicializar_firebase()
+    if not db: return {}
+    try:
+        doc = db.collection("perfiles").document(str(usuario_id)).get()
+        if doc.exists:
+            return doc.to_dict()
+    except Exception as e:
+        print(f"Error obteniendo perfil: {e}")
+    return {}

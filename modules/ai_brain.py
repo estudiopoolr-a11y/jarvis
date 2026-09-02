@@ -16,7 +16,9 @@ from modules.database import (
     marcar_tarea_completada, inicializar_firebase, limpiar_y_cargar_datos_dinamicos,
     obtener_contexto_financiero,
     obtener_tareas_pendientes, obtener_balance_financiero, obtener_resumen_presupuestos,
-    guardar_meta, obtener_metas, eliminar_meta, actualizar_progreso_meta, proyectar_meta
+    guardar_meta, obtener_metas, eliminar_meta, actualizar_progreso_meta, proyectar_meta,
+    modificar_presupuesto, guardar_pago_fijo, obtener_pagos_fijos, eliminar_pago_fijo,
+    guardar_perfil, obtener_perfil
 )
 from datetime import datetime
 
@@ -375,6 +377,78 @@ def _parse_meta(texto: str) -> dict | None:
     return None
 
 
+def _parse_presupuesto_modificar(texto: str) -> dict | None:
+    """Detecta 'sube Women a 400000' o 'cambia Alimentación a 100000'."""
+    import re
+    texto_lower = texto.lower()
+
+    # Patrones: "sube <cat> a <monto>", "cambia <cat> a <monto>", "baja <cat> a <monto>"
+    patrones = [
+        r'(?:sube|aumenta|incrementa)\s+(\w+)\s+(?:a|hasta)\s+([\d,.]+)',
+        r'(?:baja|reduce|disminuye)\s+(\w+)\s+(?:a|hasta)\s+([\d,.]+)',
+        r'(?:cambia|modifica|actualiza)\s+(\w+)\s+(?:a|hasta)\s+([\d,.]+)',
+        r'(?:sube|aumenta)\s+(\w+)\s+([\d,.]+)\s*(?:más|adicional)?',
+        r'(?:baja|reduce)\s+(\w+)\s+([\d,.]+)',
+    ]
+
+    for i, patron in enumerate(patrones):
+        match = re.search(patron, texto_lower)
+        if match:
+            cat = match.group(1).strip()
+            # Filtrar palabras que no son categorías
+            if cat in ["el", "la", "los", "las", "de", "del", "en", "un", "una", "mi", "tu", "el", "presupuesto"]:
+                continue
+            try:
+                monto = float(match.group(2).replace(',', ''))
+                accion = "subir" if i < 1 or i == 3 else ("bajar" if i < 2 or i == 4 else "cambiar")
+                return {"categoria": cat.title(), "nuevo_limite": monto, "accion": accion}
+            except ValueError:
+                continue
+    return None
+
+
+def _parse_pago_fijo(texto: str) -> dict | None:
+    """Detecta 'pago fijo arriendo 1500000 día 5'."""
+    import re
+    texto_lower = texto.lower()
+
+    # Patrón: "pago fijo <nombre> <monto> [día <N>]"
+    patron = r'pago\s+fijo\s+(\w+(?:\s+\w+)?)\s+([\d,.]+)(?:\s+d[ií]a\s+(\d+))?'
+    match = re.search(patron, texto_lower)
+    if match:
+        nombre = match.group(1).strip()
+        try:
+            monto = float(match.group(2).replace(',', ''))
+            dia = int(match.group(3)) if match.group(3) else 1
+            return {"nombre": nombre.title(), "monto": monto, "dia_mes": dia}
+        except ValueError:
+            pass
+    return None
+
+
+def _parse_perfil(texto: str) -> dict | None:
+    """Detecta 'mi nombre es X', 'vivo en Y'."""
+    import re
+    texto_lower = texto.lower()
+
+    # "mi nombre es Daniel"
+    m = re.search(r'mi nombre es\s+(\w+)', texto_lower)
+    if m:
+        return {"nombre": m.group(1).title()}
+
+    # "vivo en Bogotá"
+    m = re.search(r'vivo en\s+(\w+(?:\s+\w+)?)', texto_lower)
+    if m:
+        return {"ciudad": m.group(1).title()}
+
+    # "tengo X años"
+    m = re.search(r'tengo\s+(\d+)\s+(?:a[ñn]os)', texto_lower)
+    if m:
+        return {"edad": int(m.group(1))}
+
+    return None
+
+
 # ============================================================
 # ASESOR DE INVERSIONES COLOMBIA
 # ============================================================
@@ -536,6 +610,30 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     if presupuesto_data:
         establecer_presupuesto(usuario_id, presupuesto_data["categoria"], presupuesto_data["limite"])
         return f"🎯 Presupuesto: *{presupuesto_data['categoria']}* = **${presupuesto_data['limite']:,.0f}**"
+
+    # 5d-2. Modificar presupuesto (sube/baja/cambia)
+    mod_pres = _parse_presupuesto_modificar(texto_lc)
+    if mod_pres:
+        cat = mod_pres["categoria"]
+        nuevo = mod_pres["nuevo_limite"]
+        accion = mod_pres["accion"]
+        modificar_presupuesto(usuario_id, cat, nuevo)
+        emoji = "📈" if accion == "subir" else "📉" if accion == "bajar" else "🔄"
+        return f"{emoji} **Presupuesto {accion}do:** *{cat}* = **${nuevo:,.0f}**"
+
+    # 5d-3. Pago fijo mensual
+    pago_fijo = _parse_pago_fijo(texto_lc)
+    if pago_fijo:
+        guardar_pago_fijo(usuario_id, pago_fijo["nombre"], pago_fijo["monto"], pago_fijo["dia_mes"])
+        return f"⏰ **Pago fijo creado:** {pago_fijo['nombre']} = ${pago_fijo['monto']:,.0f} (día {pago_fijo['dia_mes']} de cada mes)"
+
+    # 5d-4. Perfil de usuario
+    perfil_data = _parse_perfil(texto_lc)
+    if perfil_data:
+        guardar_perfil(usuario_id, **perfil_data)
+        campo = list(perfil_data.keys())[0]
+        valor = list(perfil_data.values())[0]
+        return f"👤 **Perfil actualizado:** {campo} = {valor}"
 
     # 5e. Meta financiera
     if any(k in texto_lc for k in ["meta", "objetivo", "ahorrar para", "quiero ahorrar", "crear meta"]):
