@@ -160,19 +160,15 @@ async def on_message(message):
 
             # Inyectar contexto si es necesario
             if any(k in texto_lower for k in palabras_finanzas) or bool(adjunto):
+                # OPTIMIZADO: Solo 5 movimientos en vez de 10 + instrucción más corta
                 prompt_con_contexto += (
-                    f"\n\n[INFORMACIÓN REAL DE FIREBASE - FINANZAS DEL USUARIO]:\n"
-                    f"- Balance Neto: ${balance:,.0f}\n"
-                    f"- Ingresos Totales: ${ingresos:,.0f}\n"
-                    f"- Gastos Totales: ${gastos:,.0f}\n"
-                    f"- Movimientos (últimos 10): {movimientos[-10:] if movimientos else []}\n"
-                    f"- Presupuestos: {presupuestos}\n"
-                    f"INSTRUCCIÓN CRÍTICA: RESPONDE ÚNICAMENTE con datos de la lista anterior. NO inventes montos, categorías ni fechas."
+                    f"\n[FIREBASE]: Balance=${balance:,.0f} | Ing=${ingresos:,.0f} | Gas=${gastos:,.0f} | Mov={movimientos[-5:] if movimientos else []} | Pres={presupuestos}\n"
+                    f"Usa SOLO estos datos. NO inventes."
                 )
 
             if any(k in texto_lower for k in palabras_tareas) or bool(adjunto):
                 tareas = obtener_tareas_pendientes(usuario_id)
-                prompt_con_contexto += f"\n\n[INFORMACIÓN REAL DE FIREBASE - TAREAS DEL USUARIO]: {tareas}"
+                prompt_con_contexto += f"\n[TAREAS]: {tareas}"
 
             # Llamada a la IA con contexto limitado
             if adjunto:

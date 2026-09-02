@@ -256,12 +256,10 @@ def obtener_contexto_financiero(usuario_id: str = "default") -> str:
     tareas = obtener_tareas_pendientes(usuario_id)
     
     return f"""
-    [ESTADO ACTUAL DE LA BASE DE DATOS DE FIREBASE PARA EL USUARIO {usuario_id}]
-    - Ingresos totales: ${ingresos:,.2f}
-    - Gastos totales: ${gastos:,.2f}
-    - Balance neto: ${balance_neto:,.2f}
-    - Presupuestos establecidos por categoría: {json.dumps(presupuestos, ensure_ascii=False)}
-    - Transacciones recientes: {json.dumps(transacciones[-10:], ensure_ascii=False)}
+    [DATOS DE FIREBASE - Usuario {usuario_id}]
+    - Ingresos: ${ingresos:,.0f} | Gastos: ${gastos:,.0f} | Balance: ${balance_neto:,.0f}
+    - Presupuestos: {json.dumps(presupuestos, ensure_ascii=False)}
+    - Últimas 5 transacciones: {json.dumps(transacciones[-5:], ensure_ascii=False)}
     - Tareas pendientes: {json.dumps(tareas, ensure_ascii=False)}
     """
 

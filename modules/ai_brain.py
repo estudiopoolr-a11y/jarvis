@@ -1,5 +1,7 @@
 import os
 import json
+import time
+import hashlib
 import yfinance as yf
 from google import genai
 from google.genai import types
@@ -16,6 +18,10 @@ from modules.database import (
     obtener_tareas_pendientes, obtener_balance_financiero, obtener_resumen_presupuestos
 )
 from datetime import datetime
+
+# OPTIMIZACIÓN: Cache para búsquedas web (1 hora TTL)
+_busquedas_cache = {}
+_CACHE_WEB_TTL = 3600
 
 load_dotenv()
 
@@ -70,8 +76,7 @@ def _gemini_call_with_fallback(callable):
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
 SYSTEM_INSTRUCTION = """
-Eres JARVIS, un asistente personal de inteligencia artificial de nivel ejecutivo, frío, analítico, eficiente, directo y sin filtros.
-Ayudas al usuario a gestionar sus finanzas personales, presupuestos, tareas y análisis de inversiones con rigor absoluto.
+JARVIS: asistente financiero ejecutivo. Frío, analítico, directo. Responde con datos reales del usuario.
 """
 
 class ItemIntencion(BaseModel):
@@ -342,109 +347,44 @@ def _asesorar_inversion(prompt_usuario: str, usuario_id: str):
         # Calcular capacidad de inversión (20% del balance disponible, mínimo $100.000)
         capacidad_inversion = max(balance_neto * 0.20, 100000)
 
-        # Determinar mes actual para búsquedas
-        meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
-                 "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
-        mes_actual = meses[datetime.now().month - 1]
+        # OPTIMIZADO: 1 sola llamada con todo incluido (antes 3 llamadas)
+        prompt_unificado = f"""Eres JARVIS, asesor financiero ejecutivo de Colombia.
 
-        # Construir prompts para búsqueda web
-        prompt_tasas = f"""
-Eres un asesor financiero de Colombia. Busca información actualizada sobre:
-1. Tasas de interés actuales de CDT en bancos colombianos (Bancolombia, Davivienda, Banco de Bogotá, Banco Popular, Scotiabank)
-2. Tasas de fondos de inversión colectiva yemonedaros
-3. Cifras actualizadas a {mes_actual} 2026
+CONTEXTO: Balance=${balance_neto:,.0f} COP | Capacidad sugerida=${capacidad_inversion:,.0f} COP (20%)
 
-Responde con una tabla comparativa clara de tasas por banco y plazo (30, 60, 90, 180 y 360 días).
-"""
+PREGUNTA: {prompt_usuario}
 
-        prompt_apps = f"""
-Eres un experto en fintech de Colombia. Busca información actualizada sobre:
-1. Mejores apps para invertir en Colombia en 2026 (Tyba, Trii, Hapi, Nequi, otros)
-2. Montos mínimos de inversión
-3. Comisiones y costos
-4. Si tienen protección de Fogafín
-5. Tipos de productos disponibles (acciones, ETF, fondos, CDT digitales)
+INSTRUCCIONES (responde en español):
+1. Busca en la web: tasas CDT Colombia {datetime.now().month}/{datetime.now().year} (Bancolombia, Davivienda, Banco de Bogotá)
+2. Busca en la web: mejores apps invertir Colombia 2026 (Tyba, Trii, Hapi, Nequi)
+3. Genera respuesta con: tabla tasas CDT | comparativa apps | recomendación personalizada
+4. Finaliza con: TAREAS: [tarea1] | [tarea2] | [tarea3]
 
-Responde con una comparativa clara de apps.
-"""
+Si balance < $500.000, recomienda apps sin monto mínimo.
+Si balance > $1.000.000, recomienda diversificar CDT + app."""
 
-        # Realizar búsquedas web en paralelo
-        resultados_tasas = _gemini_call_with_fallback(
+        response = _gemini_call_with_fallback(
             lambda c: c.models.generate_content(
                 model=MODEL_NAME,
-                contents=prompt_tasas,
+                contents=prompt_unificado,
                 config=types.GenerateContentConfig(
-                    tools=[{"google_search": {}}]
+                    tools=[{"google_search": {}}],
+                    max_output_tokens=2000
                 )
-            ).text
-        ) or "No se pudo obtener información de tasas."
+            )
+        )
 
-        resultados_apps = _gemini_call_with_fallback(
-            lambda c: c.models.generate_content(
-                model=MODEL_NAME,
-                contents=prompt_apps,
-                config=types.GenerateContentConfig(
-                    tools=[{"google_search": {}}]
-                )
-            ).text
-        ) or "No se pudo obtener información de apps."
+        respuesta = response.text or "No se pudo generar la asesoría."
 
-        # Generar respuesta personalizada con recomendación
-        prompt_respuesta = f"""Eres JARVIS, un asesor financiero ejecutivo frío y analítico.
-
-CONTEXTO DEL USUARIO:
-- Balance neto: ${balance_neto:,.0f} COP
-- Capacidad de inversión recomendada (20%): ${capacidad_inversion:,.0f} COP
-- Ingresos totales: ${ingresos:,.0f} COP
-- Gastos totales: ${gastos:,.0f} COP
-
-INFORMACIÓN DE TASAS CDT COLOMBIA:
-{resultados_tasas}
-
-INFORMACIÓN DE APPS DE INVERSIÓN COLOMBIA:
-{resultados_apps}
-
-PREGUNTA DEL USUARIO: {prompt_usuario}
-
-INSTRUCCIONES:
-1. Genera una respuesta completa en español
-2. Incluye una tabla de tasas CDT por banco
-3. Incluye comparativa de apps recomendadas
-4. Da una recomendación personalizada según la capacidad del usuario
-5. Si el balance es menor a $500.000, sugiere empezar con Nequi o apps sin monto mínimo
-6. Si el balance es mayor a $1.000.000, sugiere diversificar: CDT + app de inversión
-7. IMPORTANTE: Al final, incluye una sección "TAREAS CREADAS" con exactamente estas tareas a crear:
-   - Formato: TAREAS CREADAS: [tarea1] | [tarea2] | [tarea3]
-   - Máximo 4 tareas
-   - Las tareas deben ser acciones concretas como:
-     * "Crear cuenta en Tyba para invertir desde $1.000"
-     * "Comparar tasas CDT en Bancolombia y Davivienda"
-     * "Revisar tasas de CDT en 30 días"
-     * "Separar ${int(capacidad_inversion):,} para fondo de emergencia"
-"""
-
-        respuesta = _gemini_call_with_fallback(
-            lambda c: c.models.generate_content(
-                model=MODEL_NAME,
-                contents=prompt_respuesta,
-                config=types.GenerateContentConfig(
-                    safety_settings=[
-                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
-                    ]
-                )
-            ).text
-        ) or "No se pudo generar la asesoría."
-
-        # Extraer tareas de la respuesta y crearlas en Firebase
-        if "TAREAS CREADAS:" in respuesta:
-            parte_tareas = respuesta.split("TAREAS CREADAS:")[1].split("---")[0].split("___")[0].strip()
+        # Extraer y crear tareas si existen
+        if "TAREAS:" in respuesta:
+            parte_tareas = respuesta.split("TAREAS:")[1].strip()
+            # Tomar solo la primera línea de tareas
+            parte_tareas = parte_tareas.split("\n")[0]
             tareas = [t.strip() for t in parte_tareas.split("|") if t.strip()]
 
-            for tarea in tareas[:4]:  # Máximo 4 tareas
-                if len(tarea) > 5 and len(tarea) < 100:
+            for tarea in tareas[:3]:  # Máximo 3 tareas
+                if 5 < len(tarea) < 100:
                     guardar_tarea(usuario_id, tarea, "Media", "Esta semana")
 
         return respuesta
@@ -551,18 +491,65 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     # Solo para preguntas complejas que no matchearon ningún parser
     return None
 
+def _gemini_call_with_cache(prompt: str, usar_web: bool = True, max_tokens: int = 1500):
+    """Llama a Gemini con cache de búsquedas web para evitar repetir la misma query."""
+    cache_key = hashlib.md5(f"{prompt}|{usar_web}".encode()).hexdigest()
+    ahora = time.time()
+
+    # Verificar cache
+    if cache_key in _busquedas_cache:
+        timestamp, resultado = _busquedas_cache[cache_key]
+        if ahora - timestamp < _CACHE_WEB_TTL:
+            return resultado
+
+    # Hacer llamada real
+    tools = [{"google_search": {}}] if usar_web else None
+    resultado = _gemini_call_with_fallback(
+        lambda c: c.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=tools,
+                max_output_tokens=max_tokens
+            )
+        ).text
+    )
+
+    if resultado:
+        _busquedas_cache[cache_key] = (ahora, resultado)
+
+    return resultado
+
+
+def _necesita_busqueda_web(texto: str) -> bool:
+    """Determina si la pregunta requiere búsqueda web en tiempo real."""
+    texto_lower = texto.lower()
+    palabras_web = [
+        "noticia", "actual", "hoy", "ayer", "esta semana", "último", "ultimo",
+        "precio", "vale", "cuesta", "tasa", "cdt", "inflación", "inflacion",
+        "dolar", "dólar", "trm", "bolsa", "mercado", "invertir", "inversion",
+        "noticias", "2026", "2025", "reciente"
+    ]
+    return any(p in texto_lower for p in palabras_web)
+
+
 def pensar_respuesta(prompt_usuario: str, usuario_id: str = "default") -> str:
     """Responde preguntas generales inyectando el contexto de Firebase y Google Search."""
     try:
         contexto_db = obtener_contexto_financiero(usuario_id)
         prompt_completo = f"{SYSTEM_INSTRUCTION}{contexto_db}\n\nMensaje del usuario: {prompt_usuario}"
 
+        # OPTIMIZADO: Solo usar google_search si es necesario
+        usar_web = _necesita_busqueda_web(prompt_usuario)
+        tools = [{"google_search": {}}] if usar_web else None
+
         response_text = _gemini_call_with_fallback(
             lambda c: c.models.generate_content(
                 model=MODEL_NAME,
                 contents=prompt_completo,
                 config=types.GenerateContentConfig(
-                    tools=[{"google_search": {}}],
+                    tools=tools,
+                    max_output_tokens=1500,
                     safety_settings=[
                         types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                         types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
