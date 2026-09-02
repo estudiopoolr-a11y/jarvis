@@ -1,6 +1,5 @@
 import os
 import sys
-import subprocess
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
 from modules.database import (
@@ -129,6 +128,7 @@ def cron_daily_summary():
         return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
-    bot_process = subprocess.Popen([sys.executable, "jarvis_discord.py"])
+    # NOTA: El bot de Discord se ejecuta LOCALMENTE (jarvis_discord.py).
+    # Render solo ejecuta el dashboard web y API.
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
