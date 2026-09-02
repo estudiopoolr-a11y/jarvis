@@ -20,7 +20,9 @@ class ComandoPayload(BaseModel):
     usuario_id: str = "iphone_user"
 
 @app.get("/", response_class=HTMLResponse)
+@app.head("/", response_class=HTMLResponse)
 @app.get("/dashboard", response_class=HTMLResponse)
+@app.head("/dashboard", response_class=HTMLResponse)
 def render_dashboard(usuario_id: str = "default"):
     balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
     tareas = obtener_tareas_pendientes(usuario_id)
