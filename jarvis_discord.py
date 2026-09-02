@@ -12,7 +12,8 @@ from modules.ai_brain import (
 )
 from modules.database import (
     guardar_mensaje, obtener_tareas_pendientes, marcar_tarea_completada,
-    obtener_balance_financiero, obtener_resumen_presupuestos
+    obtener_balance_financiero, obtener_resumen_presupuestos,
+    limpiar_datos_usuario
 )
 import firebase_admin
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -512,6 +513,7 @@ async def mostrar_ayuda(ctx):
 `!dormir [horas]` - Silencia por X horas (default: 8)
 `!pausar [horas]` - Pausa notificaciones (default: 2)
 `!ayuda` - Muestra este mensaje
+`!borrar confirmar` - Borra TODOS tus datos (requiere confirmación)
 
 **💬 MENCIÓN NATURAL**
 También puedes hablarme directamente con:
@@ -528,6 +530,32 @@ Para respuestas en audio, usa `!voz` primero.
 
 _Sistemas operativos. JARVIS a la espera de instrucciones._"""
     await ctx.send(ayuda)
+
+@bot.command(name="borrar")
+async def borrar_datos(ctx, *, confirmacion: str = None):
+    """Borra todos los datos del usuario. Requiere confirmación."""
+    if confirmacion != "confirmar":
+        await ctx.send("⚠️ **¿Estás seguro?**\n\nEsta acción eliminará TODAS tus transacciones, presupuestos y tareas.\nPara confirmar, escribe: `!borrar confirmar`")
+        return
+
+    try:
+        resultado = limpiar_datos_usuario(str(ctx.author.id))
+        total = sum(resultado.values())
+
+        if total == 0:
+            await ctx.send("ℹ️ No hay datos para borrar.")
+        else:
+            msg = "🗑️ **Datos eliminados correctamente:**\n"
+            if resultado["transacciones"] > 0:
+                msg += f"   • {resultado['transacciones']} transacciones\n"
+            if resultado["presupuestos"] > 0:
+                msg += f"   • {resultado['presupuestos']} presupuestos\n"
+            if resultado["tareas"] > 0:
+                msg += f"   • {resultado['tareas']} tareas\n"
+            msg += "\n✅ Base de datos limpia. Puedes recargar datos con el prompt masivo."
+            await ctx.send(msg)
+    except Exception as e:
+        await ctx.send(f"⚠️ Error borrando datos: {e}")
 
 if __name__ == "__main__":
     if TOKEN: bot.run(TOKEN)

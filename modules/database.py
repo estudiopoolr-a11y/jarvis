@@ -148,6 +148,38 @@ def marcar_tarea_completada(usuario_id: str, texto_busqueda: str):
         print(f"Error completando tarea: {e}")
     return None
 
+def limpiar_datos_usuario(usuario_id: str):
+    """Elimina todas las transacciones, presupuestos y tareas de un usuario."""
+    global db
+    if not db: db = inicializar_firebase()
+    if not db: return {"transacciones": 0, "presupuestos": 0, "tareas": 0}
+
+    resultado = {"transacciones": 0, "presupuestos": 0, "tareas": 0}
+
+    try:
+        # Eliminar transacciones
+        docs = db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", str(usuario_id))).stream()
+        for doc in docs:
+            doc.reference.delete()
+            resultado["transacciones"] += 1
+
+        # Eliminar presupuestos
+        docs = db.collection("presupuestos").where(filter=FieldFilter("usuario_id", "==", str(usuario_id))).stream()
+        for doc in docs:
+            doc.reference.delete()
+            resultado["presupuestos"] += 1
+
+        # Eliminar tareas
+        docs = db.collection("tareas").where(filter=FieldFilter("usuario_id", "==", str(usuario_id))).stream()
+        for doc in docs:
+            doc.reference.delete()
+            resultado["tareas"] += 1
+
+    except Exception as e:
+        print(f"Error limpiando datos: {e}")
+
+    return resultado
+
 def registrar_transaccion(usuario_id: str, tipo: str, monto: float, categoria: str, descripcion: str):
     global db
     if not db: db = inicializar_firebase()
