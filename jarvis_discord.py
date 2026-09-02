@@ -275,7 +275,16 @@ async def ver_finanzas(ctx):
         reporte += f"• **Gastos Totales:** -${gastos:,.0f}\n"
         reporte += f"• **Balance Neto:** ${balance:,.0f}\n\n"
         if movimientos:
-            reporte += "Últimos movimientos:\n" + "\n".join(movimientos[-10:])
+            # Formatear movimientos (que son diccionarios) a strings legibles
+            ultimos = []
+            for t in movimientos[-10:]:
+                tipo = t.get("tipo", "gasto")
+                monto = t.get("monto", 0)
+                cat = t.get("categoria", "General")
+                emoji = "🟢" if tipo == "ingreso" else "🔴"
+                signo = "+" if tipo == "ingreso" else "-"
+                ultimos.append(f"{emoji} {signo}${float(monto):,.0f} en {cat}")
+            reporte += "**Últimos movimientos:**\n" + "\n".join(ultimos)
         else:
             reporte += "Sin movimientos registrados."
         await ctx.send(reporte)

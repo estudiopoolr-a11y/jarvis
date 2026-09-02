@@ -56,7 +56,13 @@ def _gemini_call_with_fallback(callable):
             # For non-429 errors, re-raise immediately
             raise
     # If we exhausted all keys due to 429
-    raise Exception("All Gemini API keys exhausted due to 429 errors (quota or rate limit).")
+    raise Exception(
+        "⚠️ **Cuota de Gemini agotada en todas las keys.**\n\n"
+        "Las 5 API keys de Gemini han alcanzado su límite diario.\n"
+        "• Espera hasta la medianoche (hora Colombia) para que se resetee la cuota\n"
+        "• O agrega nuevas API keys en el archivo .env (GEMINI_API_KEYS)\n"
+        "• Por ahora, los comandos básicos (!finanzas, !tareas) seguirán funcionando."
+    )
 
 # -------------------------------------------
 
