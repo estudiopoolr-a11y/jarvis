@@ -23,21 +23,25 @@ from datetime import datetime
 _busquedas_cache = {}
 _CACHE_WEB_TTL = 3600
 
+# OPTIMIZACIÓN: Cliente de Gemini reutilizable por key
+_clientes_cache = {}
+
 load_dotenv()
 
 # ---------- API Key Rotation Setup ----------
-# Support multiple API keys via GEMINI_API_KEYS (comma-separated) or fallback to single GEMINI_API_KEY
 _api_keys_str = os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY")
 if not _api_keys_str:
-    raise ValueError("No Gemini API key found. Set GEMINI_API_KEY or GEMINI_API_KEYS environment variable.")
+    raise ValueError("No Gemini API key found.")
 _API_KEYS = [k.strip() for k in _api_keys_str.split(',') if k.strip()]
-if not _API_KEYS:
-    raise ValueError("API key list is empty after parsing.")
-_key_index = 0  # index of the current key in use
+_key_index = 0
 
 def _get_current_client() -> genai.Client:
-    """Return a genai.Client configured with the current API key."""
-    return genai.Client(api_key=_API_KEYS[_key_index])
+    """OPTIMIZADO: Reusa clientes existentes en cache."""
+    global _clientes_cache
+    key = _API_KEYS[_key_index]
+    if key not in _clientes_cache:
+        _clientes_cache[key] = genai.Client(api_key=key)
+    return _clientes_cache[key]
 
 def _rotate_key() -> None:
     """Rotate to the next API key (round-robin)."""
@@ -638,7 +642,8 @@ def analizar_inversion(ticker: str) -> str:
                 model=MODEL_NAME,
                 contents=prompt_analisis,
                 config=types.GenerateContentConfig(
-                    tools=[{"google_search": {}}]
+                    tools=[{"google_search": {}}],
+                    max_output_tokens=1500
                 )
             ).text
         )
@@ -698,12 +703,11 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
     """Procesa una imagen (factura, recibo, captura) extrayendo transacciones automáticamente."""
     try:
         imagen_file = _gemini_call_with_fallback(lambda c: c.files.upload(file=ruta_imagen))
+        # OPTIMIZADO: Prompt más corto + max_output_tokens
         prompt = (
-            f"{SYSTEM_INSTRUCTION}\n\n"
-            "El usuario te envía esta imagen. Si se trata de un recibo, factura o comprobante de pago: "
-            "1. Extrae el monto total, el establecimiento/comercio y la categoría aproximada. "
-            "2. Responde confirmando los datos extraídos y realiza un juicio analítico sobre el gasto.\n\n"
-            f"Comentario del usuario: {prompt_adicional}"
+            f"{SYSTEM_INSTRUCTION}\n"
+            "Si es recibo/factura: extrae monto, establecimiento, categoría. "
+            f"Comentario: {prompt_adicional}"
         )
 
         response_text = _gemini_call_with_fallback(
@@ -711,6 +715,7 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
                 model=MODEL_NAME,
                 contents=[prompt, imagen_file],
                 config=types.GenerateContentConfig(
+                    max_output_tokens=1000,
                     safety_settings=[
                         types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                         types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
@@ -787,11 +792,10 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
         audio_file = _gemini_call_with_fallback(lambda c: c.files.upload(file=ruta_audio))
         contexto_db = obtener_contexto_financiero(usuario_id)
 
+        # OPTIMIZADO: Prompt más corto + max_output_tokens
         prompt_completo = (
             f"{SYSTEM_INSTRUCTION}{contexto_db}\n\n"
-            "Escucha el audio adjunto del usuario. Si pregunta por sus finanzas, gastos, historial o transacciones, "
-            "DEBES responderle utilizando ÚNICAMENTE los datos reales de la base de datos proporcionados arriba. "
-            "Prohibido inventar montos, fechas o categorías que no estén en esa lista."
+            "Escucha el audio. Responde usando SOLO los datos de arriba. NO inventes."
         )
 
         response_text = _gemini_call_with_fallback(
@@ -799,6 +803,7 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
                 model=MODEL_NAME,
                 contents=[prompt_completo, audio_file],
                 config=types.GenerateContentConfig(
+                    max_output_tokens=1000,
                     safety_settings=[
                         types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                         types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),

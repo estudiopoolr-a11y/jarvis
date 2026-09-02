@@ -251,17 +251,23 @@ def limpiar_y_cargar_datos_dinamicos(usuario_id: str, presupuestos: dict, transa
         return f"❌ Error reestructurando base de datos: {e}"
 
 def obtener_contexto_financiero(usuario_id: str = "default") -> str:
+    """OPTIMIZADO: Contexto ultra-compacto para reducir tokens."""
     balance_neto, ingresos, gastos, transacciones = obtener_balance_financiero(usuario_id)
     presupuestos = obtener_resumen_presupuestos(usuario_id)
     tareas = obtener_tareas_pendientes(usuario_id)
-    
-    return f"""
-    [DATOS DE FIREBASE - Usuario {usuario_id}]
-    - Ingresos: ${ingresos:,.0f} | Gastos: ${gastos:,.0f} | Balance: ${balance_neto:,.0f}
-    - Presupuestos: {json.dumps(presupuestos, ensure_ascii=False)}
-    - Últimas 5 transacciones: {json.dumps(transacciones[-5:], ensure_ascii=False)}
-    - Tareas pendientes: {json.dumps(tareas, ensure_ascii=False)}
-    """
+
+    # Compactar presupuestos solo si existen
+    pres_str = str(presupuestos) if presupuestos else "{}"
+
+    # Compactar últimas 3 transacciones (reducido de 5 a 3)
+    ultimas = []
+    for t in transacciones[-3:]:
+        ultimas.append(f"{t.get('tipo','?')[:1].upper()}:{t.get('monto',0):,.0f}@{t.get('categoria','?')[:4]}")
+
+    # Compactar tareas solo si hay pendientes
+    tareas_str = f"{len(tareas)} tareas" if tareas else "sin tareas"
+
+    return f"""[JARVIS] Balance=${balance_neto:,.0f} Ing=${ingresos:,.0f} Gas=${gastos:,.0f} | Pres:{pres_str} | Mov:{ultimas} | {tareas_str}"""
 
 def guardar_mensaje(usuario_id: str, remitente: str, mensaje: str):
     global db

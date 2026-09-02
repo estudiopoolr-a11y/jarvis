@@ -158,17 +158,14 @@ async def on_message(message):
             # Usar cache para contexto de finanzas/tareas
             balance, ingresos, gastos, movimientos, presupuestos = obtener_contexto_cacheado(usuario_id)
 
-            # Inyectar contexto si es necesario
+            # Inyectar contexto si es necesario (OPTIMIZADO: ultra-compacto)
             if any(k in texto_lower for k in palabras_finanzas) or bool(adjunto):
-                # OPTIMIZADO: Solo 5 movimientos en vez de 10 + instrucción más corta
-                prompt_con_contexto += (
-                    f"\n[FIREBASE]: Balance=${balance:,.0f} | Ing=${ingresos:,.0f} | Gas=${gastos:,.0f} | Mov={movimientos[-5:] if movimientos else []} | Pres={presupuestos}\n"
-                    f"Usa SOLO estos datos. NO inventes."
-                )
+                movs = [f"{t.get('tipo','?')[:1].upper()}:${t.get('monto',0):,.0f}@{t.get('categoria','?')[:5]}" for t in movimientos[-3:]]
+                prompt_con_contexto += f"\n[JARVIS] Bal=${balance:,.0f} Ing=${ingresos:,.0f} Gas=${gastos:,.0f} | Mov:{movs} | Pres:{presupuestos}\nUsa SOLO estos datos."
 
             if any(k in texto_lower for k in palabras_tareas) or bool(adjunto):
                 tareas = obtener_tareas_pendientes(usuario_id)
-                prompt_con_contexto += f"\n[TAREAS]: {tareas}"
+                prompt_con_contexto += f"\nTareas:{len(tareas)}"
 
             # Llamada a la IA con contexto limitado
             if adjunto:
