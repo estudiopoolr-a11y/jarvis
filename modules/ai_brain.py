@@ -95,9 +95,13 @@ PALABRAS_CLAVE_INTENCION = [
 def _parse_configuracion_masiva(texto: str) -> tuple[dict, list] | None:
     """
     Parser directo para el formato de configuración masiva.
-    Formato esperado:
-      Presupuestos: Women: 300000, Deudas: 200000...
-      Transacciones: Salario +806199.03, Gasto Women 332540...
+    Formatos soportados:
+      Formato estructurado (preferido):
+        - tipo: ingreso, monto: 806199.03, categoria: Salario, descripcion: Salario mensual
+        - tipo: gasto, monto: 332540, categoria: Women, descripcion: Gastos categoría Women
+      Formato simple:
+        - Salario +806199.03
+        - Gasto Women 332540
     Retorna (presupuestos_dict, transacciones_list) o None si no coincide.
     """
     import re
@@ -122,29 +126,58 @@ def _parse_configuracion_masiva(texto: str) -> tuple[dict, list] | None:
     match_trans = re.search(r'transacciones?[:\s]+(.+?)(?=$)', texto, re.IGNORECASE | re.DOTALL)
     if match_trans:
         trans_text = match_trans.group(1)
-        # Patrones: "Palabra +/-Monto" o "Tipo Palabra Monto"
-        for t_match in re.finditer(r'([\w\s]+?)\s*([+-])?\s*\$?\s*([\d,.]+)', trans_text):
-            desc = t_match.group(1).strip()
-            try:
-                monto = float(t_match.group(3).replace(',', ''))
+
+        # Parsear cada línea de transacción (formato estructurado)
+        lineas = trans_text.strip().split('\n')
+        for linea in lineas:
+            linea = linea.strip()
+            if not linea or linea.startswith('#'):
+                continue
+
+            # Intentar parsear formato estructurado primero
+            # Ejemplo: "- tipo: ingreso, monto: 806199.03, categoria: Salario, descripcion: Salario mensual"
+            trans_match = re.search(
+                r'tipo:\s*(ingreso|gasto)\s*,\s*monto:\s*([\d,.]+)\s*,\s*categoria:\s*([^,]+?)\s*(?:,\s*descripcion:\s*(.+))?$',
+                linea, re.IGNORECASE
+            )
+
+            if trans_match:
+                tipo = trans_match.group(1).lower()
+                monto = float(trans_match.group(2).replace(',', ''))
+                cat = trans_match.group(3).strip()
+                desc = (trans_match.group(4) or cat).strip()
+
                 if monto > 0:
-                    # Determinar tipo: si empieza con "gasto" es gasto, sino es ingreso
-                    desc_lower = desc.lower()
-                    if desc_lower.startswith('gasto'):
-                        tipo = 'gasto'
-                        # Extraer categoria despues de "gasto"
-                        cat = desc[5:].strip() if len(desc) > 5 else 'General'
-                    else:
-                        tipo = 'ingreso'
-                        cat = 'General'
                     transacciones.append({
                         'tipo': tipo,
                         'monto': monto,
                         'categoria': cat.title() if cat else 'General',
                         'descripcion': desc
                     })
-            except ValueError:
-                pass
+                continue
+
+            # Fallback al formato simple: "Palabra +/-Monto" o "Gasto Palabra Monto"
+            simple_match = re.search(r'([\w\s]+?)\s*([+-])?\s*\$?\s*([\d,.]+)$', linea)
+            if simple_match:
+                desc = simple_match.group(1).strip()
+                try:
+                    monto = float(simple_match.group(3).replace(',', ''))
+                    if monto > 0:
+                        desc_lower = desc.lower()
+                        if desc_lower.startswith('gasto'):
+                            tipo = 'gasto'
+                            cat = desc[5:].strip() if len(desc) > 5 else 'General'
+                        else:
+                            tipo = 'ingreso'
+                            cat = 'General'
+                        transacciones.append({
+                            'tipo': tipo,
+                            'monto': monto,
+                            'categoria': cat.title() if cat else 'General',
+                            'descripcion': desc
+                        })
+                except ValueError:
+                    pass
 
     if presupuestos or transacciones:
         return presupuestos, transacciones
