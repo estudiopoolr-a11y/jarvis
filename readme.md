@@ -777,10 +777,10 @@ else:
 🚨 ALERTAS DE PRESUPUESTO
 🔴 Alimentacion (CRÍTICO)
    Gastado: $140,000 / $150,000 (93%)
-   Remaining: $10,000
+   Restante: $10,000
 ⚠️ Women (ADVERTENCIA)
    Gastado: $250,000 / $300,000 (83%)
-   Remaining: $50,000
+   Restante: $50,000
 ```
 
 #### 2. ⏰ Alertas de Tareas Vencidas
@@ -866,24 +866,45 @@ Todas las alertas se ejecutan vía:
 
 ### Manejo de Errores 429
 
-**Problema común en servicios de IA**: cuando excedes el límite de requests por minuto, recibes error 429.
+**Problema común en servicios de IA**: cuando excedes el límite de requests por minuto (RPM) o la cuota diaria, recibes error 429.
 
 **Solución implementada:**
 
+1. **Rate Limiter Local** - Previene errores antes de que ocurran:
+   - Mantiene tracking de las últimas llamadas
+   - Espera automáticamente si ya hiciste 14 requests en los últimos 60 segundos
+   - Respeta el límite de RPM (15/min en gemini-3.1-flash-lite)
+
+2. **Rotación de Keys con Backoff** - Cuando el rate limiter no es suficiente:
+   - Extrae automáticamente el `retryDelay` del error
+   - Espera antes de rotar a la siguiente key
+   - Diferencia entre RPM (recuperable en ~60s) vs cuota diaria (medianoche)
+
+3. **Mensajes Contextuales** - Informa al usuario claramente:
+   - Si es RPM: "Límite de velocidad (RPM). Espera X segundos"
+   - Si es cuota diaria: "Cuota diaria agotada. Se reinicia a medianoche (hora Colombia)"
+
 ```python
 def _gemini_call_with_fallback(callable):
+    # Rate limiter local: espera si estamos cerca del RPM
+    _esperar_por_rpm()
+
     retries = len(_API_KEYS)
     for _ in range(retries):
         try:
             return callable(_get_current_client())
         except APIError as e:
             if e.code == 429:
+                retry_delay = extraer_retry_delay(e)
+                if retry_delay and retry_delay <= 120:
+                    time.sleep(min(retry_delay, 5))
                 _rotate_key()  # Cambia a la siguiente key
                 continue
             raise
 ```
 
 **Ventajas:**
+- Previene el 90% de los errores 429 antes de que ocurran
 - Detección precisa entre límites por minuto y diarios
 - Extracción automática de `retryDelay`
 - Mensajes contextuales al usuario

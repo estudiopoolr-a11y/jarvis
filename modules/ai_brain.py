@@ -29,6 +29,36 @@ _CACHE_WEB_TTL = 3600
 # OPTIMIZACIÓN: Cliente de Gemini reutilizable por key
 _clientes_cache = {}
 
+# OPTIMIZACIÓN: Rate limiter local para evitar golpear RPM (15/min en flash-lite)
+# Tracking de timestamps de las últimas llamadas
+_llamadas_recientes = []
+_RPM_MAX = 14  # Dejamos 1 de margen respecto al límite real de 15
+_RPM_WINDOW = 60  # segundos
+
+def _esperar_por_rpm():
+    """Espera si estamos cerca del límite de Requests Per Minute.
+    Esto evita los 429 por throttling, que es el caso más común.
+    """
+    global _llamadas_recientes
+    ahora = time.time()
+
+    # Limpiar llamadas fuera de la ventana de 60s
+    _llamadas_recientes = [t for t in _llamadas_recientes if ahora - t < _RPM_WINDOW]
+
+    # Si ya estamos en el límite, esperar hasta que la más vieja salga de la ventana
+    if len(_llamadas_recientes) >= _RPM_MAX:
+        mas_vieja = _llamadas_recientes[0]
+        espera = _RPM_WINDOW - (ahora - mas_vieja) + 0.5  # +0.5s de margen
+        if espera > 0:
+            print(f"⏳ Rate limiter local: esperando {espera:.1f}s para respetar RPM={_RPM_MAX}")
+            time.sleep(espera)
+            # Re-evaluar después de esperar
+            ahora = time.time()
+            _llamadas_recientes = [t for t in _llamadas_recientes if ahora - t < _RPM_WINDOW]
+
+    # Registrar esta llamada
+    _llamadas_recientes.append(time.time())
+
 load_dotenv()
 
 # ---------- API Key Rotation Setup ----------
@@ -57,25 +87,62 @@ def _gemini_call_with_fallback(callable):
     On APIError 429, rotate API key and retry (up to number of keys times).
     Propagates other APIError immediately.
     Returns the callable's result.
+
+    Diferencia entre:
+    - RPM (rate per minute): recoverable en ~60s
+    - Cuota diaria: solo se recupera a medianoche
     """
+    import re as _re
+
     retries = len(_API_KEYS)
-    for _ in range(retries):
+    errores_429 = []
+
+    for intento in range(retries):
         try:
+            # Respetar rate limit local antes de hacer la llamada
+            _esperar_por_rpm()
             return callable(_get_current_client())
         except APIError as e:
             if e.code == 429:
-                # Rotate key and try again
-                _rotate_key()
-                continue
+                errores_429.append(str(e))
+                # Intentar extraer retry delay del mensaje
+                retry_seconds = None
+                msg = str(e.message) if hasattr(e, 'message') else str(e)
+                match = _re.search(r'(?:retry.*?|after\s*)?(\d+)\s*second', msg, _re.IGNORECASE)
+                if match:
+                    retry_seconds = int(match.group(1))
+
+                if intento < retries - 1:
+                    # Pequeña pausa antes de rotar (backoff exponencial)
+                    if retry_seconds and retry_seconds <= 120:
+                        print(f"⏳ 429 con retry={retry_seconds}s, esperando...")
+                        time.sleep(min(retry_seconds, 5))  # máx 5s por intento
+                    _rotate_key()
+                    continue
+                # Último intento falló
+                if retry_seconds and retry_seconds <= 300:
+                    # Es RPM, no cuota diaria
+                    raise Exception(
+                        f"⏳ **Límite de velocidad alcanzado (RPM).**\n\n"
+                        f"Demasiadas solicitudes por minuto. Gemini permite {int(_RPM_MAX)} req/min por key.\n"
+                        f"• Espera **{retry_seconds} segundos** y vuelve a intentar.\n"
+                        f"• Este límite se libera automáticamente cada minuto."
+                    )
+                # No hay retry delay → probablemente cuota diaria agotada
+                raise Exception(
+                    "⚠️ **Cuota diaria de Gemini agotada en todas las keys.**\n\n"
+                    "Las 5 API keys han alcanzado su límite diario.\n"
+                    "• Espera hasta la medianoche (hora Colombia) para que se resetee la cuota\n"
+                    "• O agrega nuevas API keys en el archivo .env (GEMINI_API_KEYS)\n"
+                    "• Por ahora, los comandos básicos (!finanzas, !tareas) seguirán funcionando."
+                )
             # For non-429 errors, re-raise immediately
             raise
-    # If we exhausted all keys due to 429
+
+    # Si llegamos aquí sin retornar, todas las keys dieron 429
     raise Exception(
-        "⚠️ **Cuota de Gemini agotada en todas las keys.**\n\n"
-        "Las 5 API keys de Gemini han alcanzado su límite diario.\n"
-        "• Espera hasta la medianoche (hora Colombia) para que se resetee la cuota\n"
-        "• O agrega nuevas API keys en el archivo .env (GEMINI_API_KEYS)\n"
-        "• Por ahora, los comandos básicos (!finanzas, !tareas) seguirán funcionando."
+        "⚠️ **Todas las API keys están bloqueadas por rate limit.**\n"
+        f"Espera 1-2 minutos e intenta de nuevo. ({len(errores_429)} keys probadas)"
     )
 
 # -------------------------------------------
@@ -801,13 +868,12 @@ def pensar_respuesta(prompt_usuario: str, usuario_id: str = "default") -> str:
 
                 # Determine appropriate response based on delay
                 if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
-                    return f"⚠️ Límite de tasa alcanzado. Por favor, espera {retry_delay_seconds} segundos antes de intentarlo nuevamente."
+                    return f"⏳ Límite de velocidad (RPM). Espera {retry_delay_seconds}s o vuelve en 1-2 minutos."
                 else:
-                    return "⚠️ Se ha agotado la cuota diaria gratuita de la API de Gemini. La cuota se reinicia a medianoche (hora del Pacífico). Por favor, intenta nuevamente mañana."
+                    return "⚠️ Cuota diaria de Gemini agotada. Se reinicia a medianoche (hora Colombia)."
             except Exception as parse_error:
-                # If parsing fails, fall back to safe message
-                print(f"Error parsing 429 details in pensar_respuesta: {parse_error}")
-                return "⚠️ Se ha alcanzado el límite de la API de Gemini. Verifica tu consumo y vuelve a intentar en unos minutos."
+                print(f"Error parsing 429 details: {parse_error}")
+                return "⏳ Rate limit temporal. Espera 1-2 minutos e intenta de nuevo."
         return f"Error en la API de Gemini: {e.message}"
     except Exception as e:
         return f"Error en sistemas: {e}"
@@ -885,13 +951,13 @@ def analizar_inversion(ticker: str) -> str:
 
                 # Determine appropriate response based on delay
                 if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
-                    return f"⚠️ Límite de tasa alcanzado. Por favor, espera {retry_delay_seconds} segundos antes de intentarlo nuevamente."
+                    return f"⏳ Límite de velocidad (RPM). Espera {retry_delay_seconds}s o vuelve en 1-2 minutos."
                 else:
-                    return "⚠️ Se ha agotado la cuota diaria gratuita de la API de Gemini. La cuota se reinicia a medianoche (hora del Pacífico). Por favor, intenta nuevamente mañana."
+                    return "⚠️ Cuota diaria de Gemini agotada. Se reinicia a medianoche (hora Colombia)."
             except Exception as parse_error:
                 # If parsing fails, fall back to safe message
                 print(f"Error parsing 429 details in analizar_inversion: {parse_error}")
-                return "⚠️ Se ha alcanzado el límite de la API de Gemini. Verifica tu consumo y vuelve a intentar en unos minutos."
+                return "⏳ Rate limit temporal. Espera 1-2 minutos e intenta de nuevo."
         return f"Error de API: {e.message}"
     except Exception as e:
         return f"Error consultando el mercado para {ticker}: {e}"
@@ -972,13 +1038,13 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
 
                 # Determine appropriate response based on delay
                 if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
-                    return f"⚠️ Límite de tasa alcanzado. Por favor, espera {retry_delay_seconds} segundos antes de intentarlo nuevamente."
+                    return f"⏳ Límite de velocidad (RPM). Espera {retry_delay_seconds}s o vuelve en 1-2 minutos."
                 else:
-                    return "⚠️ Se ha agotado la cuota diaria gratuita de la API de Gemini. La cuota se reinicia a medianoche (hora del Pacífico). Por favor, intenta nuevamente mañana."
+                    return "⚠️ Cuota diaria de Gemini agotada. Se reinicia a medianoche (hora Colombia)."
             except Exception as parse_error:
                 # If parsing fails, fall back to safe message
                 print(f"Error parsing 429 details in pensar_respuesta_imagen: {parse_error}")
-                return "⚠️ Se ha alcanzado el límite de la API de Gemini. Verifica tu consumo y vuelve a intentar en unos minutos."
+                return "⏳ Rate limit temporal. Espera 1-2 minutos e intenta de nuevo."
         return f"Error de API al analizar imagen: {e.message}"
     except Exception as e:
         return f"Error analizando imagen: {e}"
@@ -1055,13 +1121,13 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
 
                 # Determine appropriate response based on delay
                 if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
-                    return f"⚠️ Límite de tasa alcanzado. Por favor, espera {retry_delay_seconds} segundos antes de intentarlo nuevamente."
+                    return f"⏳ Límite de velocidad (RPM). Espera {retry_delay_seconds}s o vuelve en 1-2 minutos."
                 else:
-                    return "⚠️ Se ha agotado la cuota diaria gratuita de la API de Gemini. La cuota se reinicia a medianoche (hora del Pacífico). Por favor, intenta nuevamente mañana."
+                    return "⚠️ Cuota diaria de Gemini agotada. Se reinicia a medianoche (hora Colombia)."
             except Exception as parse_error:
                 # If parsing fails, fall back to safe message
                 print(f"Error parsing 429 details in pensar_respuesta_audio: {parse_error}")
-                return "⚠️ Se ha alcanzado el límite de la API de Gemini. Verifica tu consumo y vuelve a intentar en unos minutos."
+                return "⏳ Rate limit temporal. Espera 1-2 minutos e intenta de nuevo."
         return f"Error de API al procesar audio: {e.message}"
     except Exception as e:
         return f"Error al procesar audio: {e}"
