@@ -59,6 +59,59 @@ def _esperar_por_rpm():
     # Registrar esta llamada
     _llamadas_recientes.append(time.time())
 
+
+def _manejar_error_api(e: APIError, contexto: str = "general") -> str:
+    """Maneja errores de API de Gemini de forma centralizada."""
+    import re as _re
+
+    if e.code == 429:
+        retry_seconds = None
+        msg = str(e.message) if hasattr(e, 'message') else str(e)
+
+        # Extraer retry delay
+        match = _re.search(r'(?:retry.*?|after\s*)?(\d+)\s*second', msg, _re.IGNORECASE)
+        if match:
+            retry_seconds = int(match.group(1))
+        else:
+            match = _re.search(r'(\d+)s', msg)
+            if match:
+                retry_seconds = int(match.group(1))
+
+        if retry_seconds and retry_seconds <= 300:
+            return f"⏳ Límite de velocidad (RPM). Espera {retry_seconds}s o vuelve en 1-2 minutos."
+        return "⚠️ Cuota diaria de Gemini agotada. Se reinicia a medianoche (hora Colombia)."
+
+    # Otros errores de API
+    msg = str(e.message) if hasattr(e, 'message') else str(e)
+
+    # Casos especiales con mensajes amigables
+    if "high demand" in msg.lower():
+        return "⏳ Gemini tiene alta demanda en este momento. Espera 1-2 minutos e intenta de nuevo."
+    if "upload" in msg.lower() and "terminated" in msg.lower():
+        return "⏳ Error con el archivo. Intenta enviar el audio/imagen de nuevo."
+    if "quota" in msg.lower() or "limit" in msg.lower():
+        return "⚠️ Cuota de Gemini agotada. Se reinicia a medianoche (hora Colombia)."
+
+    # Mensaje genérico para otros errores
+    print(f"Error de API en {contexto}: {msg}")
+    return "⏳ Error temporal. Espera 1-2 minutos e intenta de nuevo."
+
+
+def _manejar_error_generico(e: Exception, contexto: str = "general") -> str:
+    """Maneja errores genéricos de forma centralizada."""
+    msg = str(e)
+    print(f"Error en {contexto}: {msg}")
+
+    if "upload" in msg.lower() and "terminated" in msg.lower():
+        return "⏳ Error con el archivo. Intenta enviar el audio/imagen de nuevo."
+    if "timeout" in msg.lower() or "timed out" in msg.lower():
+        return "⏳ Tiempo de espera agotado. Intenta de nuevo."
+    if "connection" in msg.lower() or "network" in msg.lower():
+        return "⏳ Error de conexión. Verifica tu internet e intenta de nuevo."
+
+    return "⏳ Error temporal. Espera 1-2 minutos e intenta de nuevo."
+
+
 load_dotenv()
 
 # ---------- API Key Rotation Setup ----------
@@ -829,54 +882,9 @@ def pensar_respuesta(prompt_usuario: str, usuario_id: str = "default") -> str:
         )
         return response_text or "Sin respuesta disponible."
     except APIError as e:
-        if e.code == 429:
-            retry_delay_seconds = None
-            try:
-                # Try to extract retry delay from error details
-                if hasattr(e, 'details') and e.details:
-                    import json
-                    if isinstance(e.details, str):
-                        try:
-                            details = json.loads(e.details)
-                        except:
-                            details = {}
-                    elif isinstance(e.details, dict):
-                        details = e.details
-                    else:
-                        details = {}
-
-                    if isinstance(details, dict) and 'retryDelay' in details:
-                        delay_str = details['retryDelay']
-                        if isinstance(delay_str, str) and delay_str.endswith('s'):
-                            try:
-                                retry_delay_seconds = int(delay_str[:-1])
-                            except ValueError:
-                                pass
-
-                # Fallback: check error message for retry delay patterns
-                if retry_delay_seconds is None and hasattr(e, 'message'):
-                    msg = str(e.message)
-                    import re
-                    # Look for patterns like "retry after 60 seconds" or "60s"
-                    match = re.search(r'(?:retry.*?|after\s*)?(\d+)\s*second', msg, re.IGNORECASE)
-                    if match:
-                        retry_delay_seconds = int(match.group(1))
-                    else:
-                        match = re.search(r'(\d+)s', msg)
-                        if match:
-                            retry_delay_seconds = int(match.group(1))
-
-                # Determine appropriate response based on delay
-                if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
-                    return f"⏳ Límite de velocidad (RPM). Espera {retry_delay_seconds}s o vuelve en 1-2 minutos."
-                else:
-                    return "⚠️ Cuota diaria de Gemini agotada. Se reinicia a medianoche (hora Colombia)."
-            except Exception as parse_error:
-                print(f"Error parsing 429 details: {parse_error}")
-                return "⏳ Rate limit temporal. Espera 1-2 minutos e intenta de nuevo."
-        return f"Error en la API de Gemini: {e.message}"
+        return _manejar_error_api(e, contexto="pensar_respuesta")
     except Exception as e:
-        return f"Error en sistemas: {e}"
+        return _manejar_error_generico(e, contexto="pensar_respuesta")
 
 def analizar_inversion(ticker: str) -> str:
     """Analiza un activo bursátil combinando datos en vivo de yfinance y búsqueda web."""
@@ -912,58 +920,13 @@ def analizar_inversion(ticker: str) -> str:
         )
         return response_text or "Error analizando el activo."
     except APIError as e:
-        if e.code == 429:
-            retry_delay_seconds = None
-            try:
-                # Try to extract retry delay from error details
-                if hasattr(e, 'details') and e.details:
-                    import json
-                    if isinstance(e.details, str):
-                        try:
-                            details = json.loads(e.details)
-                        except:
-                            details = {}
-                    elif isinstance(e.details, dict):
-                        details = e.details
-                    else:
-                        details = {}
-
-                    if isinstance(details, dict) and 'retryDelay' in details:
-                        delay_str = details['retryDelay']
-                        if isinstance(delay_str, str) and delay_str.endswith('s'):
-                            try:
-                                retry_delay_seconds = int(delay_str[:-1])
-                            except ValueError:
-                                pass
-
-                # Fallback: check error message for retry delay patterns
-                if retry_delay_seconds is None and hasattr(e, 'message'):
-                    msg = str(e.message)
-                    import re
-                    # Look for patterns like "retry after 60 seconds" or "60s"
-                    match = re.search(r'(?:retry.*?|after\s*)?(\d+)\s*second', msg, re.IGNORECASE)
-                    if match:
-                        retry_delay_seconds = int(match.group(1))
-                    else:
-                        match = re.search(r'(\d+)s', msg)
-                        if match:
-                            retry_delay_seconds = int(match.group(1))
-
-                # Determine appropriate response based on delay
-                if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
-                    return f"⏳ Límite de velocidad (RPM). Espera {retry_delay_seconds}s o vuelve en 1-2 minutos."
-                else:
-                    return "⚠️ Cuota diaria de Gemini agotada. Se reinicia a medianoche (hora Colombia)."
-            except Exception as parse_error:
-                # If parsing fails, fall back to safe message
-                print(f"Error parsing 429 details in analizar_inversion: {parse_error}")
-                return "⏳ Rate limit temporal. Espera 1-2 minutos e intenta de nuevo."
-        return f"Error de API: {e.message}"
+        return _manejar_error_api(e, contexto=f"análisis de {ticker}")
     except Exception as e:
-        return f"Error consultando el mercado para {ticker}: {e}"
+        return _manejar_error_generico(e, contexto=f"análisis de {ticker}")
 
 def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuario_id: str = "default") -> str:
     """Procesa una imagen (factura, recibo, captura) extrayendo transacciones automáticamente."""
+    imagen_file = None
     try:
         imagen_file = _gemini_call_with_fallback(lambda c: c.files.upload(file=ruta_imagen))
         # OPTIMIZADO: Prompt más corto + max_output_tokens
@@ -992,65 +955,21 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
         if response_text:
             procesar_intencion_natural(response_text, usuario_id)
 
-        try:
-            imagen_file.delete()  # Assuming the file object has a delete method; if not, fallback
-        except Exception:
-            pass
-
         return response_text or "Imagen procesada sin texto resultante."
     except APIError as e:
-        if e.code == 429:
-            retry_delay_seconds = None
-            try:
-                # Try to extract retry delay from error details
-                if hasattr(e, 'details') and e.details:
-                    import json
-                    if isinstance(e.details, str):
-                        try:
-                            details = json.loads(e.details)
-                        except:
-                            details = {}
-                    elif isinstance(e.details, dict):
-                        details = e.details
-                    else:
-                        details = {}
-
-                    if isinstance(details, dict) and 'retryDelay' in details:
-                        delay_str = details['retryDelay']
-                        if isinstance(delay_str, str) and delay_str.endswith('s'):
-                            try:
-                                retry_delay_seconds = int(delay_str[:-1])
-                            except ValueError:
-                                pass
-
-                # Fallback: check error message for retry delay patterns
-                if retry_delay_seconds is None and hasattr(e, 'message'):
-                    msg = str(e.message)
-                    import re
-                    # Look for patterns like "retry after 60 seconds" or "60s"
-                    match = re.search(r'(?:retry.*?|after\s*)?(\d+)\s*second', msg, re.IGNORECASE)
-                    if match:
-                        retry_delay_seconds = int(match.group(1))
-                    else:
-                        match = re.search(r'(\d+)s', msg)
-                        if match:
-                            retry_delay_seconds = int(match.group(1))
-
-                # Determine appropriate response based on delay
-                if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
-                    return f"⏳ Límite de velocidad (RPM). Espera {retry_delay_seconds}s o vuelve en 1-2 minutos."
-                else:
-                    return "⚠️ Cuota diaria de Gemini agotada. Se reinicia a medianoche (hora Colombia)."
-            except Exception as parse_error:
-                # If parsing fails, fall back to safe message
-                print(f"Error parsing 429 details in pensar_respuesta_imagen: {parse_error}")
-                return "⏳ Rate limit temporal. Espera 1-2 minutos e intenta de nuevo."
-        return f"Error de API al analizar imagen: {e.message}"
+        return _manejar_error_api(e, contexto="imagen")
     except Exception as e:
-        return f"Error analizando imagen: {e}"
+        return _manejar_error_generico(e, contexto="imagen")
+    finally:
+        if imagen_file is not None:
+            try:
+                imagen_file.delete()
+            except Exception:
+                pass
 
 def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_id: str = "default") -> str:
     """Procesa archivos de audio recibidos inyectando estrictamente el contexto de la base de datos."""
+    audio_file = None
     try:
         audio_file = _gemini_call_with_fallback(lambda c: c.files.upload(file=ruta_audio))
         contexto_db = obtener_contexto_financiero(usuario_id)
@@ -1076,58 +995,15 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
                 )
             ).text
         )
-        try:
-            audio_file.delete()
-        except Exception:
-            pass
-        return response_text or ""
+        return response_text or "No se pudo obtener respuesta del audio."
     except APIError as e:
-        if e.code == 429:
-            retry_delay_seconds = None
-            try:
-                # Try to extract retry delay from error details
-                if hasattr(e, 'details') and e.details:
-                    import json
-                    if isinstance(e.details, str):
-                        try:
-                            details = json.loads(e.details)
-                        except:
-                            details = {}
-                    elif isinstance(e.details, dict):
-                        details = e.details
-                    else:
-                        details = {}
-
-                    if isinstance(details, dict) and 'retryDelay' in details:
-                        delay_str = details['retryDelay']
-                        if isinstance(delay_str, str) and delay_str.endswith('s'):
-                            try:
-                                retry_delay_seconds = int(delay_str[:-1])
-                            except ValueError:
-                                pass
-
-                # Fallback: check error message for retry delay patterns
-                if retry_delay_seconds is None and hasattr(e, 'message'):
-                    msg = str(e.message)
-                    import re
-                    # Look for patterns like "retry after 60 seconds" or "60s"
-                    match = re.search(r'(?:retry.*?|after\s*)?(\d+)\s*second', msg, re.IGNORECASE)
-                    if match:
-                        retry_delay_seconds = int(match.group(1))
-                    else:
-                        match = re.search(r'(\d+)s', msg)
-                        if match:
-                            retry_delay_seconds = int(match.group(1))
-
-                # Determine appropriate response based on delay
-                if retry_delay_seconds is not None and retry_delay_seconds <= 300:  # 5 minutes or less
-                    return f"⏳ Límite de velocidad (RPM). Espera {retry_delay_seconds}s o vuelve en 1-2 minutos."
-                else:
-                    return "⚠️ Cuota diaria de Gemini agotada. Se reinicia a medianoche (hora Colombia)."
-            except Exception as parse_error:
-                # If parsing fails, fall back to safe message
-                print(f"Error parsing 429 details in pensar_respuesta_audio: {parse_error}")
-                return "⏳ Rate limit temporal. Espera 1-2 minutos e intenta de nuevo."
-        return f"Error de API al procesar audio: {e.message}"
+        return _manejar_error_api(e, contexto="audio")
     except Exception as e:
-        return f"Error al procesar audio: {e}"
+        return _manejar_error_generico(e, contexto="audio")
+    finally:
+        # SIEMPRE limpiar el archivo subido para evitar "Upload has already been terminated"
+        if audio_file is not None:
+            try:
+                audio_file.delete()
+            except Exception:
+                pass

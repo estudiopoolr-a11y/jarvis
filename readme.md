@@ -1,3 +1,4 @@
+<!-- cSpell:disable -->
 # 🤖 Proyecto JARVIS - Asistente Personal Inteligente
 
 > **"Sistemas en línea. JARVIS v3.0 Operativo."**
@@ -44,14 +45,14 @@ Está diseñado para funcionar como un **mayordomo digital**: ejecuta tareas, mo
 
 ### ¿Por qué JARVIS?
 
-| Problema | Solución de JARVIS |
-|----------|-------------------|
-| Perder el control de gastos | Registro automático + detección de anomalías |
-| Olvidar tareas importantes | Tareas con prioridad + alertas de vencimiento |
-| Necesitar consultar finanzas | Balance en tiempo real + resúmenes |
-| Sobrecargar la API de Gemini | Parsers determinísticos (90% sin Gemini) |
-| Caídas del servicio | Bot separado del web service en Render |
-| Rate limits (429) | Rotación automática entre 5 API keys |
+| Problema                     | Solución de JARVIS                            |
+| ---------------------------- | --------------------------------------------- |
+| Perder el control de gastos  | Registro automático + detección de anomalías  |
+| Olvidar tareas importantes   | Tareas con prioridad + alertas de vencimiento |
+| Necesitar consultar finanzas | Balance en tiempo real + resúmenes            |
+| Sobrecargar la API de Gemini | Parsers determinísticos (90% sin Gemini)      |
+| Caídas del servicio          | Bot separado del web service en Render        |
+| Rate limits (429)            | Rotación automática entre 5 API keys          |
 
 ---
 
@@ -249,13 +250,13 @@ jarvis/
 
 ### Prerrequisitos
 
-| Servicio | Requisito | Dónde obtenerlo |
-|----------|-----------|-----------------|
-| Python | 3.11+ | [python.org](https://www.python.org/) |
-| Google Cloud | API de Gemini habilitada | [console.cloud.google.com](https://console.cloud.google.com/) |
-| Firebase | Firestore API habilitada | [firebase.google.com](https://firebase.google.com/) |
-| Discord | Bot con Message Content Intent | [discord.com/developers](https://discord.com/developers/applications) |
-| API Keys | 1-5 keys de Gemini (recomendado: 3+) | [aistudio.google.com](https://aistudio.google.com/) |
+| Servicio     | Requisito                            | Dónde obtenerlo                                                       |
+| ------------ | ------------------------------------ | --------------------------------------------------------------------- |
+| Python       | 3.11+                                | [python.org](https://www.python.org/)                                 |
+| Google Cloud | API de Gemini habilitada             | [console.cloud.google.com](https://console.cloud.google.com/)         |
+| Firebase     | Firestore API habilitada             | [firebase.google.com](https://firebase.google.com/)                   |
+| Discord      | Bot con Message Content Intent       | [discord.com/developers](https://discord.com/developers/applications) |
+| API Keys     | 1-5 keys de Gemini (recomendado: 3+) | [aistudio.google.com](https://aistudio.google.com/)                   |
 
 ### Instalación
 
@@ -385,24 +386,24 @@ Una vez que el bot esté en línea, mencionalo con `@Jarvis` o al rol configurad
 
 ### Comandos Rápidos (Slash)
 
-| Comando | Descripción |
-|---------|-------------|
-| `!finanzas` | Balance completo con últimos movimientos |
-| `!presupuestos` | Estado de todos los presupuestos con barras de progreso |
-| `!historial [N]` | Últimas N transacciones (default: 20) |
-| `!buscar <término>` | Busca por categoría o descripción |
-| `!estado` | Estado del sistema: API keys, datos, modo |
-| `!ayuda` | Lista completa de comandos disponibles |
-| `!tareas` | Lista de tareas pendientes |
-| `!hecho "descripción"` | Marca tarea como completada |
-| `!dormir 8` | Silencia notificaciones por 8 horas |
-| `!pausar 2` | Pausa notificaciones por 2 horas |
-| `!voz` | Activa/desactiva respuestas de audio TTS |
-| `!inversion AAPL` | Análisis de acción de Apple |
-| `!borrar confirmar` | Borra TODOS tus datos (con confirmación) |
-| `!mes [mes]` | Resumen de mes específico (ej: !mes agosto) |
-| `!stats` | Estadísticas: promedios, proyecciones, anomalías |
-| `!top [N]` | Top N categorías con más gastos (default: 5) |
+| Comando                | Descripción                                             |
+| ---------------------- | ------------------------------------------------------- |
+| `!finanzas`            | Balance completo con últimos movimientos                |
+| `!presupuestos`        | Estado de todos los presupuestos con barras de progreso |
+| `!historial [N]`       | Últimas N transacciones (default: 20)                   |
+| `!buscar <término>`    | Busca por categoría o descripción                       |
+| `!estado`              | Estado del sistema: API keys, datos, modo               |
+| `!ayuda`               | Lista completa de comandos disponibles                  |
+| `!tareas`              | Lista de tareas pendientes                              |
+| `!hecho "descripción"` | Marca tarea como completada                             |
+| `!dormir 8`            | Silencia notificaciones por 8 horas                     |
+| `!pausar 2`            | Pausa notificaciones por 2 horas                        |
+| `!voz`                 | Activa/desactiva respuestas de audio TTS                |
+| `!inversion AAPL`      | Análisis de acción de Apple                             |
+| `!borrar confirmar`    | Borra TODOS tus datos (con confirmación)                |
+| `!mes [mes]`           | Resumen de mes específico (ej: !mes agosto)             |
+| `!stats`               | Estadísticas: promedios, proyecciones, anomalías        |
+| `!top [N]`             | Top N categorías con más gastos (default: 5)            |
 
 ### Comandos con Menciones
 
@@ -605,15 +606,15 @@ Accede a `https://jarvis-h20g.onrender.com/` (en producción) o `http://localhos
 
 ### Endpoints Disponibles
 
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| `GET`  | `/` | Dashboard HTML (soporta HEAD) |
-| `GET`  | `/dashboard` | Dashboard HTML (soporta HEAD) |
-| `POST` | `/api/comando` | Procesa comando de texto natural |
-| `POST` | `/api/recibo` | Sube imagen de recibo para procesar |
-| `GET`  | `/api/cron/daily-summary` | Ejecuta resumen diario a Discord |
-| `GET`  | `/api/cron/weekly-summary` | Ejecuta resumen semanal a Discord |
-| `GET`  | `/api/cron/alertas` | Verifica y envía alertas proactivas |
+| Método | Endpoint                   | Descripción                         |
+| ------ | -------------------------- | ----------------------------------- |
+| `GET`  | `/`                        | Dashboard HTML (soporta HEAD)       |
+| `GET`  | `/dashboard`               | Dashboard HTML (soporta HEAD)       |
+| `POST` | `/api/comando`             | Procesa comando de texto natural    |
+| `POST` | `/api/recibo`              | Sube imagen de recibo para procesar |
+| `GET`  | `/api/cron/daily-summary`  | Ejecuta resumen diario a Discord    |
+| `GET`  | `/api/cron/weekly-summary` | Ejecuta resumen semanal a Discord   |
+| `GET`  | `/api/cron/alertas`        | Verifica y envía alertas proactivas |
 
 ### Ejemplos de Uso
 
@@ -674,12 +675,12 @@ JARVIS usa **GitHub Actions** como cron (alternativa gratuita a Render Cron Job)
 
 ### 📅 Resumen Diario
 
-| Aspecto | Detalle |
-|---------|---------|
-| **Frecuencia** | Cada 30 minutos entre 7am-12pm y 7pm-12am (hora Colombia UTC-5) |
-| **Acción** | Despierta Render + llama a `/api/cron/daily-summary` y `/api/cron/alertas` |
-| **Workflow** | `.github/workflows/daily-summary.yml` |
-| **Contenido** | Balance general, presupuestos, tareas pendientes |
+| Aspecto        | Detalle                                                                    |
+| -------------- | -------------------------------------------------------------------------- |
+| **Frecuencia** | Cada 30 minutos entre 7am-12pm y 7pm-12am (hora Colombia UTC-5)            |
+| **Acción**     | Despierta Render + llama a `/api/cron/daily-summary` y `/api/cron/alertas` |
+| **Workflow**   | `.github/workflows/daily-summary.yml`                                      |
+| **Contenido**  | Balance general, presupuestos, tareas pendientes                           |
 
 **Cron expression**: `0,30 12-17,0-4 * * *`
 - UTC 12:00-17:00 = COL 7:00am-12:00pm
@@ -687,22 +688,22 @@ JARVIS usa **GitHub Actions** como cron (alternativa gratuita a Render Cron Job)
 
 ### 📊 Resumen Semanal
 
-| Aspecto | Detalle |
-|---------|---------|
-| **Frecuencia** | Domingos 8am hora Colombia (UTC 13:00) |
-| **Acción** | Llama a `/api/cron/weekly-summary` |
-| **Workflow** | `.github/workflows/weekly-summary.yml` |
-| **Contenido** | Variación vs semana anterior, top categorías, tareas |
+| Aspecto        | Detalle                                              |
+| -------------- | ---------------------------------------------------- |
+| **Frecuencia** | Domingos 8am hora Colombia (UTC 13:00)               |
+| **Acción**     | Llama a `/api/cron/weekly-summary`                   |
+| **Workflow**   | `.github/workflows/weekly-summary.yml`               |
+| **Contenido**  | Variación vs semana anterior, top categorías, tareas |
 
 **Cron expression**: `0 13 * * 0`
 
 ### 🚨 Alertas Proactivas
 
-| Aspecto | Detalle |
-|---------|---------|
-| **Frecuencia** | Cada 30 minutos (junto con daily summary) |
-| **Detecta** | Presupuestos >80%, tareas vencidas, gastos anormales |
-| **Endpoint** | `/api/cron/alertas` |
+| Aspecto        | Detalle                                              |
+| -------------- | ---------------------------------------------------- |
+| **Frecuencia** | Cada 30 minutos (junto con daily summary)            |
+| **Detecta**    | Presupuestos >80%, tareas vencidas, gastos anormales |
+| **Endpoint**   | `/api/cron/alertas`                                  |
 
 ### Diagrama de Automatización
 
@@ -848,13 +849,13 @@ Todas las alertas se ejecutan vía:
 
 ### Parsers Determinísticos Implementados
 
-| Parser | Función | Ejemplo |
-|--------|---------|---------|
-| `_parse_tarea()` | Detecta creación de tareas | "tarea llamar al médico" |
-| `_parse_transaccion()` | Detecta gastos/ingresos | "gasté 50000 en mercado" |
-| `_parse_presupuesto()` | Detecta configuración | "presupuesto Women 300000" |
-| `_parse_completar_tarea()` | Detecta completado | "hecho llamar al médico" |
-| `_parse_configuracion_masiva()` | Carga masiva | "Presupuestos: X: Y..." |
+| Parser                          | Función                    | Ejemplo                    |
+| ------------------------------- | -------------------------- | -------------------------- |
+| `_parse_tarea()`                | Detecta creación de tareas | "tarea llamar al médico"   |
+| `_parse_transaccion()`          | Detecta gastos/ingresos    | "gasté 50000 en mercado"   |
+| `_parse_presupuesto()`          | Detecta configuración      | "presupuesto Women 300000" |
+| `_parse_completar_tarea()`      | Detecta completado         | "hecho llamar al médico"   |
+| `_parse_configuracion_masiva()` | Carga masiva               | "Presupuestos: X: Y..."    |
 
 ### Optimización de Costos de API
 
@@ -1171,3 +1172,4 @@ Para preguntas y soporte:
 *Hecho con ❤️ por tu asistente personal ejecutivo JARVIS*
 
 > **"Sistemas en línea. A la espera de instrucciones."**
+<!-- cSpell:enable -->
