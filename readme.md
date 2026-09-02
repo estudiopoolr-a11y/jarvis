@@ -399,6 +399,10 @@ Una vez que el bot esté en línea, mencionalo con `@Jarvis` o al rol configurad
 | `!pausar 2` | Pausa notificaciones por 2 horas |
 | `!voz` | Activa/desactiva respuestas de audio TTS |
 | `!inversion AAPL` | Análisis de acción de Apple |
+| `!borrar confirmar` | Borra TODOS tus datos (con confirmación) |
+| `!mes [mes]` | Resumen de mes específico (ej: !mes agosto) |
+| `!stats` | Estadísticas: promedios, proyecciones, anomalías |
+| `!top [N]` | Top N categorías con más gastos (default: 5) |
 
 ### Comandos con Menciones
 
@@ -1007,6 +1011,15 @@ Para cada servicio (Web + Background Worker), ve a **Environment** y agrega las 
 ---
 
 ## 📈 Historial de Cambios
+
+### Nuevos Comandos de Estadísticas (Septiembre 2026)
+- ✅ `!mes [mes/año]` - Resumen de un mes específico (ej: !mes agosto)
+- ✅ `!stats` - Estadísticas: promedios, top categorías, proyecciones
+- ✅ `!top [N]` - Top N categorías con más gastos (medallas)
+- ✅ `!borrar confirmar` - Borrar todos los datos con confirmación
+- ✅ Comando soporta `!mes actual`, `!mes anterior`, `!mes 08 2026`, `!mes agosto`
+- ✅ Cálculo automático de promedios diarios y proyecciones mensuales/anuales
+- ✅ Bug fix: parser de configuración masiva corregido
 
 ### Nuevos Comandos Discord (Septiembre 2026)
 - ✅ `!presupuestos` - Estado detallado con barras de progreso

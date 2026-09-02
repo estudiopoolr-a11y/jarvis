@@ -557,5 +557,239 @@ async def borrar_datos(ctx, *, confirmacion: str = None):
     except Exception as e:
         await ctx.send(f"⚠️ Error borrando datos: {e}")
 
+# ===== COMANDOS DE ESTADÍSTICAS =====
+
+@bot.command(name="mes")
+async def ver_mes(ctx, *, mes: str = None):
+    """Muestra resumen de un mes específico. Ej: !mes agosto, !mes 08 2026, !mes actual"""
+    try:
+        from modules.database import db
+        from datetime import datetime, timedelta
+        from dateutil import parser as dateparser
+        uid = str(ctx.author.id)
+
+        # Determinar el mes a consultar
+        ahora = datetime.now()
+        anio_actual = ahora.year
+        mes_actual = ahora.month
+
+        if mes is None or mes.lower() in ["actual", "este", "este mes"]:
+            mes_num = mes_actual
+            anio = anio_actual
+        elif mes.lower() in ["anterior", "pasado"]:
+            mes_num = mes_actual - 1 if mes_actual > 1 else 12
+            anio = anio_actual if mes_actual > 1 else anio_actual - 1
+        else:
+            # Intentar parsear el mes
+            try:
+                # Formato: "08 2026" o "agosto 2026"
+                partes = mes.strip().split()
+                if len(partes) >= 2:
+                    mes_str = partes[0]
+                    anio_str = partes[1]
+                else:
+                    mes_str = partes[0]
+                    anio_str = str(anio_actual)
+
+                # Convertir mes a número
+                meses = {
+                    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+                    "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+                    "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+                    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+                    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
+                }
+
+                if mes_str.isdigit():
+                    mes_num = int(mes_str)
+                else:
+                    mes_num = meses.get(mes_str.lower()[:3], mes_actual)
+
+                anio = int(anio_str) if len(anio_str) == 4 else anio_actual
+            except:
+                mes_num = mes_actual
+                anio = anio_actual
+
+        # Calcular fechas del mes
+        fecha_inicio = datetime(anio, mes_num, 1)
+        if mes_num == 12:
+            fecha_fin = datetime(anio + 1, 1, 1) - timedelta(days=1)
+        else:
+            fecha_fin = datetime(anio, mes_num + 1, 1) - timedelta(days=1)
+
+        # Obtener transacciones del mes
+        ingresos = 0.0
+        gastos = 0.0
+        por_categoria = {}
+        num_dias = (fecha_fin - fecha_inicio).days + 1
+
+        for doc in db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", uid)).stream():
+            t = doc.to_dict()
+            fecha_str = t.get("fecha", "")
+            if not fecha_str:
+                continue
+
+            try:
+                fecha_trans = datetime.strptime(fecha_str, "%Y-%m-%d")
+                if fecha_inicio <= fecha_trans <= fecha_fin:
+                    monto = float(t.get("monto", 0))
+                    tipo = t.get("tipo", "gasto")
+                    cat = t.get("categoria", "General")
+
+                    if tipo == "ingreso":
+                        ingresos += monto
+                    else:
+                        gastos += monto
+                        por_categoria[cat] = por_categoria.get(cat, 0) + monto
+            except:
+                continue
+
+        # Nombres de meses
+        nombres_meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
+        reporte = f"📅 **RESUMEN {nombres_meses[mes_num]} {anio}**\n\n"
+        reporte += f"💰 **Ingresos:** +${ingresos:,.0f}\n"
+        reporte += f"💸 **Gastos:** -${gastos:,.0f}\n"
+        reporte += f"📊 **Balance:** ${ingresos - gastos:,.0f}\n\n"
+
+        if por_categoria:
+            reporte += "**🔴 Gastos por categoría:**\n"
+            for cat, monto in sorted(por_categoria.items(), key=lambda x: x[1], reverse=True):
+                pct = (monto / gastos * 100) if gastos > 0 else 0
+                reporte += f"   • {cat}: ${monto:,.0f} ({pct:.0f}%)\n"
+
+            reporte += f"\n📈 **Promedio diario:** ${gastos/num_dias:,.0f}\n"
+            reporte += f"📆 **Días en el mes:** {num_dias}"
+
+        else:
+            reporte += "Sin transacciones registradas este mes."
+
+        await ctx.send(reporte)
+    except Exception as e:
+        await ctx.send(f"⚠️ Error generando resumen mensual: {e}")
+
+@bot.command(name="stats")
+async def ver_stats(ctx):
+    """Muestra estadísticas generales: promedios, proyecciones, anomalías."""
+    try:
+        from modules.database import db
+        from datetime import datetime, timedelta
+        uid = str(ctx.author.id)
+
+        ahora = datetime.now()
+        hace_30_dias = ahora - timedelta(days=30)
+
+        # Recolectar datos
+        todos_gastos = []
+        todos_ingresos = []
+        por_categoria = {}
+        por_dia = {}
+
+        for doc in db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", uid)).stream():
+            t = doc.to_dict()
+            monto = float(t.get("monto", 0))
+            tipo = t.get("tipo", "gasto")
+            cat = t.get("categoria", "General")
+            fecha_str = t.get("fecha", "")
+
+            if not fecha_str:
+                continue
+
+            try:
+                fecha = datetime.strptime(fecha_str, "%Y-%m-%d")
+                clave_dia = fecha.strftime("%Y-%m-%d")
+
+                if tipo == "ingreso":
+                    todos_ingresos.append(monto)
+                else:
+                    todos_gastos.append(monto)
+                    por_categoria[cat] = por_categoria.get(cat, 0) + monto
+                    por_dia[clave_dia] = por_dia.get(clave_dia, 0) + monto
+            except:
+                continue
+
+        if not todos_gastos and not todos_ingresos:
+            await ctx.send("ℹ️ No hay suficientes datos para estadísticas.")
+            return
+
+        total_gastos = sum(todos_gastos)
+        total_ingresos = sum(todos_ingresos)
+        num_trans = len(todos_gastos) + len(todos_ingresos)
+
+        # Calcular promedios
+        promedio_gasto = total_gastos / len(todos_gastos) if todos_gastos else 0
+        promedio_ingreso = total_ingresos / len(todos_ingresos) if todos_ingresos else 0
+
+        # Encontrar día con más gastos
+        dia_max = max(por_dia.items(), key=lambda x: x[1]) if por_dia else ("N/A", 0)
+
+        reporte = "📊 **ESTADÍSTICAS GENERALES**\n\n"
+
+        reporte += "**💰 INGRESOS**\n"
+        reporte += f"   • Total: ${total_ingresos:,.0f}\n"
+        reporte += f"   • Promedio por transacción: ${promedio_ingreso:,.0f}\n\n"
+
+        reporte += "**💸 GASTOS**\n"
+        reporte += f"   • Total: ${total_gastos:,.0f}\n"
+        reporte += f"   • Promedio por transacción: ${promedio_gasto:,.0f}\n"
+        reporte += f"   • Día con más gastos: {dia_max[0]} (${dia_max[1]:,.0f})\n\n"
+
+        reporte += "**📈 TOP 5 CATEGORÍAS**\n"
+        if por_categoria:
+            for i, (cat, monto) in enumerate(sorted(por_categoria.items(), key=lambda x: x[1], reverse=True)[:5], 1):
+                pct = (monto / total_gastos * 100) if total_gastos > 0 else 0
+                reporte += f"   {i}. {cat}: ${monto:,.0f} ({pct:.0f}%)\n"
+
+        reporte += "\n**📅 PROYECCIÓN**\n"
+        dias_pasados = max(1, (ahora - hace_30_dias).days)
+        gasto_diario_promedio = total_gastos / dias_pasados if dias_pasados > 0 else 0
+        reporte += f"   • Gasto diario promedio (30 días): ${gasto_diario_promedio:,.0f}\n"
+        reporte += f"   • Proyección mensual: ${gasto_diario_promedio * 30:,.0f}\n"
+        reporte += f"   • Proyección anual: ${gasto_diario_promedio * 365:,.0f}\n"
+
+        await ctx.send(reporte)
+    except Exception as e:
+        await ctx.send(f"⚠️ Error calculando estadísticas: {e}")
+
+@bot.command(name="top")
+async def ver_top(ctx, limite: int = 5):
+    """Muestra el top N de categorías con más gastos."""
+    try:
+        from modules.database import db
+        uid = str(ctx.author.id)
+
+        por_categoria = {}
+        for doc in db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", uid)).stream():
+            t = doc.to_dict()
+            if t.get("tipo") == "gasto":
+                cat = t.get("categoria", "General")
+                monto = float(t.get("monto", 0))
+                por_categoria[cat] = por_categoria.get(cat, 0) + monto
+
+        if not por_categoria:
+            await ctx.send("ℹ️ No hay gastos registrados.")
+            return
+
+        total_gastos = sum(por_categoria.values())
+        limite = min(limite, len(por_categoria))
+
+        reporte = f"🏆 **TOP {limite} CATEGORÍAS DE GASTOS**\n\n"
+
+        emoji_medallas = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+        for i, (cat, monto) in enumerate(sorted(por_categoria.items(), key=lambda x: x[1], reverse=True)[:limite], 0):
+            pct = (monto / total_gastos * 100) if total_gastos > 0 else 0
+            barra_len = int(pct / 5)
+            barra = "█" * barra_len + "░" * (20 - barra_len)
+            emoji = emoji_medallas[i] if i < 10 else f"{i+1}."
+
+            reporte += f"{emoji} **{cat}** ${monto:,.0f}\n"
+            reporte += f"   [{barra}] {pct:.1f}%\n\n"
+
+        await ctx.send(reporte)
+    except Exception as e:
+        await ctx.send(f"⚠️ Error generando top: {e}")
+
 if __name__ == "__main__":
     if TOKEN: bot.run(TOKEN)
