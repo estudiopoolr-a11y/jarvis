@@ -8,12 +8,14 @@ import time
 
 from modules.ai_brain import (
     pensar_respuesta, pensar_respuesta_audio, procesar_intencion_natural,
-    analizar_inversion
+    analizar_inversion, _API_KEYS, _key_index
 )
 from modules.database import (
     guardar_mensaje, obtener_tareas_pendientes, marcar_tarea_completada,
     obtener_balance_financiero, obtener_resumen_presupuestos
 )
+import firebase_admin
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 # Estados en memoria
 usuarios_silenciados = {}
@@ -290,6 +292,242 @@ async def ver_finanzas(ctx):
         await ctx.send(reporte)
     except Exception as e:
         await ctx.send(f"⚠️ Error al obtener finanzas: {e}")
+
+# ===== NUEVOS COMANDOS =====
+
+@bot.command(name="presupuestos")
+async def ver_presupuestos(ctx):
+    """Muestra el estado de todos los presupuestos con barras de progreso."""
+    try:
+        from modules.database import inicializar_firebase
+        if not firebase_admin._apps:
+            inicializar_firebase()
+
+        from modules.database import db
+        uid = str(ctx.author.id)
+
+        # Obtener presupuestos
+        presupuestos = {}
+        for doc in db.collection("presupuestos").stream():
+            d = doc.to_dict()
+            if d.get("usuario_id") == uid:
+                presupuestos[d.get("categoria")] = float(d.get("limite", 0))
+
+        # Obtener gastos por categoría
+        gastos = {}
+        for doc in db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", uid)).stream():
+            data = doc.to_dict()
+            if data.get("tipo") == "gasto":
+                cat = data.get("categoria", "General")
+                gastos[cat] = gastos.get(cat, 0) + float(data.get("monto", 0))
+
+        if not presupuestos:
+            await ctx.send("⚠️ No tienes presupuestos configurados. Usa `@Jarvis presupuesto Categoría Monto` para crear uno.")
+            return
+
+        reporte = "🎯 **ESTADO DE PRESUPUESTOS**\n\n"
+        for cat, limite in presupuestos.items():
+            gastado = gastos.get(cat, 0)
+            pct = min(100, int((gastado / limite) * 100)) if limite > 0 else 0
+            barra_llena = int(pct / 10)
+            barra_vacia = 10 - barra_llena
+            barra = "█" * barra_llena + "░" * barra_vacia
+
+            if pct >= 100:
+                estado = "🔴 EXCEDIDO"
+                color_emoji = "🚨"
+            elif pct >= 90:
+                estado = "🟠 CRÍTICO"
+                color_emoji = "⚠️"
+            elif pct >= 80:
+                estado = "🟡 ADVERTENCIA"
+                color_emoji = "⚠️"
+            else:
+                estado = "🟢 OK"
+                color_emoji = "✅"
+
+            restante = limite - gastado
+            reporte += f"{color_emoji} **{cat}** {estado}\n"
+            reporte += f"   {barra} {pct}%\n"
+            reporte += f"   Gastado: ${gastado:,.0f} / ${limite:,.0f}\n"
+            reporte += f"   Restante: ${max(0, restante):,.0f}\n\n"
+
+        await ctx.send(reporte)
+    except Exception as e:
+        await ctx.send(f"⚠️ Error al obtener presupuestos: {e}")
+
+@bot.command(name="historial")
+async def ver_historial(ctx, cantidad: int = 20):
+    """Muestra las últimas N transacciones (por defecto 20)."""
+    try:
+        from modules.database import db
+        uid = str(ctx.author.id)
+
+        docs = list(db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", uid)).stream())
+
+        if not docs:
+            await ctx.send("📋 Sin transacciones registradas.")
+            return
+
+        # Ordenar por fecha descendente (asumimos que hay campo fecha)
+        docs_ordenados = sorted(docs, key=lambda d: d.to_dict().get("fecha", ""), reverse=True)
+        ultimos = docs_ordenados[:min(cantidad, len(docs_ordenados))]
+
+        reporte = f"📜 **ÚLTIMAS {len(ultimos)} TRANSACCIONES**\n\n"
+        for doc in ultimos:
+            t = doc.to_dict()
+            tipo = t.get("tipo", "gasto")
+            monto = t.get("monto", 0)
+            cat = t.get("categoria", "General")
+            desc = t.get("descripcion", "")
+            fecha = t.get("fecha", "")
+            emoji = "🟢" if tipo == "ingreso" else "🔴"
+            signo = "+" if tipo == "ingreso" else "-"
+            desc_str = f" - {desc}" if desc else ""
+            reporte += f"{emoji} {signo}${float(monto):,.0f} en **{cat}**{desc_str}\n"
+            reporte += f"   📅 {fecha}\n"
+
+        await ctx.send(reporte)
+    except Exception as e:
+        await ctx.send(f"⚠️ Error al obtener historial: {e}")
+
+@bot.command(name="buscar")
+async def buscar_categoria(ctx, *, termino: str):
+    """Busca todas las transacciones que coincidan con el término (categoría o descripción)."""
+    try:
+        from modules.database import db
+        uid = str(ctx.author.id)
+        termino_lower = termino.lower()
+
+        resultados = []
+        for doc in db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", uid)).stream():
+            t = doc.to_dict()
+            cat = str(t.get("categoria", "")).lower()
+            desc = str(t.get("descripcion", "")).lower()
+
+            if termino_lower in cat or termino_lower in desc:
+                resultados.append(t)
+
+        if not resultados:
+            await ctx.send(f"🔍 No encontré transacciones que coincidan con **'{termino}'**.")
+            return
+
+        total_gastos = sum(float(t.get("monto", 0)) for t in resultados if t.get("tipo") == "gasto")
+        total_ingresos = sum(float(t.get("monto", 0)) for t in resultados if t.get("tipo") == "ingreso")
+
+        reporte = f"🔍 **RESULTADOS PARA '{termino}'** ({len(resultados)} transacciones)\n\n"
+        reporte += f"💸 Total gastos: ${total_gastos:,.0f}\n"
+        reporte += f"💰 Total ingresos: ${total_ingresos:,.0f}\n\n"
+        reporte += "**Detalle:**\n"
+
+        for t in resultados[:15]:  # Limitar a 15 para no saturar
+            tipo = t.get("tipo", "gasto")
+            monto = t.get("monto", 0)
+            cat = t.get("categoria", "General")
+            desc = t.get("descripcion", "")
+            emoji = "🟢" if tipo == "ingreso" else "🔴"
+            signo = "+" if tipo == "ingreso" else "-"
+            desc_str = f" - {desc}" if desc else ""
+            reporte += f"{emoji} {signo}${float(monto):,.0f} en {cat}{desc_str}\n"
+
+        if len(resultados) > 15:
+            reporte += f"\n_...y {len(resultados) - 15} más_"
+
+        await ctx.send(reporte)
+    except Exception as e:
+        await ctx.send(f"⚠️ Error en búsqueda: {e}")
+
+@bot.command(name="estado")
+async def estado_sistema(ctx):
+    """Muestra el estado del sistema: API keys, conexión, datos."""
+    try:
+        from modules.database import db, inicializar_firebase
+        if not firebase_admin._apps:
+            inicializar_firebase()
+
+        uid = str(ctx.author.id)
+
+        # Contar datos del usuario
+        num_transacciones = 0
+        num_presupuestos = 0
+        num_tareas = 0
+        for _ in db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", uid)).stream():
+            num_transacciones += 1
+        for _ in db.collection("presupuestos").where(filter=FieldFilter("usuario_id", "==", uid)).stream():
+            num_presupuestos += 1
+        for _ in db.collection("tareas").where(filter=FieldFilter("usuario_id", "==", uid)).where(filter=FieldFilter("completada", "==", False)).stream():
+            num_tareas += 1
+
+        # Estado de las API keys (informativo)
+        key_actual = _key_index + 1
+        total_keys = len(_API_KEYS)
+
+        reporte = "🤖 **ESTADO DEL SISTEMA**\n\n"
+        reporte += f"✅ **Bot:** Activo y conectado\n"
+        reporte += f"✅ **Firebase:** {'Conectado' if firebase_admin._apps else '❌ Desconectado'}\n"
+        reporte += f"🔑 **API Keys Gemini:** Usando {key_actual}/{total_keys}\n"
+        reporte += f"📊 **Datos personales:**\n"
+        reporte += f"   • {num_transacciones} transacciones\n"
+        reporte += f"   • {num_presupuestos} presupuestos\n"
+        reporte += f"   • {num_tareas} tareas pendientes\n"
+
+        if uid in usuarios_silenciados:
+            tiempo_restante = usuarios_silenciados[uid] - datetime.now()
+            horas = tiempo_restante.seconds // 3600
+            minutos = (tiempo_restante.seconds % 3600) // 60
+            reporte += f"💤 **Modo silencio:** {horas}h {minutos}m restantes\n"
+        else:
+            reporte += f"🔔 **Notificaciones:** Activas\n"
+
+        if uid in usuarios_modo_voz:
+            reporte += f"🎙️ **Modo voz:** Activado\n"
+        else:
+            reporte += f"🔇 **Modo voz:** Desactivado\n"
+
+        await ctx.send(reporte)
+    except Exception as e:
+        await ctx.send(f"⚠️ Error al obtener estado: {e}")
+
+@bot.command(name="ayuda")
+async def mostrar_ayuda(ctx):
+    """Muestra la lista completa de comandos disponibles."""
+    ayuda = """🤖 **COMANDOS DISPONIBLES - JARVIS**
+
+**💰 FINANZAS**
+`!finanzas` - Balance general con últimos movimientos
+`!presupuestos` - Estado de todos los presupuestos con barras
+`!historial [N]` - Últimas N transacciones (default: 20)
+`!buscar <término>` - Busca por categoría o descripción
+
+**📋 TAREAS**
+`!tareas` - Lista de tareas pendientes
+`!hecho <descripción>` - Marca tarea como completada
+
+**🧠 ANÁLISIS**
+`!inversion <TICKER>` - Análisis de acción (ej: AAPL)
+
+**⚙️ CONTROL**
+`!estado` - Estado del sistema y API keys
+`!voz` - Activa/desactiva respuestas de audio
+`!dormir [horas]` - Silencia por X horas (default: 8)
+`!pausar [horas]` - Pausa notificaciones (default: 2)
+`!ayuda` - Muestra este mensaje
+
+**💬 MENCIÓN NATURAL**
+También puedes hablarme directamente con:
+`@Jarvis hola` - Saludo con balance
+`@Jarvis gasté 50000 en mercado` - Registra gasto
+`@Jarvis presupuesto Women 300000` - Configura presupuesto
+`@Jarvis tarea llamar al médico mañana Alta` - Crea tarea
+`@Jarvis ¿cuánto llevo en Women?` - Consulta con IA
+`@App` (rol configurado) - Activa el bot
+
+**🎙️ AUDIO**
+Puedes enviar notas de voz y las procesaré con IA.
+Para respuestas en audio, usa `!voz` primero.
+
+_Sistemas operativos. JARVIS a la espera de instrucciones._"""
+    await ctx.send(ayuda)
 
 if __name__ == "__main__":
     if TOKEN: bot.run(TOKEN)

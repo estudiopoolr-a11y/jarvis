@@ -387,7 +387,12 @@ Una vez que el bot esté en línea, mencionalo con `@Jarvis` o al rol configurad
 
 | Comando | Descripción |
 |---------|-------------|
-| `!finanzas` | Balance completo con ingresos/gastos |
+| `!finanzas` | Balance completo con últimos movimientos |
+| `!presupuestos` | Estado de todos los presupuestos con barras de progreso |
+| `!historial [N]` | Últimas N transacciones (default: 20) |
+| `!buscar <término>` | Busca por categoría o descripción |
+| `!estado` | Estado del sistema: API keys, datos, modo |
+| `!ayuda` | Lista completa de comandos disponibles |
 | `!tareas` | Lista de tareas pendientes |
 | `!hecho "descripción"` | Marca tarea como completada |
 | `!dormir 8` | Silencia notificaciones por 8 horas |
@@ -493,7 +498,64 @@ JARVIS: 🍎 ANÁLISIS DE AAPL
        Análisis: Momentum positivo con soporte en $185...
 ```
 
-### Ejemplo 7: Resumen Diario Automático
+### Ejemplo 7: Estado del Sistema
+
+```
+Usuario: !estado
+
+JARVIS: 🤖 ESTADO DEL SISTEMA
+
+✅ Bot: Activo y conectado
+✅ Firebase: Conectado
+🔑 API Keys Gemini: Usando 1/5
+📊 Datos personales:
+   • 9 transacciones
+   • 7 presupuestos
+   • 3 tareas pendientes
+🔔 Notificaciones: Activas
+🔇 Modo voz: Desactivado
+```
+
+### Ejemplo 8: Estado de Presupuestos
+
+```
+Usuario: !presupuestos
+
+JARVIS: 🎯 ESTADO DE PRESUPUESTOS
+
+✅ Deudas OK
+   ████░░░░░░ 25%
+   Gastado: $50,000 / $200,000
+   Restante: $150,000
+
+🟢 Alimentacion OK
+   █████████░ 92%
+   Gastado: $138,000 / $150,000
+   Restante: $12,000
+
+⚠️ Women ADVERTENCIA
+   ████████░░ 80%
+   Gastado: $240,000 / $300,000
+   Restante: $60,000
+```
+
+### Ejemplo 9: Búsqueda por Categoría
+
+```
+Usuario: !buscar Women
+
+JARVIS: 🔍 RESULTADOS PARA 'Women' (3 transacciones)
+
+💸 Total gastos: $332,540
+💰 Total ingresos: $0
+
+Detalle:
+🔴 -$332,540 en Women - Gastos categoría Women
+🔴 -$80,000 en Women - Pago mensual
+🔴 -$50,000 en Women - Extraordinario
+```
+
+### Ejemplo 10: Resumen Diario Automático
 
 ```
 🤖 [JARVIS - Resumen Diario]
@@ -946,6 +1008,15 @@ Para cada servicio (Web + Background Worker), ve a **Environment** y agrega las 
 
 ## 📈 Historial de Cambios
 
+### Nuevos Comandos Discord (Septiembre 2026)
+- ✅ `!presupuestos` - Estado detallado con barras de progreso
+- ✅ `!historial [N]` - Últimas N transacciones (default 20)
+- ✅ `!buscar <término>` - Búsqueda por categoría o descripción
+- ✅ `!estado` - Estado del sistema (API keys, datos, modo)
+- ✅ `!ayuda` - Lista completa de comandos disponibles
+- ✅ Bug fix: `!finanzas` ahora formatea correctamente los movimientos
+- ✅ Mensaje de error 429 mejorado con instrucciones claras
+
 ### Fase 3 - Alertas Proactivas (Septiembre 2026)
 - ✅ Nuevo módulo `modules/alertas.py` con detección de:
   - Presupuestos críticos (>90%) y warning (>80%)
@@ -1004,6 +1075,12 @@ Para cada servicio (Web + Background Worker), ve a **Environment** y agrega las 
 - [ ] **Integración con bancos** (Plaid/Tink)
 - [ ] **Sistema de metas** financieras
 - [ ] **Análisis de tendencias** con visualización
+- [ ] **Confirmación para comandos destructivos** (`!borrar todo`)
+- [ ] **Filtros por mes** (`!mes agosto`)
+- [ ] **Recordatorios programados** (`!recordar 2026-09-15 "..."`)
+- [ ] **Tags/categorías personalizadas**
+- [ ] **Tests automatizados** completos
+- [ ] **Dashboard con gráficos** (Chart.js)
 
 ---
 
