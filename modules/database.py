@@ -282,3 +282,124 @@ def guardar_mensaje(usuario_id: str, remitente: str, mensaje: str):
         })
     except Exception as e:
         print(f"Error guardando mensaje: {e}")
+
+
+# ============== METAS FINANCIERAS ==============
+
+def guardar_meta(usuario_id: str, nombre: str, monto_objetivo: float, fecha_limite: str = "", categoria: str = "General"):
+    """Crea una nueva meta financiera."""
+    global db
+    if not db: db = inicializar_firebase()
+    if not db: return
+    try:
+        db.collection("metas").document(f"{usuario_id}_{nombre.lower().replace(' ', '_')[:30]}").set({
+            "usuario_id": str(usuario_id),
+            "nombre": nombre.title(),
+            "monto_objetivo": float(monto_objetivo),
+            "monto_actual": 0.0,
+            "fecha_limite": fecha_limite,
+            "categoria": categoria.capitalize(),
+            "completada": False,
+            "timestamp": firestore.SERVER_TIMESTAMP
+        })
+    except Exception as e:
+        print(f"Error guardando meta: {e}")
+
+
+def obtener_metas(usuario_id: str = "default"):
+    """Obtiene todas las metas del usuario."""
+    global db
+    if not db: db = inicializar_firebase()
+    if not db: return []
+    try:
+        docs = db.collection("metas").where(filter=FieldFilter("usuario_id", "==", str(usuario_id))).stream()
+        metas = []
+        for doc in docs:
+            m = doc.to_dict()
+            m["id"] = doc.id
+            metas.append(m)
+        return metas
+    except Exception as e:
+        print(f"Error obteniendo metas: {e}")
+        return []
+
+
+def actualizar_progreso_meta(usuario_id: str, nombre: str, monto_actual: float):
+    """Actualiza el progreso de una meta."""
+    global db
+    if not db: db = inicializar_firebase()
+    if not db: return False
+    try:
+        doc_id = f"{usuario_id}_{nombre.lower().replace(' ', '_')[:30]}"
+        doc_ref = db.collection("metas").document(doc_id)
+        doc = doc_ref.get()
+        if doc.exists:
+            data = doc.to_dict()
+            nuevo_monto = float(data.get("monto_actual", 0)) + float(monto_actual)
+            completada = nuevo_monto >= float(data.get("monto_objetivo", 0))
+            doc_ref.update({"monto_actual": nuevo_monto, "completada": completada})
+            return True
+    except Exception as e:
+        print(f"Error actualizando meta: {e}")
+    return False
+
+
+def eliminar_meta(usuario_id: str, nombre: str):
+    """Elimina una meta por nombre."""
+    global db
+    if not db: db = inicializar_firebase()
+    if not db: return False
+    try:
+        nombre_norm = nombre.lower().strip()
+        docs = db.collection("metas").where(filter=FieldFilter("usuario_id", "==", str(usuario_id))).stream()
+        for doc in docs:
+            data = doc.to_dict()
+            if nombre_norm in data.get("nombre", "").lower():
+                doc.reference.delete()
+                return True
+    except Exception as e:
+        print(f"Error eliminando meta: {e}")
+    return False
+
+
+def proyectar_meta(meta: dict, capacidad_ahorro_mensual: float) -> dict:
+    """Calcula proyección de una meta."""
+    from datetime import datetime
+    objetivo = float(meta.get("monto_objetivo", 0))
+    actual = float(meta.get("monto_actual", 0))
+    falta = max(0, objetivo - actual)
+
+    # Calcular meses hasta fecha límite
+    meses_restantes = 12  # default
+    fecha_limite_str = meta.get("fecha_limite", "")
+    if fecha_limite_str:
+        try:
+            fecha_limite = datetime.strptime(fecha_limite_str, "%Y-%m-%d")
+            hoy = datetime.now()
+            meses_restantes = max(1, (fecha_limite - hoy).days // 30)
+        except (ValueError, TypeError):
+            meses_restantes = 12
+
+    # Ahorro mensual necesario
+    ahorro_necesario = falta / meses_restantes if meses_restantes > 0 else falta
+
+    # Tiempo proyectado según capacidad actual
+    if capacidad_ahorro_mensual > 0:
+        meses_proyectados = falta / capacidad_ahorro_mensual
+    else:
+        meses_proyectados = float('inf')
+
+    # ¿Va atrasado?
+    atrasado = meses_proyectados > meses_restantes
+
+    return {
+        "objetivo": objetivo,
+        "actual": actual,
+        "falta": falta,
+        "porcentaje": min(100, (actual / objetivo * 100)) if objetivo > 0 else 0,
+        "meses_restantes": meses_restantes,
+        "ahorro_necesario": ahorro_necesario,
+        "ahorro_capacidad": capacidad_ahorro_mensual,
+        "meses_proyectados": meses_proyectados,
+        "atrasado": atrasado
+    }

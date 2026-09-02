@@ -15,7 +15,8 @@ from modules.database import (
     guardar_tarea, registrar_transaccion, establecer_presupuesto,
     marcar_tarea_completada, inicializar_firebase, limpiar_y_cargar_datos_dinamicos,
     obtener_contexto_financiero,
-    obtener_tareas_pendientes, obtener_balance_financiero, obtener_resumen_presupuestos
+    obtener_tareas_pendientes, obtener_balance_financiero, obtener_resumen_presupuestos,
+    guardar_meta, obtener_metas, eliminar_meta, actualizar_progreso_meta, proyectar_meta
 )
 from datetime import datetime
 
@@ -327,6 +328,53 @@ def _parse_completar_tarea(texto: str) -> str | None:
     return None
 
 
+def _parse_meta(texto: str) -> dict | None:
+    """Extrae nombre, monto y fecha de una meta financiera."""
+    import re
+    texto_lower = texto.lower()
+
+    # Patrones para crear meta
+    # "meta vacaciones 3000000 diciembre"
+    # "crear meta casa 50000000"
+    # "quiero ahorrar 1 millon para navidad"
+    # "meta 1 millon"
+    patrones = [
+        r'meta\s+(\w+(?:\s+\w+)?)\s+([\d,.]+)',
+        r'crear\s+meta\s+(\w+(?:\s+\w+)?)\s+([\d,.]+)',
+        r'ahorrar\s+(?:para\s+)?(?:un[ao]?\s+)?(\w+(?:\s+\w+)?)\s+([\d,.]+)',
+        r'quiero\s+ahorrar\s+([\d,.]+)\s+(?:para\s+)?(.+?)(?:\s+(?:en|hasta|para)\s+(.+))?$',
+        r'(\w+(?:\s+\w+)?)\s+([\d,.]+)',
+    ]
+
+    for i, patron in enumerate(patrones):
+        match = re.search(patron, texto_lower)
+        if match:
+            if i == 3:  # "quiero ahorrar 1 millon para X"
+                monto_str = match.group(1).replace(',', '')
+                nombre = match.group(2).strip()
+            else:
+                nombre = match.group(1).strip()
+                monto_str = match.group(2).replace(',', '')
+
+            try:
+                monto = float(monto_str)
+            except ValueError:
+                continue
+
+            # Detectar fecha
+            fecha = ""
+            meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+                     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+            mes_encontrado = next((m for m in meses if m in texto_lower), None)
+            if mes_encontrado:
+                from datetime import datetime
+                mes_num = meses.index(mes_encontrado) + 1
+                fecha = f"2026-{mes_num:02d}-28"
+
+            return {"nombre": nombre.title(), "monto": monto, "fecha": fecha}
+    return None
+
+
 # ============================================================
 # ASESOR DE INVERSIONES COLOMBIA
 # ============================================================
@@ -488,6 +536,57 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     if presupuesto_data:
         establecer_presupuesto(usuario_id, presupuesto_data["categoria"], presupuesto_data["limite"])
         return f"🎯 Presupuesto: *{presupuesto_data['categoria']}* = **${presupuesto_data['limite']:,.0f}**"
+
+    # 5e. Meta financiera
+    if any(k in texto_lc for k in ["meta", "objetivo", "ahorrar para", "quiero ahorrar", "crear meta"]):
+        meta_data = _parse_meta(texto_lc)
+        if meta_data:
+            guardar_meta(usuario_id, meta_data["nombre"], meta_data["monto"], meta_data["fecha"])
+
+            # Calcular capacidad de ahorro
+            balance, ingresos, gastos, _ = obtener_balance_financiero(usuario_id)
+            capacidad_mensual = max(0, ingresos - gastos) / 1  # Aproximado
+
+            # Proyectar
+            from modules.database import proyectar_meta
+            proy = proyectar_meta({"monto_objetivo": meta_data["monto"], "monto_actual": 0, "fecha_limite": meta_data["fecha"]}, capacidad_mensual)
+
+            msg = f"🎯 **META CREADA**\n\n"
+            msg += f"✅ **{meta_data['nombre']}**\n"
+            msg += f"   Meta: ${meta_data['monto']:,.0f}\n"
+            if meta_data["fecha"]:
+                msg += f"   📅 Fecha límite: {meta_data['fecha']}\n"
+            msg += f"   💰 Tu capacidad de ahorro: ${capacidad_mensual:,.0f}/mes\n"
+
+            if proy["atrasado"] and meta_data["fecha"]:
+                msg += f"\n⚠️ **ALERTA:** Necesitas ahorrar ${proy['ahorro_necesario']:,.0f}/mes para llegar a tiempo\n"
+                msg += f"💡 Reduce gastos o aumenta ingresos en ${proy['ahorro_necesario'] - capacidad_mensual:,.0f}/mes"
+
+            return msg
+
+        # Si dice "metas" (ver todas)
+        if "metas" in texto_lc or "mis metas" in texto_lc:
+            metas = obtener_metas(usuario_id)
+            if not metas:
+                return "📋 No tienes metas. Crea una con: `@Jarvis meta <nombre> <monto> [fecha]`"
+
+            balance, ingresos, gastos, _ = obtener_balance_financiero(usuario_id)
+            capacidad = max(0, ingresos - gastos)
+
+            msg = "🎯 **TUS METAS**\n\n"
+            for m in metas:
+                from modules.database import proyectar_meta
+                p = proyectar_meta(m, capacidad)
+                barra_llena = int(p["porcentaje"] / 10)
+                barra = "█" * barra_llena + "░" * (10 - barra_llena)
+                estado = "✅" if m.get("completada") else ("⚠️" if p["atrasado"] else "🎯")
+                msg += f"{estado} **{m['nombre']}**\n"
+                msg += f"   {barra} {p['porcentaje']:.0f}%\n"
+                msg += f"   ${m['monto_actual']:,.0f} / ${m['monto_objetivo']:,.0f}\n"
+                if p["falta"] > 0 and not m.get("completada"):
+                    msg += f"   Falta: ${p['falta']:,.0f}\n"
+                msg += "\n"
+            return msg
 
     # =========================================
     # 6. NADA MATCHEÓ → USAR GEMINI
