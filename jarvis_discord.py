@@ -11,7 +11,7 @@ import time
 
 from modules.ai_brain import (
     pensar_respuesta, pensar_respuesta_audio, procesar_intencion_natural,
-    analizar_inversion, _API_KEYS, _key_index
+    analizar_inversion, transcribir_audio, _API_KEYS, _key_index
 )
 from modules.database import (
     guardar_mensaje, obtener_tareas_pendientes, marcar_tarea_completada,
@@ -233,11 +233,25 @@ async def on_message(message):
                 ruta = os.path.join(TEMP_DIR, adjunto.filename)
                 await adjunto.save(ruta)
 
-                # OPTIMIZADO: Usar pensar_respuesta_audio directamente (1 sola llamada API)
-                # en lugar de transcribir_audio + pensar_respuesta (2-3 llamadas)
-                # Si el usuario escribió texto junto al audio, pasarlo como prompt adicional
-                prompt_audio = prompt_con_contexto if texto_limpio else ""
-                respuesta_ia = pensar_respuesta_audio(ruta, prompt_audio, usuario_id)
+                # ESTRATEGIA: Transcribir primero, luego parsers determinísticos
+                # 1) Transcribir audio (1 llamada API)
+                texto_transcrito = transcribir_audio(ruta)
+
+                # 2) Si hay texto transcrito, intentar parsers determinísticos (0 API calls)
+                if texto_transcrito:
+                    print(f"[AUDIO] Transcripción: {texto_transcrito[:100]}")
+                    respuesta_ia = procesar_intencion_natural(texto_transcrito, usuario_id)
+                    if respuesta_ia:
+                        print(f"[AUDIO] ✅ Parser determinístico matcheó")
+                    else:
+                        # 3) Si no hay match, ir a Gemini con el texto (1 llamada API)
+                        print(f"[AUDIO] Sin parser match → Gemini con texto")
+                        respuesta_ia = pensar_respuesta(texto_transcrito)
+                else:
+                    # Si falló la transcripción, usar modo audio directo (1 llamada API)
+                    print(f"[AUDIO] Transcripción falló → modo audio directo")
+                    prompt_audio = prompt_con_contexto if texto_limpio else ""
+                    respuesta_ia = pensar_respuesta_audio(ruta, prompt_audio, usuario_id)
 
                 if os.path.exists(ruta): os.remove(ruta)
             else:
