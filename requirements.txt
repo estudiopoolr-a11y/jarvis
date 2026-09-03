@@ -6,6 +6,7 @@ firebase-admin
 discord.py
 yfinance
 gTTS
+edge-tts
 pydantic
 python-multipart
 pillow
