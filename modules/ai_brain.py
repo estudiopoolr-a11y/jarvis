@@ -685,6 +685,17 @@ Si balance > $1.000.000, recomienda diversificar CDT + app."""
 def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     texto_lc = prompt_usuario.lower().strip()
 
+    # Mapeo de meses (compartido entre varios parsers)
+    _MESES = {
+        "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+        "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+        "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+        "sep": 9, "ago": 8, "dic": 12, "ene": 1, "feb": 2,
+        "mar": 3, "abr": 4, "jun": 6, "jul": 7, "oct": 10, "nov": 11
+    }
+    _NOMBRES_MESES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
     # =========================================
     # 0. ASESORÍA DE INVERSIÓN
     # =========================================
@@ -732,6 +743,95 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         else:
             msg += "- No hay presupuestos establecidos."
         return msg
+
+    # =========================================
+    # 4b. VER PRESUPUESTOS DE UN MES ESPECÍFICO
+    # =========================================
+    if "presupuesto" in texto_lc or "presupuestos" in texto_lc:
+        # Detectar mes mencionado
+        mes_mencionado = None
+        for nombre, num in _MESES.items():
+            if nombre in texto_lc:
+                mes_mencionado = num
+                break
+
+        if mes_mencionado:
+            from datetime import datetime
+            import re
+            anio_actual = datetime.now().year
+            anio_match = re.search(r'20(?:24|25|26)', texto_lc)
+            anio = int(anio_match.group()) if anio_match else anio_actual
+
+            mes_formato = f"{anio}-{mes_mencionado:02d}"
+            presupuestos_mes = obtener_resumen_presupuestos(usuario_id, mes_formato)
+
+            if presupuestos_mes:
+                total = sum(presupuestos_mes.values())
+                msg = f"📊 **PRESUPUESTOS {_NOMBRES_MESES[mes_mencionado]} {anio}**\n\n"
+                for cat, limite in presupuestos_mes.items():
+                    msg += f"• {cat}: ${limite:,.0f}\n"
+                msg += f"\n💰 **Total: ${total:,.0f}**"
+                return msg
+            else:
+                return f"📋 No hay presupuestos registrados para {_NOMBRES_MESES[mes_mencionado]} {anio}."
+
+    # =========================================
+    # 4c. COMPARAR MESES
+    # =========================================
+    if "compar" in texto_lc or " vs " in texto_lc or "versus" in texto_lc:
+        # Buscar dos meses en el texto
+        meses_encontrados = []
+        for nombre, num in _MESES.items():
+            if nombre in texto_lc:
+                meses_encontrados.append(num)
+
+        if len(meses_encontrados) >= 2:
+            mes1, mes2 = meses_encontrados[0], meses_encontrados[1]
+        elif len(meses_encontrados) == 1:
+            # Solo se mencionó un mes: comparar contra el mes actual
+            from datetime import datetime
+            mes_actual = datetime.now().month
+            if meses_encontrados[0] == mes_actual:
+                # El mes mencionado es el actual → comparar contra el mes anterior
+                mes1 = mes_actual - 1 if mes_actual > 1 else 12
+                mes2 = mes_actual
+            else:
+                # El mes mencionado NO es el actual → comparar contra el actual
+                mes1 = meses_encontrados[0]
+                mes2 = mes_actual
+        else:
+            meses_encontrados = []
+
+        if len(meses_encontrados) >= 1:
+            from datetime import datetime
+            import re
+            anio_actual = datetime.now().year
+            anio_match = re.search(r'20(?:24|25|26)', texto_lc)
+            anio = int(anio_match.group()) if anio_match else anio_actual
+
+            mes1_fmt = f"{anio}-{mes1:02d}"
+            mes2_fmt = f"{anio}-{mes2:02d}"
+
+            bal1, ing1, gas1, _ = obtener_balance_financiero(usuario_id, mes1_fmt)
+            bal2, ing2, gas2, _ = obtener_balance_financiero(usuario_id, mes2_fmt)
+            pres1 = obtener_resumen_presupuestos(usuario_id, mes1_fmt)
+            pres2 = obtener_resumen_presupuestos(usuario_id, mes2_fmt)
+
+            total_pres1 = sum(pres1.values()) if pres1 else 0
+            total_pres2 = sum(pres2.values()) if pres2 else 0
+
+            n1 = _NOMBRES_MESES[mes1][:10]
+            n2 = _NOMBRES_MESES[mes2][:10]
+            msg = f"📊 **COMPARATIVA {n1} vs {n2} {anio}**\n\n"
+            msg += "```\n"
+            msg += f"Concepto       | {n1:<11} | {n2:<11} | Var %\n"
+            msg += f"---------------|--------------|--------------|------\n"
+            msg += f"Ingresos       | ${ing1:>11,.0f} | ${ing2:>11,.0f} | {((ing2-ing1)/max(ing1,1)*100):>+5.1f}%\n"
+            msg += f"Gastos         | ${gas1:>11,.0f} | ${gas2:>11,.0f} | {((gas2-gas1)/max(gas1,1)*100):>+5.1f}%\n"
+            msg += f"Balance        | ${bal1:>11,.0f} | ${bal2:>11,.0f} | {((bal2-bal1)/max(abs(bal1),1)*100):>+5.1f}%\n"
+            msg += f"Presupuestos   | ${total_pres1:>11,.0f} | ${total_pres2:>11,.0f} | {((total_pres2-total_pres1)/max(total_pres1,1)*100):>+5.1f}%\n"
+            msg += "```"
+            return msg
 
     # =========================================
     # 5. PARSERS DETERMINÍSTICOS
