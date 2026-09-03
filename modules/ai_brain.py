@@ -844,21 +844,50 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             except TypeError:
                 pres2 = obtener_resumen_presupuestos(usuario_id)
 
-            total_pres1 = sum(pres1.values()) if pres1 else 0
-            total_pres2 = sum(pres2.values()) if pres2 else 0
-
+            # Comparativa de PRESUPUESTOS por categoría
             n1 = _NOMBRES_MESES[mes1][:10]
             n2 = _NOMBRES_MESES[mes2][:10]
-            msg = f"📊 **COMPARATIVA {n1} vs {n2} {anio}**\n\n"
-            msg += "```\n"
-            msg += f"Concepto       | {n1:<11} | {n2:<11} | Var %\n"
-            msg += f"---------------|--------------|--------------|------\n"
-            msg += f"Ingresos       | ${ing1:>11,.0f} | ${ing2:>11,.0f} | {((ing2-ing1)/max(ing1,1)*100):>+5.1f}%\n"
-            msg += f"Gastos         | ${gas1:>11,.0f} | ${gas2:>11,.0f} | {((gas2-gas1)/max(gas1,1)*100):>+5.1f}%\n"
-            msg += f"Balance        | ${bal1:>11,.0f} | ${bal2:>11,.0f} | {((bal2-bal1)/max(abs(bal1),1)*100):>+5.1f}%\n"
-            msg += f"Presupuestos   | ${total_pres1:>11,.0f} | ${total_pres2:>11,.0f} | {((total_pres2-total_pres1)/max(total_pres1,1)*100):>+5.1f}%\n"
-            msg += "```"
-            return msg
+
+            # Unir todas las categorías de ambos meses
+            todas_cats = set(pres1.keys()) | set(pres2.keys())
+
+            if todas_cats:
+                msg = f"📊 **PRESUPUESTOS: {n1} vs {n2} {anio}**\n\n"
+                msg += f"```\n"
+                msg += f"{'Categoría':<15}| {n1:<10} | {n2:<10} | Var\n"
+                msg += f"{'='*14}+{'='*12}+{'='*12}+{'='*6}\n"
+
+                total_pres1 = 0
+                total_pres2 = 0
+
+                for cat in sorted(todas_cats):
+                    p1 = pres1.get(cat, 0)
+                    p2 = pres2.get(cat, 0)
+                    total_pres1 += p1
+                    total_pres2 += p2
+
+                    # Variación
+                    if p1 > 0:
+                        var = ((p2 - p1) / p1) * 100
+                        var_str = f"{var:+.0f}%"
+                    elif p2 > 0:
+                        var_str = "NUEVO"
+                    else:
+                        var_str = "-"
+
+                    emoji = "📈" if p2 > p1 else "📉" if p2 < p1 else "➡️"
+
+                    msg += f"{cat:<15}| ${p1:>8,.0f} | ${p2:>8,.0f} | {var_str}\n"
+
+                # Totales
+                if len(todas_cats) > 1:
+                    var_total = ((total_pres2 - total_pres1) / max(total_pres1, 1)) * 100
+                    msg += f"{'-'*14}+{'-'*12}+{'-'*12}+{'-'*6}\n"
+                    msg += f"{'TOTAL':<15}| ${total_pres1:>8,.0f} | ${total_pres2:>8,.0f} | {var_total:+.0f}%\n"
+                msg += "```"
+                return msg
+            else:
+                return f"📋 No hay presupuestos registrados para {n1} ni {n2} {anio}."
 
     # =========================================
     # 5. PARSERS DETERMINÍSTICOS
