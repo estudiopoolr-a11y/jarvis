@@ -763,7 +763,12 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             anio = int(anio_match.group()) if anio_match else anio_actual
 
             mes_formato = f"{anio}-{mes_mencionado:02d}"
-            presupuestos_mes = obtener_resumen_presupuestos(usuario_id, mes_formato)
+            try:
+                # Intentar con parámetro mes (versión nueva)
+                presupuestos_mes = obtener_resumen_presupuestos(usuario_id, mes_formato)
+            except TypeError:
+                # Fallback: versión vieja sin parámetro mes
+                presupuestos_mes = obtener_resumen_presupuestos(usuario_id)
 
             if presupuestos_mes:
                 total = sum(presupuestos_mes.values())
@@ -821,10 +826,23 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             mes1_fmt = f"{anio}-{mes1:02d}"
             mes2_fmt = f"{anio}-{mes2:02d}"
 
-            bal1, ing1, gas1, _ = obtener_balance_financiero(usuario_id, mes1_fmt)
-            bal2, ing2, gas2, _ = obtener_balance_financiero(usuario_id, mes2_fmt)
-            pres1 = obtener_resumen_presupuestos(usuario_id, mes1_fmt)
-            pres2 = obtener_resumen_presupuestos(usuario_id, mes2_fmt)
+            # Llamadas defensivas: si la versión vieja no acepta mes, usar sin mes
+            try:
+                bal1, ing1, gas1, _ = obtener_balance_financiero(usuario_id, mes1_fmt)
+            except TypeError:
+                bal1, ing1, gas1, _ = obtener_balance_financiero(usuario_id)
+            try:
+                bal2, ing2, gas2, _ = obtener_balance_financiero(usuario_id, mes2_fmt)
+            except TypeError:
+                bal2, ing2, gas2, _ = obtener_balance_financiero(usuario_id)
+            try:
+                pres1 = obtener_resumen_presupuestos(usuario_id, mes1_fmt)
+            except TypeError:
+                pres1 = obtener_resumen_presupuestos(usuario_id)
+            try:
+                pres2 = obtener_resumen_presupuestos(usuario_id, mes2_fmt)
+            except TypeError:
+                pres2 = obtener_resumen_presupuestos(usuario_id)
 
             total_pres1 = sum(pres1.values()) if pres1 else 0
             total_pres2 = sum(pres2.values()) if pres2 else 0
