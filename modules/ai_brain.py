@@ -60,6 +60,45 @@ def _esperar_por_rpm():
     _llamadas_recientes.append(time.time())
 
 
+def transcribir_audio(ruta_audio: str) -> str:
+    """Transcribe audio a texto usando Gemini (solo transcripción, sin análisis)."""
+    try:
+        # Subir el archivo
+        audio_file = _gemini_call_with_fallback(lambda c: c.files.upload(file=ruta_audio))
+
+        # Prompt simple para transcripción
+        prompt_transcripcion = "Transcribe exactamente lo que se dice en este audio. Solo devuelve el texto transcrito, sin comentarios."
+
+        # Obtener transcripción
+        response_text = _gemini_call_with_fallback(
+            lambda c: c.models.generate_content(
+                model=MODEL_NAME,
+                contents=[prompt_transcripcion, audio_file],
+                config=types.GenerateContentConfig(
+                    max_output_tokens=500,
+                    temperature=0.1,  # Bajo para precisión
+                    safety_settings=[
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                        types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
+                    ]
+                )
+            ).text
+        )
+
+        # Limpiar el archivo
+        try:
+            audio_file.delete()
+        except Exception:
+            pass
+
+        return response_text.strip() if response_text else ""
+    except Exception as e:
+        print(f"Error en transcripción: {e}")
+        return ""
+
+
 def _manejar_error_api(e: APIError, contexto: str = "general") -> str:
     """Maneja errores de API de Gemini de forma centralizada."""
     import re as _re
@@ -968,17 +1007,22 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
                 pass
 
 def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_id: str = "default") -> str:
-    """Procesa archivos de audio recibidos inyectando estrictamente el contexto de la base de datos."""
+    """Procesa archivos de audio recibidos inyectando estrictamente el contexto de la base de datos.
+
+    OPTIMIZADO: Una sola llamada API (sube audio + genera respuesta con contexto).
+    """
     audio_file = None
     try:
+        # Subir audio una sola vez
         audio_file = _gemini_call_with_fallback(lambda c: c.files.upload(file=ruta_audio))
         contexto_db = obtener_contexto_financiero(usuario_id)
 
-        # OPTIMIZADO: Prompt más corto + max_output_tokens
-        prompt_completo = (
-            f"{SYSTEM_INSTRUCTION}{contexto_db}\n\n"
-            "Escucha el audio. Responde usando SOLO los datos de arriba. NO inventes."
-        )
+        # Construir prompt: system + contexto + instrucción
+        prompt_base = "Responde de forma concisa. Solo usa los datos proporcionados."
+        if prompt_adicional:
+            prompt_completo = f"{SYSTEM_INSTRUCTION}\n{contexto_db}\n{prompt_base}\n\nContexto adicional: {prompt_adicional}"
+        else:
+            prompt_completo = f"{SYSTEM_INSTRUCTION}\n{contexto_db}\n{prompt_base}"
 
         response_text = _gemini_call_with_fallback(
             lambda c: c.models.generate_content(
@@ -986,6 +1030,7 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
                 contents=[prompt_completo, audio_file],
                 config=types.GenerateContentConfig(
                     max_output_tokens=1000,
+                    temperature=0.3,
                     safety_settings=[
                         types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_NONE),
                         types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=types.HarmBlockThreshold.BLOCK_NONE),
@@ -995,7 +1040,7 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
                 )
             ).text
         )
-        return response_text or "No se pudo obtener respuesta del audio."
+        return response_text.strip() if response_text else "No pude procesar el audio. Intenta de nuevo."
     except APIError as e:
         return _manejar_error_api(e, contexto="audio")
     except Exception as e:

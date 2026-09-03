@@ -2,7 +2,10 @@ import os
 import discord
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta
-from gtts import gTTS
+import edge_tts
+import asyncio
+import tempfile
+import hashlib
 from dotenv import load_dotenv
 import time
 
@@ -44,11 +47,69 @@ def obtener_contexto_cacheado(usuario_id):
     _finanzas_cache[usuario_id] = (datos, ahora)
     return datos
 
+# Cache para archivos TTS (clave = hash del texto)
+_tts_cache = {}
+
+async def _generar_tts_async(texto: str, output_path: str) -> None:
+    """Genera audio TTS usando edge-tts (no bloquea event loop)."""
+    cache_key = hashlib.md5(texto.encode('utf-8')).hexdigest()
+    if cache_key in _tts_cache and os.path.exists(output_path):
+        # Cache hit: reutilizar archivo existente
+        return
+
+    communicate = edge_tts.Communicate(texto, "es-MX")
+    await communicate.save(output_path)
+
+    # Guardar en cache para reutilizar
+    _tts_cache[cache_key] = True
+
+def _limpiar_marca_tts(texto: str) -> str:
+    """Quita marcas markdown para TTS."""
+    if not texto:
+        return ""
+    return texto.replace("**", "").replace("*", "").replace("#", "").replace("`", "").strip()
+
+def _generar_tts_sincrono(texto: str, output_path: str) -> None:
+    """Genera TTS de forma síncrona (fallback)."""
+    # edge-tts es asíncrono, pero podemos ejecutarlo en un loop nuevo
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_generar_tts_async(texto, output_path))
+    finally:
+        loop.close()
+
 def generar_audio_respuesta(texto: str, output_path: str) -> str:
-    texto_limpio = texto.replace("**", "").replace("*", "").replace("#", "").replace("`", "")
-    tts = gTTS(text=texto_limpio[:500], lang='es', slow=False)
-    tts.save(output_path)
-    return output_path
+    """Genera respuesta de audio usando edge-tts (asíncrono, mejor calidad).
+
+    Esta función es NO BLOQUEANTE: lanza la generación en background.
+    El archivo estará disponible cuando termine (típicamente <1s).
+    """
+    texto_limpio = _limpiar_marca_tts(texto)
+    if not texto_limpio:
+        # Si no hay texto, no hacer nada
+        return ""
+
+    # Truncar a 800 caracteres, cortando por palabras para no cortar a la mitad
+    if len(texto_limpio) > 800:
+        texto_limpio = texto_limpio[:800].rsplit(' ', 1)[0] + "..."
+
+    # Crear directorio padre si no existe
+    padre = os.path.dirname(output_path)
+    if padre and not os.path.exists(padre):
+        os.makedirs(padre, exist_ok=True)
+
+    # Ejecutar en hilo separado para no bloquear el event loop de Discord
+    try:
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_generar_tts_async(texto_limpio, output_path))
+        finally:
+            loop.close()
+    except Exception as e:
+        print(f"Error generando TTS: {e}")
+        return ""
+
+    return output_path if os.path.exists(output_path) else ""
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("TOKEN")
@@ -171,7 +232,13 @@ async def on_message(message):
             if adjunto:
                 ruta = os.path.join(TEMP_DIR, adjunto.filename)
                 await adjunto.save(ruta)
-                respuesta_ia = pensar_respuesta_audio(ruta, prompt_con_contexto)
+
+                # OPTIMIZADO: Usar pensar_respuesta_audio directamente (1 sola llamada API)
+                # en lugar de transcribir_audio + pensar_respuesta (2-3 llamadas)
+                # Si el usuario escribió texto junto al audio, pasarlo como prompt adicional
+                prompt_audio = prompt_con_contexto if texto_limpio else ""
+                respuesta_ia = pensar_respuesta_audio(ruta, prompt_audio, usuario_id)
+
                 if os.path.exists(ruta): os.remove(ruta)
             else:
                 respuesta_ia = pensar_respuesta(prompt_con_contexto)
@@ -187,12 +254,15 @@ async def on_message(message):
     if usuario_id in usuarios_modo_voz:
         ruta_tts = os.path.join(TEMP_DIR, f"tts_{usuario_id}.mp3")
         try:
-            generar_audio_respuesta(respuesta_ia, ruta_tts)
-            await message.channel.send(file=discord.File(ruta_tts))
+            # Ejecutar TTS en hilo separado (no bloquea el event loop)
+            exito = await asyncio.to_thread(generar_audio_respuesta, respuesta_ia, ruta_tts)
+            if exito and os.path.exists(ruta_tts):
+                await message.channel.send(file=discord.File(ruta_tts))
         except Exception as e:
             print(f"Error generando audio TTS: {e}")
         finally:
-            if os.path.exists(ruta_tts): os.remove(ruta_tts)
+            if os.path.exists(ruta_tts):
+                os.remove(ruta_tts)
 
     # Guardar en Firestore
     try:
