@@ -778,29 +778,38 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     # =========================================
     # 4c. COMPARAR MESES
     # =========================================
-    if "compar" in texto_lc or " vs " in texto_lc or "versus" in texto_lc:
-        # Buscar dos meses en el texto
+    # Detecta: "comparar vs agosto", "compáralo con julio", "agosto vs septiembre", etc.
+    if any(k in texto_lc for k in ["compar", "vs", "versus"]) or \
+       ("respecto" in texto_lc and "mes" in texto_lc) or \
+       ("con" in texto_lc and any(m in texto_lc for m in _MESES.keys())):
+
+        # Buscar meses mencionados en el texto
         meses_encontrados = []
         for nombre, num in _MESES.items():
             if nombre in texto_lc:
                 meses_encontrados.append(num)
 
+        from datetime import datetime
+        mes_actual = datetime.now().month
+
         if len(meses_encontrados) >= 2:
-            mes1, mes2 = meses_encontrados[0], meses_encontrados[1]
+            # Dos meses mencionados: "agosto vs septiembre"
+            mes1, mes2 = meses_encontrados[0], meses_encontrados[-1]
         elif len(meses_encontrados) == 1:
-            # Solo se mencionó un mes: comparar contra el mes actual
-            from datetime import datetime
-            mes_actual = datetime.now().month
-            if meses_encontrados[0] == mes_actual:
-                # El mes mencionado es el actual → comparar contra el mes anterior
+            # Un mes mencionado: comparar contra el otro
+            # Si dice "respecto al de agosto" o "vs agosto" → mes1=agosto, mes2=actual
+            # Si solo dice "comparar" → mes1=mes anterior, mes2=actual
+            if "respecto" in texto_lc or "con" in texto_lc or "vs" in texto_lc:
+                # El mentioned month es el de referencia, comparar contra actual
+                mes1 = mes_actual
+                mes2 = meses_encontrados[0]
+            else:
+                # Solo dice "comparar" sin especificar → vs mes anterior
                 mes1 = mes_actual - 1 if mes_actual > 1 else 12
                 mes2 = mes_actual
-            else:
-                # El mes mencionado NO es el actual → comparar contra el actual
-                mes1 = meses_encontrados[0]
-                mes2 = mes_actual
         else:
-            meses_encontrados = []
+            # No se detectó ningún mes → intentar con mes anterior
+            meses_encontrados = [mes_actual - 1 if mes_actual > 1 else 12]
 
         if len(meses_encontrados) >= 1:
             from datetime import datetime
