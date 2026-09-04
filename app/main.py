@@ -266,12 +266,16 @@ def api_finanzas_resumen(usuario_id: str = "default"):
             cat_map[c.id] = cdata.get("nombre", "?")
 
         # 2) Presupuestos del mes
+        # Estructura Kebo: users/{userId}/budgets/{year}/{month}/items/{id}
         presupuestos = {}
-        items_pres = user_ref.collection("budgets").document(f"{year}/{month}/items").stream()
-        for p in items_pres:
-            pdata = p.to_dict()
-            nombre = pdata.get("category_name") or cat_map.get(pdata.get("category_id"), "?")
-            presupuestos[nombre] = float(pdata.get("amount", 0))
+        try:
+            items_ref = user_ref.collection("budgets").document(year).document(month).collection("items")
+            for p in items_ref.stream():
+                pdata = p.to_dict()
+                nombre = pdata.get("category_name") or cat_map.get(pdata.get("category_id"), "?")
+                presupuestos[nombre] = float(pdata.get("amount", 0))
+        except Exception as pres_err:
+            print(f"[resumen] Error leyendo presupuestos: {pres_err}", flush=True)
 
         # 3) Transacciones — sumamos TODAS las del usuario (no solo el mes actual)
         # Esto es más útil para el widget porque muestra el estado real,
@@ -281,24 +285,27 @@ def api_finanzas_resumen(usuario_id: str = "default"):
         gastos_por_categoria = {}
 
         # Recorrer todos los años/meses que tengan items
-        # Estructura: transactions/{year}/{month}/items/{id}
-        tx_root = user_ref.collection("transactions")
-        for year_doc in tx_root.list_documents():
-            # year_doc es un DocumentReference del año
-            for month_doc in year_doc.list_documents():
-                # month_doc es un DocumentReference del mes
-                for t in month_doc.collection("items").stream():
-                    tdata = t.to_dict()
-                    monto = float(tdata.get("amount", 0))
-                    tipo = tdata.get("type", "expense")
-                    cat_id = tdata.get("category_id")
-                    nombre = cat_map.get(cat_id, "Sin categoría")
+        # Estructura: users/{userId}/transactions/{year}/{month}/items/{id}
+        try:
+            tx_root = user_ref.collection("transactions")
+            for year_doc in tx_root.list_documents():
+                year_id = year_doc.id
+                for month_doc in year_doc.list_documents():
+                    month_id = month_doc.id
+                    for t in user_ref.collection("transactions").document(year_id).document(month_id).collection("items").stream():
+                        tdata = t.to_dict()
+                        monto = float(tdata.get("amount", 0))
+                        tipo = tdata.get("type", "expense")
+                        cat_id = tdata.get("category_id")
+                        nombre = cat_map.get(cat_id, "Sin categoría")
 
-                    if tipo == "income":
-                        ingresos += monto
-                    else:
-                        gastos += monto
-                        gastos_por_categoria[nombre] = gastos_por_categoria.get(nombre, 0) + monto
+                        if tipo == "income":
+                            ingresos += monto
+                        else:
+                            gastos += monto
+                            gastos_por_categoria[nombre] = gastos_por_categoria.get(nombre, 0) + monto
+        except Exception as tx_err:
+            print(f"[resumen] Error leyendo transacciones: {tx_err}", flush=True)
 
         balance = ingresos - gastos
 
