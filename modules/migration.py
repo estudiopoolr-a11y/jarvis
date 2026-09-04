@@ -263,7 +263,7 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
 
         # Verificar si ya existe (idempotencia)
         existing = list(
-            user_ref.collection("transactions").document(year).document(month).collection("items")
+            user_ref.collection("transactions").document(year).collection(month).collection("items")
             .where("legacy_id", "==", d.id).limit(1).stream()
         )
         if existing:
@@ -282,7 +282,7 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
 
         # Crear transacción
         try:
-            tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
+            tx_ref = user_ref.collection("transactions").document(year).collection(month).collection("items").document()
             tx_ref.set({
                 "type": tipo_kebo,
                 "amount": float(data.get("monto", 0)),
@@ -330,7 +330,7 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
         existing_budget = None
         if cat_id:
             existing_budget = list(
-                user_ref.collection("budgets").document(year).document(month).collection("items")
+                user_ref.collection("budgets").document(year).collection(month).collection("items")
                 .where("category_id", "==", cat_id).limit(1).stream()
             )
 
@@ -340,7 +340,7 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
             stats["migrados"] += 1
         else:
             try:
-                user_ref.collection("budgets").document(year).document(month).collection("items").document().set({
+                user_ref.collection("budgets").document(year).collection(month).collection("items").document().set({
                     "category_id": cat_id,
                     "category_name": cat_nombre,
                     "amount": limite,

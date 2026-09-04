@@ -495,7 +495,7 @@ def actualizar_presupuesto_categoria(usuario_id, nombre, nuevo_budget):
         year = str(ahora.year)
         month = f"{ahora.month:02d}"
         # Buscar presupuesto existente para esta categoría en este mes
-        budget_ref = user_ref.collection("budgets").document(year).document(month).collection("items")
+        budget_ref = user_ref.collection("budgets").document(year).collection(month).collection("items")
         existing = budget_ref.where("category_name", "==", nombre).limit(1).stream()
         existing_list = list(existing)
         if existing_list:
@@ -534,7 +534,7 @@ def establecer_presupuesto_mes(usuario_id, categoria_nombre, monto, year=None, m
         cat_id = crear_categoria(usuario_id, categoria_nombre)
 
         # Buscar si ya existe un presupuesto para esta categoría en este mes
-        items_ref = user_ref.collection("budgets").document(year).document(month).collection("items")
+        items_ref = user_ref.collection("budgets").document(year).collection(month).collection("items")
         existing = items_ref.where("category_id", "==", cat_id).limit(1).stream()
         existing_list = list(existing)
 
@@ -571,7 +571,7 @@ def obtener_presupuestos_mes(usuario_id, year=None, month=None):
     presupuestos_mes = {}
     try:
         # Primero intentar leer del mes específico
-        items_ref = user_ref.collection("budgets").document(year).document(month).collection("items")
+        items_ref = user_ref.collection("budgets").document(year).collection(month).collection("items")
         for d in items_ref.stream():
             data = d.to_dict()
             presupuestos_mes[data.get("category_name")] = float(data.get("amount", 0))
@@ -630,7 +630,7 @@ def registrar_transaccion_v2(usuario_id, tipo, monto, categoria_nombre, descripc
         month = f"{ahora.month:02d}"
         fecha = ahora.strftime("%Y-%m-%d")
 
-        tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
+        tx_ref = user_ref.collection("transactions").document(year).collection(month).collection("items").document()
         tx_ref.set({
             "type": tipo,                          # Kebo usa 'type' en inglés
             "amount": float(monto),                # Kebo usa 'amount' en inglés
@@ -695,7 +695,7 @@ def registrar_transferencia(usuario_id, cuenta_origen, cuenta_destino, monto, de
         month = f"{ahora.month:02d}"
         fecha = ahora.strftime("%Y-%m-%d")
 
-        tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
+        tx_ref = user_ref.collection("transactions").document(year).collection(month).collection("items").document()
         tx_ref.set({
             "type": "transfer",                    # Kebo: type en inglés
             "amount": float(monto),                # Kebo: amount en inglés
@@ -747,7 +747,7 @@ def registrar_split(usuario_id, monto_total, splits, cuenta_nombre="Efectivo", d
         fecha = ahora.strftime("%Y-%m-%d")
 
         # Crear transacción padre (split)
-        parent_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
+        parent_ref = user_ref.collection("transactions").document(year).collection(month).collection("items").document()
         parent_ref.set({
             "type": "expense",
             "amount": float(monto_total),
@@ -765,7 +765,7 @@ def registrar_split(usuario_id, monto_total, splits, cuenta_nombre="Efectivo", d
         child_ids = []
         for split in splits:
             cat_id = crear_categoria(usuario_id, split["categoria"])
-            child_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
+            child_ref = user_ref.collection("transactions").document(year).collection(month).collection("items").document()
             child_ref.set({
                 "type": "expense",
                 "amount": float(split["monto"]),
@@ -941,7 +941,7 @@ def buscar_transacciones(usuario_id, texto="", categoria="", cuenta="", status="
             year = str(mes_date.year)
             month = f"{mes_date.month:02d}"
             try:
-                docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+                docs = user_ref.collection("transactions").document(year).collection(month).collection("items").stream()
                 for d in docs:
                     t = d.to_dict()
                     t["_id"] = d.id
@@ -1024,7 +1024,7 @@ def obtener_sugerencias_payee(usuario_id, prefijo, limite=10):
             year = str(mes_date.year)
             month = f"{mes_date.month:02d}"
             try:
-                docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+                docs = user_ref.collection("transactions").document(year).collection(month).collection("items").stream()
                 for d in docs:
                     t = d.to_dict()
                     payee = t.get("payee", "")
@@ -1054,7 +1054,7 @@ def obtener_sugerencias_categoria(usuario_id, prefijo, limite=10):
             year = str(mes_date.year)
             month = f"{mes_date.month:02d}"
             try:
-                docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+                docs = user_ref.collection("transactions").document(year).collection(month).collection("items").stream()
                 for d in docs:
                     t = d.to_dict()
                     cat_id = t.get("category_id", "")
@@ -1087,7 +1087,7 @@ def listar_transacciones_recientes(usuario_id="default", limite=20):
             year = str(mes_date.year)
             month = f"{mes_date.month:02d}"
             try:
-                docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+                docs = user_ref.collection("transactions").document(year).collection(month).collection("items").stream()
                 for d in docs:
                     t = d.to_dict()
                     t["_id"] = d.id
@@ -1150,7 +1150,7 @@ def aplicar_rollover_presupuesto(usuario_id, year=None, month=None):
                     rollovers[cat_nombre] = sobrante
 
                     # Buscar o crear presupuesto del mes actual
-                    mes_items = user_ref.collection("budgets").document(year).document(month).collection("items")
+                    mes_items = user_ref.collection("budgets").document(year).collection(month).collection("items")
                     existing = mes_items.where("category_id", "==", cat_id).limit(1).stream()
                     existing_list = list(existing)
                     if existing_list:
@@ -1192,7 +1192,7 @@ def obtener_balance_v2(usuario_id="default", mes=None):
     year, month = mes.split("-")
 
     try:
-        docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+        docs = user_ref.collection("transactions").document(year).collection(month).collection("items").stream()
         ingresos = 0.0
         gastos = 0.0
         transacciones = []
@@ -1228,7 +1228,7 @@ def obtener_presupuestos_v2(usuario_id="default", mes=None):
         # Obtener presupuestos del mes (Kebo: budgets/{year}/{month}/items/)
         presupuestos_mes = {}
         try:
-            items_ref = user_ref.collection("budgets").document(year).document(month).collection("items")
+            items_ref = user_ref.collection("budgets").document(year).collection(month).collection("items")
             for d in items_ref.stream():
                 data = d.to_dict()
                 presupuestos_mes[data.get("category_name")] = {
@@ -1255,7 +1255,7 @@ def obtener_presupuestos_v2(usuario_id="default", mes=None):
                     }
 
         # Calcular gasto por categoría
-        docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+        docs = user_ref.collection("transactions").document(year).collection(month).collection("items").stream()
         gastos_por_cat_id = {}
         for d in docs:
             t = d.to_dict()
@@ -1544,7 +1544,7 @@ def ejecutar_recurrentes(usuario_id="default"):
                 month = f"{hoy.month:02d}"
                 fecha = hoy.strftime("%Y-%m-%d")
 
-                tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
+                tx_ref = user_ref.collection("transactions").document(year).collection(month).collection("items").document()
                 tx_ref.set({
                     "type": "expense",                              # Kebo: type en inglés
                     "amount": monto,                                 # Kebo: amount en inglés
@@ -1585,7 +1585,7 @@ def obtener_alertas_presupuesto(usuario_id="default"):
         cats = listar_categorias(usuario_id)
         alertas = []
 
-        docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+        docs = user_ref.collection("transactions").document(year).collection(month).collection("items").stream()
         gastos_por_cat = {}
         for d in docs:
             t = d.to_dict()
@@ -1643,7 +1643,7 @@ def obtener_estadisticas(usuario_id="default", meses=6):
             mes_key = f"{year}-{month}"
 
             try:
-                docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+                docs = user_ref.collection("transactions").document(year).collection(month).collection("items").stream()
                 ingresos_mes = 0.0
                 gastos_mes = 0.0
 
@@ -1707,7 +1707,7 @@ def exportar_json_completo(usuario_id="default"):
             month = f"{mes_date.month:02d}"
             mes_key = f"{year}-{month}"
             try:
-                docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+                docs = user_ref.collection("transactions").document(year).collection(month).collection("items").stream()
                 export["transacciones"][mes_key] = [{**d.to_dict(), "_id": d.id} for d in docs]
             except Exception:
                 pass
@@ -1726,7 +1726,7 @@ def exportar_csv(usuario_id="default", mes=None):
     if not user_ref:
         return None, "DB no disponible"
     try:
-        docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+        docs = user_ref.collection("transactions").document(year).collection(month).collection("items").stream()
         lineas = ["Fecha,Tipo,Monto,Descripción"]
         for d in docs:
             t = d.to_dict()
