@@ -214,39 +214,62 @@ def api_finanzas_resumen(usuario_id: str = "default"):
     """API para widget iPhone Scriptable: resumen del MES ACTUAL con presupuestos y gastado por categoría."""
     import traceback
     from datetime import datetime
+    from google.cloud.firestore_v1.base_query import FieldFilter
 
     try:
-        from modules.database import obtener_balance_financiero, obtener_resumen_presupuestos
+        from modules.database import inicializar_firebase
+        db = inicializar_firebase()
+        if not db:
+            return {"error": True, "message": "DB no inicializada"}
 
         # Mes actual en formato YYYY-MM
         mes_actual = datetime.now().strftime("%Y-%m")
 
-        # Intentar con parámetro mes (versión nueva)
-        try:
-            balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id, mes_actual)
-        except TypeError:
-            balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
+        # 1) Obtener TODOS los presupuestos (no tienen campo mes en la estructura actual)
+        docs_pres = db.collection("presupuestos").where(filter=FieldFilter("usuario_id", "==", usuario_id)).stream()
+        presupuestos = {}
+        for doc in docs_pres:
+            d = doc.to_dict()
+            presupuestos[d.get("categoria")] = float(d.get("limite", 0))
 
-        try:
-            presupuestos = obtener_resumen_presupuestos(usuario_id, mes_actual)
-        except TypeError:
-            presupuestos = obtener_resumen_presupuestos(usuario_id)
-
-        # Calcular gastos del mes actual por categoría
+        # 2) Obtener transacciones y filtrar por mes actual
+        ingresos = 0.0
+        gastos = 0.0
         gastos_por_categoria = {}
-        for t in movimientos:
-            if t.get("tipo") == "gasto":
-                cat = t.get("categoria", "General")
-                monto = float(t.get("monto", 0))
+        balance = 0.0
+
+        docs_fin = db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", usuario_id)).stream()
+        for t in docs_fin:
+            d = t.to_dict()
+            # Filtrar por mes si tiene campo fecha o mes
+            fecha_str = d.get("fecha", "") or d.get("timestamp", "")
+            mes_doc = d.get("mes", "")
+            if not mes_doc and fecha_str and len(fecha_str) >= 7:
+                mes_doc = fecha_str[:7]
+
+            # Solo contar los del mes actual
+            if mes_doc and mes_doc != mes_actual:
+                continue
+
+            monto = float(d.get("monto", 0))
+            tipo = d.get("tipo", "gasto")
+            cat = d.get("categoria", "General")
+
+            if tipo == "ingreso":
+                ingresos += monto
+            else:
+                gastos += monto
                 gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + monto
 
-        # Construir respuesta para widget
+        balance = ingresos - gastos
+
+        # 3) Construir respuesta
         datos_por_categoria = []
         total_limite = 0
         total_gastado = 0
         total_libre = 0
 
-        for categoria, limite in presupuestos.items():
+        for categoria, limite in sorted(presupuestos.items()):
             gastado = gastos_por_categoria.get(categoria, 0)
             libre = limite - gastado
             excedido = libre < 0
@@ -274,7 +297,6 @@ def api_finanzas_resumen(usuario_id: str = "default"):
             "datos_por_categoria": datos_por_categoria
         }
     except Exception as e:
-        # Devolver error como JSON (nunca HTML)
         return {
             "error": True,
             "tipo_error": type(e).__name__,
