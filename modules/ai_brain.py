@@ -20,6 +20,10 @@ from modules.database import (
     modificar_presupuesto, guardar_pago_fijo, obtener_pagos_fijos, eliminar_pago_fijo,
     guardar_perfil, obtener_perfil
 )
+from modules.database_v2 import (
+    registrar_transaccion_v2, obtener_balance_v2, obtener_presupuestos_v2,
+    listar_cuentas, crear_cuenta, actualizar_presupuesto_categoria
+)
 from datetime import datetime
 
 # OPTIMIZACIÓN: Cache para búsquedas web (1 hora TTL)
@@ -907,18 +911,22 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         guardar_tarea(usuario_id, tarea_data["tarea"], tarea_data["prioridad"], tarea_data["fecha_limite"])
         return f"📌 Tarea registrada: *{tarea_data['tarea']}* [Prioridad: {tarea_data['prioridad']}, Vence: {tarea_data['fecha_limite']}]"
 
-    # 5c. Transacción (gasto/ingreso)
+    # 5c. Transacción (gasto/ingreso) - USA NUEVA ESTRUCTURA KEBO
     transaccion = _parse_transaccion(texto_lc)
     if transaccion:
         monto = transaccion["monto"]
         cat = transaccion["categoria"]
         tipo = transaccion["tipo"]
-        if tipo == "gasto":
-            alerta = registrar_transaccion(usuario_id, "gasto", monto, cat, "Registro directo")
-            return f"💸 Gasto registrado: **-${monto:,.0f}** en *{cat}*.{alerta or ''}"
+        # Mapear: gasto -> expense, ingreso -> income
+        tipo_db = "expense" if tipo == "gasto" else "income"
+        tx_id = registrar_transaccion_v2(usuario_id, tipo_db, monto, cat, "Registro por voz", "Efectivo")
+        if tx_id:
+            if tipo == "gasto":
+                return f"💸 Gasto registrado: **-${monto:,.0f}** en *{cat}*."
+            else:
+                return f"💰 Ingreso registrado: **+${monto:,.0f}** en *{cat}*."
         else:
-            registrar_transaccion(usuario_id, "ingreso", monto, cat, "Registro directo")
-            return f"💰 Ingreso registrado: **+${monto:,.0f}** en *{cat}*."
+            return "⚠️ Error al registrar transacción. Intenta de nuevo."
 
     # 5d. Presupuesto
     presupuesto_data = _parse_presupuesto(texto_lc)

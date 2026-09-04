@@ -1,0 +1,48 @@
+// Script debug simple para Scriptable
+// Copia esto y ejecútalo en Scriptable
+
+// URL CONFIGURA ESTO
+let url = "https://jarvis-h20g.onrender.com/api/finanzas/resumen"
+
+async function main() {
+    let req = new Request(url)
+
+    try {
+        let json = await req.loadJSON()
+
+        // Crear widget
+        let w = new ListWidget()
+        w.backgroundColor = new Color("#1a1a2e")
+
+        // Mostrar cada propiedad del JSON
+        for (let key of Object.keys(json)) {
+            let valor = json[key]
+            // Formatear valores complejos
+            let texto
+            if (typeof valor === "object") {
+                texto = JSON.stringify(valor).substring(0, 100) + (JSON.stringify(valor).length > 100 ? "..." : "")
+            } else {
+                texto = String(valor)
+            }
+
+            let t = w.addText(`${key}: ${texto}`)
+            t.font = Font.systemFont(11)
+            t.textColor = new Color("#fff")
+            w.addSpacer(4)
+        }
+
+        Script.setWidget(w)
+        Script.complete()
+
+    } catch(e) {
+        // Mostrar error
+        let w = new ListWidget()
+        w.backgroundColor = new Color("#1a1a2e")
+        let t = w.addText("❌ Error: " + String(e))
+        t.textColor = new Color("#ff4444")
+        Script.setWidget(w)
+        Script.complete()
+    }
+}
+
+main()

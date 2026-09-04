@@ -295,6 +295,36 @@ def api_finanzas_resumen(usuario_id: str = "default"):
         }
 
 
+@app.get("/api/kebo/cuentas")
+def api_kebo_cuentas(usuario_id: str = "default"):
+    """API para widget iPhone: lista de cuentas con balances (NUEVA ESTRUCTURA KEBO)."""
+    import traceback
+    try:
+        from modules.database_v2 import listar_cuentas
+        cuentas = listar_cuentas(usuario_id)
+        return {
+            "cuentas": cuentas,
+            "total_balance": sum(c.get("balance", 0) for c in cuentas)
+        }
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/presupuestos")
+def api_kebo_presupuestos(usuario_id: str = "default", mes: str = None):
+    """API para widget iPhone: presupuestos con gastado del mes (NUEVA ESTRUCTURA KEBO)."""
+    import traceback
+    from datetime import datetime
+    try:
+        from modules.database_v2 import obtener_presupuestos_v2
+        if not mes:
+            mes = datetime.now().strftime("%Y-%m")
+        presupuestos = obtener_presupuestos_v2(usuario_id, mes)
+        return {"mes": mes, "presupuestos": presupuestos}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
 @app.get("/api/finanzas/debug")
 def api_finanzas_debug(usuario_id: str = "default"):
     """Endpoint debug: muestra 1 muestra de cada coleccion."""
