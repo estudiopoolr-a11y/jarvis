@@ -773,3 +773,52 @@ def exportar_json_completo(usuario_id="default"):
     except Exception as e:
         print(f"Error exportando: {e}")
         return None
+
+# ==================== NOTAS Y ADJUNTOS ====================
+
+def agregar_nota_transaccion(usuario_id, tx_id, mes, nota):
+    """Agrega una nota a una transacción existente."""
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return False
+    try:
+        year, month = mes.split("-")
+        tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document(tx_id)
+        tx_ref.update({"notas": nota})
+        return True
+    except Exception as e:
+        print(f"Error agregando nota: {e}")
+        return False
+
+def listar_transacciones_recientes(usuario_id="default", limite=20):
+    """Lista las últimas N transacciones del usuario."""
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    try:
+        ahora = datetime.now()
+        transacciones = []
+
+        # Buscar en los últimos 3 meses
+        for i in range(3):
+            mes_date = ahora - timedelta(days=30 * i)
+            year = str(mes_date.year)
+            month = f"{mes_date.month:02d}"
+
+            try:
+                docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+                for d in docs:
+                    t = d.to_dict()
+                    t["_id"] = d.id
+                    t["_year"] = year
+                    t["_month"] = month
+                    transacciones.append(t)
+            except Exception:
+                pass
+
+        # Ordenar por created_at desc
+        transacciones.sort(key=lambda x: str(x.get("created_at", "")), reverse=True)
+        return transacciones[:limite]
+    except Exception as e:
+        print(f"Error listando transacciones recientes: {e}")
+        return []

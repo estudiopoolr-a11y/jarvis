@@ -1,8 +1,9 @@
 // JARVIS Widget para Scriptable
-// Muestra: Cuentas + Balance + Top categorías
+// Muestra: Cuentas + Balance + Top categorías + Alertas + Metas
 //
 // TAMAÑO PEQUEÑO: Solo cuentas
-// TAMAÑO MEDIANO/GRANDE: Cuentas + Resumen + Categorías
+// TAMAÑO MEDIANO: Cuentas + Resumen mes
+// TAMAÑO GRANDE: Todo (cuentas + resumen + categorías + metas + alertas)
 //
 // Configura la URL según tu servidor:
 const BASE_URL = "https://jarvis-h20g.onrender.com"
@@ -12,20 +13,15 @@ const USUARIO = "iphone_user"
 const COLORS = {
     bg: "#0f0f23",
     card: "#1a1a2e",
+    card_alt: "#16213e",
     text: "#ffffff",
     subtitle: "#8b8b9e",
     income: "#10b981",
     expense: "#ef4444",
     accent: "#6366f1",
-    progress: "#3b82f6"
-}
-
-// Iconos por tipo de cuenta
-const ICONOS = {
-    cash: "💵",
-    debit: "💳",
-    credit: "💳",
-    savings: "🏦"
+    progress: "#3b82f6",
+    warning: "#f59e0b",
+    danger: "#ef4444"
 }
 
 async function fetchJSON(url) {
@@ -61,30 +57,43 @@ async function main() {
     // Obtener tamaño del widget
     const widgetFamily = config.widgetFamily || "small"
 
-    // Cargar datos en paralelo
-    const [cuentasData, resumenData] = await Promise.all([
+    // Cargar datos en paralelo (todos los endpoints Kebo)
+    const [cuentasData, resumenData, metasData, alertasData, recurrentesData] = await Promise.all([
         fetchJSON(`${BASE_URL}/api/kebo/cuentas?usuario_id=${USUARIO}`),
-        fetchJSON(`${BASE_URL}/api/finanzas/resumen?usuario_id=${USUARIO}`)
+        fetchJSON(`${BASE_URL}/api/finanzas/resumen?usuario_id=${USUARIO}`),
+        fetchJSON(`${BASE_URL}/api/kebo/metas?usuario_id=${USUARIO}`),
+        fetchJSON(`${BASE_URL}/api/kebo/alertas?usuario_id=${USUARIO}`),
+        fetchJSON(`${BASE_URL}/api/kebo/recurrentes?usuario_id=${USUARIO}`)
     ])
 
     if (widgetFamily === "small") {
-        // WIDGET PEQUEÑO: Solo cuentas principales
-        await renderSmallWidget(w, cuentasData)
+        await renderSmallWidget(w, cuentasData, alertasData)
+    } else if (widgetFamily === "medium") {
+        await renderMediumWidget(w, cuentasData, resumenData, alertasData)
     } else {
-        // WIDGET MEDIANO/GRANDE: Todo
-        await renderMediumLargeWidget(w, cuentasData, resumenData)
+        // large
+        await renderLargeWidget(w, cuentasData, resumenData, metasData, alertasData, recurrentesData)
     }
 
     Script.setWidget(w)
     Script.complete()
 }
 
-async function renderSmallWidget(w, cuentasData) {
+async function renderSmallWidget(w, cuentasData, alertasData) {
     // Header
     const header = w.addText("💳 CUENTAS")
     header.font = Font.boldSystemFont(12)
     header.textColor = new Color(COLORS.accent)
     w.addSpacer(6)
+
+    // Alerta destacada si hay excedidos
+    const excedidos = (alertasData && alertasData.alertas) ? alertasData.alertas.filter(a => a.tipo === "excedido") : []
+    if (excedidos.length > 0) {
+        const alertTxt = w.addText(`🚨 ${excedidos[0].categoria} excedido`)
+        alertTxt.font = Font.systemFont(10)
+        alertTxt.textColor = new Color(COLORS.danger)
+        w.addSpacer(4)
+    }
 
     if (!cuentasData || !cuentasData.cuentas || cuentasData.cuentas.length === 0) {
         const empty = w.addText("Sin cuentas")
@@ -116,8 +125,140 @@ async function renderSmallWidget(w, cuentasData) {
     }
 }
 
-async function renderMediumLargeWidget(w, cuentasData, resumenData) {
-    // Header con logo y fecha
+async function renderMediumWidget(w, cuentasData, resumenData, alertasData) {
+    // Header
+    const headerRow = w.addStack()
+    headerRow.layoutHorizontal()
+
+    const title = headerRow.addText("🤖 JARVIS")
+    title.font = Font.boldSystemFont(14)
+    title.textColor = new Color(COLORS.accent)
+
+    headerRow.addSpacer()
+
+    const fecha = new Date()
+    const fechaStr = fecha.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase()
+    const fechaTxt = headerRow.addText(fechaStr)
+    fechaTxt.font = Font.systemFont(10)
+    fechaTxt.textColor = new Color(COLORS.subtitle)
+
+    w.addSpacer(8)
+
+    // Sección cuentas (compacta)
+    if (cuentasData && cuentasData.cuentas && cuentasData.cuentas.length > 0) {
+        const label = w.addText("💳 CUENTAS")
+        label.font = Font.boldSystemFont(9)
+        label.textColor = new Color(COLORS.subtitle)
+        w.addSpacer(3)
+
+        const cuentasCard = w.addStack()
+        cuentasCard.backgroundColor = new Color(COLORS.card)
+        cuentasCard.cornerRadius = 6
+        cuentasCard.paddingAll = 6
+
+        const cc = cuentasCard.addStack()
+        cc.layoutVertical()
+
+        for (const cuenta of cuentasData.cuentas.slice(0, 4)) {
+            const row = cc.addStack()
+            row.layoutHorizontal()
+
+            const icono = cuenta.icono || "💳"
+            const nombre = cuenta.nombre || ""
+            const balance = Number(cuenta.balance) || 0
+
+            const left = row.addText(`${icono} ${nombre}`)
+            left.font = Font.systemFont(10)
+            left.textColor = new Color(COLORS.text)
+            row.addSpacer()
+            const right = row.addText(formatMoney(balance))
+            right.font = Font.boldSystemFont(10)
+            right.textColor = balance >= 0 ? new Color(COLORS.text) : new Color(COLORS.expense)
+            cc.addSpacer(2)
+        }
+
+        w.addSpacer(6)
+    }
+
+    // Sección resumen mes
+    if (resumenData && !resumenData.error) {
+        const label = w.addText("📊 ESTE MES")
+        label.font = Font.boldSystemFont(9)
+        label.textColor = new Color(COLORS.subtitle)
+        w.addSpacer(3)
+
+        const card = w.addStack()
+        card.backgroundColor = new Color(COLORS.card)
+        card.cornerRadius = 6
+        card.paddingAll = 6
+
+        const content = card.addStack()
+        content.layoutVertical()
+
+        const balance = Number(resumenData.balance) || 0
+        const ingresos = Number(resumenData.ingresos) || 0
+        const gastos = Number(resumenData.gastos) || 0
+
+        // Balance
+        const balRow = content.addStack()
+        balRow.layoutHorizontal()
+        balRow.addSpacer()
+        const balTxt = balRow.addText(formatMoneyFull(balance))
+        balTxt.font = Font.boldSystemFont(18)
+        balTxt.textColor = balance >= 0 ? new Color(COLORS.income) : new Color(COLORS.expense)
+
+        content.addSpacer(3)
+
+        const stats = content.addStack()
+        stats.layoutHorizontal()
+        const ingTxt = stats.addText(`↑ ${formatMoneyFull(ingresos)}`)
+        ingTxt.font = Font.systemFont(10)
+        ingTxt.textColor = new Color(COLORS.income)
+        stats.addSpacer()
+        const gasTxt = stats.addText(`↓ ${formatMoneyFull(gastos)}`)
+        gasTxt.font = Font.systemFont(10)
+        gasTxt.textColor = new Color(COLORS.expense)
+
+        // Barra progreso presupuesto
+        if (resumenData.porcentaje_uso !== undefined) {
+            content.addSpacer(4)
+            const pb = content.addStack()
+            pb.layoutHorizontal()
+            const pct = Number(resumenData.porcentaje_uso) || 0
+            const barBg = pb.addStack()
+            barBg.backgroundColor = new Color("#2a2a3e")
+            barBg.cornerRadius = 3
+            const barFill = barBg.addStack()
+            barFill.backgroundColor = pct > 90 ? new Color(COLORS.danger) : pct > 70 ? new Color(COLORS.warning) : new Color(COLORS.progress)
+            barFill.cornerRadius = 3
+            barFill.size = new Size(Math.min(pct, 100), 6)
+            barBg.size = new Size(120, 6)
+
+            const pctTxt = pb.addText(` ${pct}%`)
+            pctTxt.font = Font.systemFont(9)
+            pctTxt.textColor = new Color(COLORS.subtitle)
+        }
+
+        w.addSpacer(6)
+    }
+
+    // Alertas
+    if (alertasData && alertasData.alertas && alertasData.alertas.length > 0) {
+        const label = w.addText("⚠️ ALERTAS")
+        label.font = Font.boldSystemFont(9)
+        label.textColor = new Color(COLORS.warning)
+        w.addSpacer(2)
+        for (const a of alertasData.alertas.slice(0, 2)) {
+            const txt = w.addText(a.mensaje)
+            txt.font = Font.systemFont(9)
+            txt.textColor = a.tipo === "excedido" ? new Color(COLORS.danger) : new Color(COLORS.warning)
+            w.addSpacer(1)
+        }
+    }
+}
+
+async function renderLargeWidget(w, cuentasData, resumenData, metasData, alertasData, recurrentesData) {
+    // Header
     const header = w.addStack()
     header.layoutHorizontal()
 
@@ -128,179 +269,213 @@ async function renderMediumLargeWidget(w, cuentasData, resumenData) {
     header.addSpacer()
 
     const fecha = new Date()
-    const mesNombre = fecha.toLocaleDateString('es-ES', { month: 'short' }).toUpperCase()
-    const fechaStr = `${mesNombre} ${fecha.getFullYear()}`
+    const fechaStr = fecha.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }).toUpperCase()
     const fechaTxt = header.addText(fechaStr)
     fechaTxt.font = Font.systemFont(10)
     fechaTxt.textColor = new Color(COLORS.subtitle)
 
     w.addSpacer(8)
 
-    // ===== SECCIÓN: CUENTAS =====
-    if (cuentasData && cuentasData.cuentas && cuentasData.cuentas.length > 0) {
-        const cuentasLabel = w.addText("💳 CUENTAS")
-        cuentasLabel.font = Font.boldSystemFont(10)
-        cuentasLabel.textColor = new Color(COLORS.subtitle)
-        w.addSpacer(4)
+    // ===== ALERTAS =====
+    if (alertasData && alertasData.alertas && alertasData.alertas.length > 0) {
+        const alertLabel = w.addText("⚠️ ALERTAS")
+        alertLabel.font = Font.boldSystemFont(10)
+        alertLabel.textColor = new Color(COLORS.warning)
+        w.addSpacer(3)
 
-        // Tarjeta de cuentas
-        const cuentasCard = w.addStack()
-        cuentasCard.backgroundColor = new Color(COLORS.card)
-        cuentasCard.cornerRadius = 8
-        cuentasCard.paddingAll = 8
+        const alertCard = w.addStack()
+        alertCard.backgroundColor = new Color("#2d1f1f")
+        alertCard.cornerRadius = 6
+        alertCard.paddingAll = 6
 
-        const cuentasContent = cuentasCard.addStack()
-        cuentasContent.layoutVertical()
-
-        for (const cuenta of cuentasData.cuentas) {
-            const row = cuentasContent.addStack()
-            row.layoutHorizontal()
-
-            const icono = cuenta.icono || "💳"
-            const nombre = cuenta.nombre || "Cuenta"
-            const balance = Number(cuenta.balance) || 0
-            const balanceStr = formatMoneyFull(balance)
-            const colorBalance = balance >= 0 ? COLORS.text : COLORS.expense
-
-            const nombreTxt = row.addText(`${icono} ${nombre}`)
-            nombreTxt.font = Font.systemFont(11)
-            nombreTxt.textColor = new Color(COLORS.text)
-
-            row.addSpacer()
-
-            const balanceTxt = row.addText(balanceStr)
-            balanceTxt.font = Font.boldSystemFont(11)
-            balanceTxt.textColor = new Color(colorBalance)
-
-            row.addSpacer(4)
+        for (const a of alertasData.alertas.slice(0, 2)) {
+            const txt = alertCard.addText(a.mensaje)
+            txt.font = Font.systemFont(10)
+            txt.textColor = a.tipo === "excedido" ? new Color(COLORS.danger) : new Color(COLORS.warning)
+            alertCard.addSpacer(2)
         }
 
         w.addSpacer(8)
     }
 
-    // ===== SECCIÓN: RESUMEN DEL MES =====
+    // ===== CUENTAS =====
+    if (cuentasData && cuentasData.cuentas && cuentasData.cuentas.length > 0) {
+        const label = w.addText("💳 CUENTAS")
+        label.font = Font.boldSystemFont(10)
+        label.textColor = new Color(COLORS.subtitle)
+        w.addSpacer(3)
+
+        const card = w.addStack()
+        card.backgroundColor = new Color(COLORS.card)
+        card.cornerRadius = 6
+        card.paddingAll = 6
+
+        const content = card.addStack()
+        content.layoutVertical()
+
+        for (const cuenta of cuentasData.cuentas) {
+            const row = content.addStack()
+            row.layoutHorizontal()
+
+            const icono = cuenta.icono || "💳"
+            const nombre = cuenta.nombre || ""
+            const balance = Number(cuenta.balance) || 0
+
+            const left = row.addText(`${icono} ${nombre}`)
+            left.font = Font.systemFont(11)
+            left.textColor = new Color(COLORS.text)
+
+            row.addSpacer()
+
+            const right = row.addText(formatMoneyFull(balance))
+            right.font = Font.boldSystemFont(11)
+            right.textColor = balance >= 0 ? new Color(COLORS.text) : new Color(COLORS.expense)
+
+            content.addSpacer(3)
+        }
+
+        w.addSpacer(8)
+    }
+
+    // ===== RESUMEN =====
     if (resumenData && !resumenData.error) {
-        const resumenLabel = w.addText("📊 ESTE MES")
-        resumenLabel.font = Font.boldSystemFont(10)
-        resumenLabel.textColor = new Color(COLORS.subtitle)
-        w.addSpacer(4)
-
-        // Tarjeta resumen
-        const resumenCard = w.addStack()
-        resumenCard.backgroundColor = new Color(COLORS.card)
-        resumenCard.cornerRadius = 8
-        resumenCard.paddingAll = 8
-
-        const resumenContent = resumenCard.addStack()
-        resumenContent.layoutVertical()
+        const label = w.addText("📊 ESTE MES")
+        label.font = Font.boldSystemFont(10)
+        label.textColor = new Color(COLORS.subtitle)
+        w.addSpacer(3)
 
         const balance = Number(resumenData.balance) || 0
         const ingresos = Number(resumenData.ingresos) || 0
         const gastos = Number(resumenData.gastos) || 0
 
-        // Balance principal
-        const balanceRow = resumenContent.addStack()
-        balanceRow.layoutHorizontal()
-        balanceRow.addSpacer()
+        const card = w.addStack()
+        card.backgroundColor = new Color(COLORS.card)
+        card.cornerRadius = 6
+        card.paddingAll = 6
 
-        const balanceTxt = balanceRow.addText(formatMoneyFull(balance))
-        balanceTxt.font = Font.boldSystemFont(16)
-        balanceTxt.textColor = balance >= 0 ? new Color(COLORS.income) : new Color(COLORS.expense)
+        const content = card.addStack()
+        content.layoutVertical()
 
-        resumenContent.addSpacer(4)
+        // Balance grande
+        const balRow = content.addStack()
+        balRow.layoutHorizontal()
+        balRow.addSpacer()
+        const balTxt = balRow.addText(formatMoneyFull(balance))
+        balTxt.font = Font.boldSystemFont(20)
+        balTxt.textColor = balance >= 0 ? new Color(COLORS.income) : new Color(COLORS.expense)
 
-        // Ingresos y gastos
-        const statsRow = resumenContent.addStack()
-        statsRow.layoutHorizontal()
+        content.addSpacer(4)
 
-        const ingTxt = statsRow.addText(`↑ ${formatMoneyFull(ingresos)}`)
-        ingTxt.font = Font.systemFont(10)
+        // Stats
+        const stats = content.addStack()
+        stats.layoutHorizontal()
+        const ingTxt = stats.addText(`↑ ${formatMoneyFull(ingresos)}`)
+        ingTxt.font = Font.systemFont(11)
         ingTxt.textColor = new Color(COLORS.income)
-
-        statsRow.addSpacer()
-
-        const gasTxt = statsRow.addText(`↓ ${formatMoneyFull(gastos)}`)
-        gasTxt.font = Font.systemFont(10)
+        stats.addSpacer()
+        const gasTxt = stats.addText(`↓ ${formatMoneyFull(gastos)}`)
+        gasTxt.font = Font.systemFont(11)
         gasTxt.textColor = new Color(COLORS.expense)
 
-        // Barra de progreso presupuesto
+        // Barra presupuesto
         if (resumenData.porcentaje_uso !== undefined) {
-            resumenContent.addSpacer(6)
-
-            const progressBar = resumenContent.addStack()
-            progressBar.layoutHorizontal()
-
+            content.addSpacer(6)
             const pct = Number(resumenData.porcentaje_uso) || 0
-            const barBg = progressBar.addStack()
+            const pb = content.addStack()
+            pb.layoutHorizontal()
+
+            const barBg = pb.addStack()
             barBg.backgroundColor = new Color("#2a2a3e")
             barBg.cornerRadius = 3
-
-            const barWidth = Math.min(pct, 100) / 100 * 100 // 100 pts width
             const barFill = barBg.addStack()
-            barFill.backgroundColor = pct > 90 ? new Color(COLORS.expense) : new Color(COLORS.progress)
+            barFill.backgroundColor = pct > 90 ? new Color(COLORS.danger) : new Color(COLORS.progress)
             barFill.cornerRadius = 3
+            barFill.size = new Size(Math.min(pct, 100), 8)
+            barBg.size = new Size(150, 8)
 
-            // Ajustar altura del fill
-            barFill.size = new Size(barWidth, 8)
-            barBg.size = new Size(100, 8)
-
-            const pctTxt = progressBar.addText(` ${pct}%`)
-            pctTxt.font = Font.systemFont(9)
+            const pctTxt = pb.addText(` ${pct}%`)
+            pctTxt.font = Font.systemFont(10)
             pctTxt.textColor = new Color(COLORS.subtitle)
         }
 
         w.addSpacer(8)
 
-        // ===== SECCIÓN: TOP CATEGORÍAS =====
+        // Categorías
         if (resumenData.datos_por_categoria && resumenData.datos_por_categoria.length > 0) {
-            const catsLabel = w.addText("📁 TOP GASTOS")
+            const catsLabel = w.addText("📁 TOP CATEGORIAS")
             catsLabel.font = Font.boldSystemFont(10)
             catsLabel.textColor = new Color(COLORS.subtitle)
-            w.addSpacer(4)
+            w.addSpacer(3)
 
-            const topCats = resumenData.datos_por_categoria.slice(0, 3)
-            for (const cat of topCats) {
-                const catRow = w.addStack()
-                catRow.layoutHorizontal()
+            for (const cat of resumenData.datos_por_categoria.slice(0, 3)) {
+                const row = w.addStack()
+                row.layoutHorizontal()
 
-                const catNombre = cat.categoria || "General"
-                const catGastado = Number(cat.gastado) || 0
-                const catLimite = Number(cat.limite) || 0
+                const txt = row.addText(`${cat.categoria || "?"}: ${formatMoneyFull(cat.gastado || 0)}`)
+                txt.font = Font.systemFont(10)
+                txt.textColor = new Color(COLORS.text)
+                txt.lineLimit = 1
 
-                const nombreTxt = catRow.addText(catNombre)
-                nombreTxt.font = Font.systemFont(10)
-                nombreTxt.textColor = new Color(COLORS.text)
-                nombreTxt.lineLimit = 1
+                row.addSpacer()
 
-                catRow.addSpacer()
-
-                const gastoTxt = catRow.addText(formatMoneyFull(catGastado))
-                gastoTxt.font = Font.systemFont(10)
-                gastoTxt.textColor = new Color(COLORS.expense)
-
-                if (catLimite > 0) {
-                    const pctCat = Math.round((catGastado / catLimite) * 100)
-                    const pctTxt = catRow.addText(` (${pctCat}%)`)
-                    pctTxt.font = Font.systemFont(9)
-                    pctTxt.textColor = pctCat > 90 ? new Color(COLORS.expense) : new Color(COLORS.subtitle)
+                if (cat.limite > 0) {
+                    const pctCat = Math.round((cat.gastado / cat.limite) * 100)
+                    const pctTxt = row.addText(`${pctCat}%`)
+                    pctTxt.font = Font.systemFont(10)
+                    pctTxt.textColor = pctCat > 90 ? new Color(COLORS.danger) : new Color(COLORS.subtitle)
                 }
 
                 w.addSpacer(2)
             }
         }
-    } else {
-        // Error o sin datos
-        w.addSpacer()
-        const errorTxt = w.addText("📱 Abre JARVIS para ver tus finanzas")
-        errorTxt.font = Font.systemFont(11)
-        errorTxt.textColor = new Color(COLORS.subtitle)
-        errorTxt.centerAlignText()
-        w.addSpacer()
+    }
+
+    w.addSpacer(8)
+
+    // ===== METAS =====
+    if (metasData && metasData.metas && metasData.metas.length > 0) {
+        const label = w.addText("🎯 METAS")
+        label.font = Font.boldSystemFont(10)
+        label.textColor = new Color(COLORS.subtitle)
+        w.addSpacer(3)
+
+        for (const meta of metasData.metas.slice(0, 2)) {
+            const row = w.addStack()
+            row.layoutHorizontal()
+
+            const nombre = meta.nombre || ""
+            const pct = meta.porcentaje || 0
+
+            const txt = row.addText(`🎯 ${nombre}: ${pct}%`)
+            txt.font = Font.systemFont(10)
+            txt.textColor = pct >= 100 ? new Color(COLORS.income) : new Color(COLORS.text)
+
+            w.addSpacer(2)
+        }
+
+        w.addSpacer(8)
+    }
+
+    // ===== RECURRENTES =====
+    if (recurrentesData && recurrentesData.recurrentes && recurrentesData.recurrentes.length > 0) {
+        const label = w.addText("🔁 RECURRENTES")
+        label.font = Font.boldSystemFont(10)
+        label.textColor = new Color(COLORS.subtitle)
+        w.addSpacer(3)
+
+        for (const rec of recurrentesData.recurrentes.slice(0, 2)) {
+            const txt = w.addText(`📅 ${rec.nombre || ""}: ${formatMoneyFull(rec.monto || 0)}`)
+            txt.font = Font.systemFont(10)
+            txt.textColor = new Color(COLORS.subtitle)
+            w.addSpacer(2)
+        }
+
+        w.addSpacer(8)
     }
 
     // Footer
     w.addSpacer()
-    const footer = w.addText("Actualizado: " + new Date().toLocaleTimeString('es-ES', {hour: '2-digit', minute:'2-digit'}))
+    const footer = w.addText("JARVIS " + new Date().toLocaleTimeString('es-ES', {hour: '2-digit', minute:'2-digit'}))
     footer.font = Font.systemFont(8)
     footer.textColor = new Color(COLORS.subtitle)
     footer.centerAlignText()

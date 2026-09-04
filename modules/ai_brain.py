@@ -25,7 +25,8 @@ from modules.database_v2 import (
     listar_cuentas, crear_cuenta, actualizar_presupuesto_categoria,
     registrar_transferencia, listar_metas_v2, guardar_meta_v2, agregar_aporte_meta,
     listar_recurrentes, guardar_recurrente, obtener_alertas_presupuesto,
-    obtener_estadisticas, crear_categorias_predefinidas
+    obtener_estadisticas, crear_categorias_predefinidas,
+    listar_transacciones_recientes
 )
 from datetime import datetime
 
@@ -1177,6 +1178,25 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             diff_gastos = gas1 - gas2
             diff_emoji = "📈" if diff_gastos > 0 else "📉" if diff_gastos < 0 else "➡️"
             msg += f"{diff_emoji} Diferencia gastos: ${abs(diff_gastos):,.0f} ({'más' if diff_gastos > 0 else 'menos' if diff_gastos < 0 else 'igual'})"
+            return msg
+
+    # =========================================
+    # 5l. ÚLTIMAS TRANSACCIONES
+    # =========================================
+    if any(k in texto_lc for k in ["ultimo", "último", "recientes", "movimientos", "historial", "transacciones"]):
+        if any(k in texto_lc for k in ["ver", "mostrar", "mis", "lista"]):
+            transacciones = listar_transacciones_recientes(usuario_id, 10)
+            if not transacciones:
+                return "📋 No hay transacciones registradas."
+            msg = "📋 **Últimas transacciones:**\n"
+            for t in transacciones:
+                fecha = t.get("fecha", "")[:10]
+                tipo = t.get("tipo", "?")
+                monto = float(t.get("monto", 0))
+                desc = t.get("descripcion", "")[:30]
+                emoji = "💸" if tipo == "expense" else "💰" if tipo == "income" else "🔄"
+                signo = "-" if tipo == "expense" else "+"
+                msg += f"  {emoji} {fecha}: {signo}${monto:,.0f} ({desc})\n"
             return msg
 
     # Crear recurrente: "cada 15 me sale arriendo 1.5M"

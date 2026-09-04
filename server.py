@@ -310,6 +310,17 @@ def api_kebo_cuentas(usuario_id: str = "default"):
         return {"error": True, "message": str(e)}
 
 
+@app.get("/api/kebo/transacciones")
+def api_kebo_transacciones(usuario_id: str = "default", limite: int = 20):
+    """API para widget: últimas transacciones."""
+    try:
+        from modules.database_v2 import listar_transacciones_recientes
+        transacciones = listar_transacciones_recientes(usuario_id, limite)
+        return {"transacciones": transacciones}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
 @app.get("/api/backup/export")
 def api_backup_export(usuario_id: str = "default"):
     """Endpoint para hacer backup de TODOS los datos. Útil para migración."""
