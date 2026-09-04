@@ -267,7 +267,7 @@ def api_finanzas_resumen(usuario_id: str = "default"):
 
         # 2) Presupuestos del mes
         presupuestos = {}
-        items_pres = user_ref.collection("budgets").document(year).document(month).collection("items").stream()
+        items_pres = user_ref.collection("budgets").document(f"{year}/{month}/items").stream()
         for p in items_pres:
             pdata = p.to_dict()
             nombre = pdata.get("category_name") or cat_map.get(pdata.get("category_id"), "?")
