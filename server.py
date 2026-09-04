@@ -28,28 +28,41 @@ def render_dashboard(usuario_id: str = "default"):
     tareas = obtener_tareas_pendientes(usuario_id)
     presupuestos = obtener_resumen_presupuestos(usuario_id)
 
+    # Calcular gastos reales por categoría
+    gastos_por_categoria = {}
+    for t in movimientos:
+        if t.get("tipo") == "gasto":
+            cat = t.get("categoria", "General")
+            monto = float(t.get("monto", 0))
+            gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + monto
+
     # Generar HTML de Presupuestos
     html_presupuestos = ""
     if not presupuestos:
         html_presupuestos = "<p style='color:#888;'>No has establecido presupuestos aún.</p>"
     else:
-        for p in presupuestos:
-            porcentaje = min(int((p['gastado'] / p['limite']) * 100) if p['limite'] > 0 else 0, 100)
-            color_barra = "#e74c3c" if p['excedido'] else ("#f39c12" if porcentaje > 80 else "#2ecc71")
-            
+        for categoria, limite in presupuestos.items():
+            gastado = gastos_por_categoria.get(categoria, 0)
+            restante = limite - gastado
+            excedido = restante < 0
+            porcentaje = min(int((abs(gastado) / limite) * 100) if limite > 0 else 0, 100)
+            # Para la barra, mostrar porcentaje del límite usado (hasta 100%)
+            porcentaje_barra = min(int((gastado / limite) * 100) if limite > 0 else 0, 100) if gastado >= 0 else 100
+            color_barra = "#e74c3c" if excedido else ("#f39c12" if porcentaje_barra > 80 else "#2ecc71")
+
             html_presupuestos += f"""
             <div style="background:#1e1e2e; padding:15px; border-radius:10px; margin-bottom:12px; border-left:5px solid {color_barra};">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <strong style="color:#fff; font-size:16px;">{p['categoria']}</strong>
+                    <strong style="color:#fff; font-size:16px;">{categoria}</strong>
                     <span style="color:{color_barra}; font-weight:bold;">
-                        {'$' + f"{abs(p['restante']):,.0f}" + (' Excedido ⚠️' if p['excedido'] else ' Restante')}
+                        {'$' + f"{abs(restante):,.0f}" + (' Excedido ⚠️' if excedido else ' Restante')}
                     </span>
                 </div>
                 <div style="font-size:12px; color:#aaa; margin:5px 0;">
-                    Gastado: ${p['gastado']:,.0f} de ${p['limite']:,.0f}
+                    Gastado: ${gastado:,.0f} de ${limite:,.0f}
                 </div>
                 <div style="background:#313244; height:8px; border-radius:4px; overflow:hidden;">
-                    <div style="background:{color_barra}; width:{porcentaje}%; height:100%;"></div>
+                    <div style="background:{color_barra}; width:{porcentaje_barra}%; height:100%;"></div>
                 </div>
             </div>
             """
@@ -195,6 +208,58 @@ def ejecutar_comando_shortcut(payload: ComandoPayload):
     if not respuesta:
         respuesta = pensar_respuesta(payload.texto)
     return {"status": "ok", "respuesta": respuesta}
+
+@app.get("/api/finanzas/resumen")
+def api_finanzas_resumen(usuario_id: str = "default"):
+    """API para widget iPhone Scriptable: resumen con presupuestos, gastado y libre."""
+    from modules.database import obtener_balance_financiero, obtener_resumen_presupuestos
+    balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
+    presupuestos = obtener_resumen_presupuestos(usuario_id)
+
+    # Calcular gastos reales por categoría
+    gastos_por_categoria = {}
+    for t in movimientos:
+        if t.get("tipo") == "gasto":
+            cat = t.get("categoria", "General")
+            monto = float(t.get("monto", 0))
+            gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + monto
+
+    # Construir respuesta para widget
+    datos_por_categoria = []
+    total_limite = 0
+    total_gastado = 0
+    total_libre = 0
+
+    for categoria, limite in presupuestos.items():
+        gastado = gastos_por_categoria.get(categoria, 0)
+        libre = limite - gastado
+        excedido = libre < 0
+        total_limite += limite
+        total_gastado += gastado
+        total_libre += libre
+
+        datos_por_categoria.append({
+            "categoria": categoria,
+            "limite": round(limite),
+            "gastado": round(gastado),
+            "libre": round(max(libre, 0)),
+            "excedido": excedido
+        })
+
+    # Si hay presupuestos pero el usuario no los estableció todos, sumar categorías no presupuestadas
+    # Gastos totales calculados
+    total_gastado_all = sum(gastos_por_categoria.values())
+
+    return {
+        "balance": round(balance),
+        "ingresos": round(ingresos),
+        "gastos": round(gastos),
+        "total_limite": round(total_limite),
+        "total_gastado": round(total_gastado_all),
+        "total_libre": round(max(total_libre, 0)),
+        "porcentaje_uso": round((total_gastado_all / max(total_limite, 1)) * 100),
+        "datos_por_categoria": datos_por_categoria
+    }
 
 @app.post("/api/recibo")
 async def subir_recibo_shortcut(file: UploadFile = File(...), usuario_id: str = Form("iphone_user")):
