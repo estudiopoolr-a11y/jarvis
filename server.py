@@ -212,65 +212,75 @@ def ejecutar_comando_shortcut(payload: ComandoPayload):
 @app.get("/api/finanzas/resumen")
 def api_finanzas_resumen(usuario_id: str = "default"):
     """API para widget iPhone Scriptable: resumen del MES ACTUAL con presupuestos y gastado por categoría."""
+    import traceback
     from datetime import datetime
-    from modules.database import obtener_balance_financiero, obtener_resumen_presupuestos
-
-    # Mes actual en formato YYYY-MM
-    mes_actual = datetime.now().strftime("%Y-%m")
 
     try:
+        from modules.database import obtener_balance_financiero, obtener_resumen_presupuestos
+
+        # Mes actual en formato YYYY-MM
+        mes_actual = datetime.now().strftime("%Y-%m")
+
         # Intentar con parámetro mes (versión nueva)
-        balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id, mes_actual)
-    except TypeError:
-        # Fallback: versión vieja sin parámetro mes
-        balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
+        try:
+            balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id, mes_actual)
+        except TypeError:
+            balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
 
-    try:
-        presupuestos = obtener_resumen_presupuestos(usuario_id, mes_actual)
-    except TypeError:
-        presupuestos = obtener_resumen_presupuestos(usuario_id)
+        try:
+            presupuestos = obtener_resumen_presupuestos(usuario_id, mes_actual)
+        except TypeError:
+            presupuestos = obtener_resumen_presupuestos(usuario_id)
 
-    # Calcular gastos del mes actual por categoría
-    gastos_por_categoria = {}
-    for t in movimientos:
-        if t.get("tipo") == "gasto":
-            cat = t.get("categoria", "General")
-            monto = float(t.get("monto", 0))
-            gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + monto
+        # Calcular gastos del mes actual por categoría
+        gastos_por_categoria = {}
+        for t in movimientos:
+            if t.get("tipo") == "gasto":
+                cat = t.get("categoria", "General")
+                monto = float(t.get("monto", 0))
+                gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + monto
 
-    # Construir respuesta para widget
-    datos_por_categoria = []
-    total_limite = 0
-    total_gastado = 0
-    total_libre = 0
+        # Construir respuesta para widget
+        datos_por_categoria = []
+        total_limite = 0
+        total_gastado = 0
+        total_libre = 0
 
-    for categoria, limite in presupuestos.items():
-        gastado = gastos_por_categoria.get(categoria, 0)
-        libre = limite - gastado
-        excedido = libre < 0
-        total_limite += limite
-        total_gastado += gastado
-        total_libre += libre
+        for categoria, limite in presupuestos.items():
+            gastado = gastos_por_categoria.get(categoria, 0)
+            libre = limite - gastado
+            excedido = libre < 0
+            total_limite += limite
+            total_gastado += gastado
+            total_libre += libre
 
-        datos_por_categoria.append({
-            "categoria": categoria,
-            "limite": round(limite),
-            "gastado": round(gastado),
-            "libre": round(libre),
-            "excedido": excedido
-        })
+            datos_por_categoria.append({
+                "categoria": categoria,
+                "limite": round(limite),
+                "gastado": round(gastado),
+                "libre": round(libre),
+                "excedido": excedido
+            })
 
-    return {
-        "mes": mes_actual,
-        "balance": round(balance),
-        "ingresos": round(ingresos),
-        "gastos": round(gastos),
-        "total_limite": round(total_limite),
-        "total_gastado": round(total_gastado),
-        "total_libre": round(total_libre),
-        "porcentaje_uso": round((total_gastado / max(total_limite, 1)) * 100),
-        "datos_por_categoria": datos_por_categoria
-    }
+        return {
+            "mes": mes_actual,
+            "balance": round(balance),
+            "ingresos": round(ingresos),
+            "gastos": round(gastos),
+            "total_limite": round(total_limite),
+            "total_gastado": round(total_gastado),
+            "total_libre": round(total_libre),
+            "porcentaje_uso": round((total_gastado / max(total_limite, 1)) * 100),
+            "datos_por_categoria": datos_por_categoria
+        }
+    except Exception as e:
+        # Devolver error como JSON (nunca HTML)
+        return {
+            "error": True,
+            "tipo_error": type(e).__name__,
+            "message": str(e),
+            "traceback": traceback.format_exc()[:1000]
+        }
 
 @app.post("/api/recibo")
 async def subir_recibo_shortcut(file: UploadFile = File(...), usuario_id: str = Form("iphone_user")):
