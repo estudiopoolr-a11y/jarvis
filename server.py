@@ -409,6 +409,50 @@ def api_backup_migrate(usuario_id: str = "default"):
         return {"error": True, "message": str(e)}
 
 
+@app.get("/api/kebo/metas")
+def api_kebo_metas(usuario_id: str = "default"):
+    """API para widget: lista de metas de ahorro."""
+    try:
+        from modules.database_v2 import listar_metas_v2
+        metas = listar_metas_v2(usuario_id)
+        return {"metas": metas}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/recurrentes")
+def api_kebo_recurrentes(usuario_id: str = "default"):
+    """API para widget: lista de recurrentes activos."""
+    try:
+        from modules.database_v2 import listar_recurrentes
+        recurrentes = listar_recurrentes(usuario_id)
+        return {"recurrentes": recurrentes}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/alertas")
+def api_kebo_alertas(usuario_id: str = "default"):
+    """API para widget: alertas de presupuesto activas."""
+    try:
+        from modules.database_v2 import obtener_alertas_presupuesto
+        alertas = obtener_alertas_presupuesto(usuario_id)
+        return {"alertas": alertas}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/cron/recurrentes")
+def cron_ejecutar_recurrentes():
+    """Cron diario: ejecuta recurrentes que tocan hoy."""
+    try:
+        from modules.database_v2 import ejecutar_recurrentes
+        ejecutados = ejecutar_recurrentes("iphone_user")
+        return {"status": "ok", "ejecutados": ejecutados}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
 @app.get("/api/kebo/presupuestos")
 def api_kebo_presupuestos(usuario_id: str = "default", mes: str = None):
     """API para widget iPhone: presupuestos con gastado del mes (NUEVA ESTRUCTURA KEBO)."""

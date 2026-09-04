@@ -277,15 +277,308 @@ def guardar_meta_v2(usuario_id, nombre, monto_objetivo, fecha_limite="", cuenta_
         return None
     try:
         ensure_user(usuario_id)
+
+        # Buscar cuenta por nombre para guardar su ID
+        cuenta_id = None
+        cuenta_ref = user_ref.collection("accounts").where("nombre", "==", cuenta_nombre).limit(1).stream()
+        cuenta_list = list(cuenta_ref)
+        if cuenta_list:
+            cuenta_id = cuenta_list[0].id
+
         doc_ref = user_ref.collection("goals").document()
         doc_ref.set({
             "nombre": nombre,
             "monto_objetivo": float(monto_objetivo),
             "current_amount": 0.0,
             "fecha_limite": fecha_limite,
+            "account_id": cuenta_id,
             "created_at": firestore.SERVER_TIMESTAMP
         })
         return doc_ref.id
     except Exception as e:
         print(f"Error guardando meta v2: {e}")
         return None
+
+def listar_metas_v2(usuario_id="default"):
+    """Lista todas las metas del usuario."""
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    try:
+        docs = user_ref.collection("goals").stream()
+        metas = []
+        for d in docs:
+            meta = d.to_dict()
+            meta["_id"] = d.id
+            obj = float(meta.get("monto_objetivo", 0))
+            cur = float(meta.get("current_amount", 0))
+            meta["porcentaje"] = round((cur / max(obj, 1)) * 100, 1) if obj > 0 else 0
+            meta["restante"] = max(0, obj - cur)
+            metas.append(meta)
+        return metas
+    except Exception as e:
+        print(f"Error listando metas: {e}")
+        return []
+
+def agregar_aporte_meta(usuario_id, meta_nombre, monto):
+    """Agrega un aporte a una meta existente."""
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return False, "DB no disponible"
+    try:
+        docs = user_ref.collection("goals").where("nombre", "==", meta_nombre).limit(1).stream()
+        docs_list = list(docs)
+        if not docs_list:
+            return False, f"No encontré la meta '{meta_nombre}'"
+
+        meta_ref = docs_list[0].reference
+        meta = docs_list[0].to_dict()
+
+        nuevo_current = float(meta.get("current_amount", 0)) + float(monto)
+        objetivo = float(meta.get("monto_objetivo", 0))
+        completada = nuevo_current >= objetivo
+
+        # Registrar aporte en subcol
+        aporte_ref = meta_ref.collection("aportes").document()
+        aporte_ref.set({
+            "monto": float(monto),
+            "fecha": datetime.now().strftime("%Y-%m-%d"),
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+
+        # Actualizar current_amount
+        meta_ref.update({
+            "current_amount": nuevo_current,
+            "completada": completada
+        })
+
+        pct = round((nuevo_current / max(objetivo, 1)) * 100, 1)
+        return True, f"Aporte de ${float(monto):,.0f} registrado. Progreso: {pct}% (${nuevo_current:,.0f} / ${objetivo:,.0f})"
+    except Exception as e:
+        return False, f"Error: {e}"
+
+# ==================== TRANSFERENCIAS ====================
+
+def registrar_transferencia(usuario_id, cuenta_origen, cuenta_destino, monto, descripcion=""):
+    """Registra transferencia entre dos cuentas (restar de origen, sumar a destino)."""
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return None, "DB no disponible"
+    try:
+        ensure_user(usuario_id)
+
+        # Buscar cuenta origen
+        origen_ref = user_ref.collection("accounts").where("nombre", "==", cuenta_origen).limit(1).stream()
+        origen_list = list(origen_ref)
+        if not origen_list:
+            return None, f"No existe la cuenta origen '{cuenta_origen}'"
+        origen_id = origen_list[0].id
+
+        # Buscar cuenta destino
+        destino_ref = user_ref.collection("accounts").where("nombre", "==", cuenta_destino).limit(1).stream()
+        destino_list = list(destino_ref)
+        if not destino_list:
+            return None, f"No existe la cuenta destino '{cuenta_destino}'"
+        destino_id = destino_list[0].id
+
+        if origen_id == destino_id:
+            return None, "Origen y destino son la misma cuenta"
+
+        # Actualizar balances
+        user_ref.collection("accounts").document(origen_id).update({
+            "balance": firestore.Increment(-float(monto))
+        })
+        user_ref.collection("accounts").document(destino_id).update({
+            "balance": firestore.Increment(float(monto))
+        })
+
+        # Registrar como transacción tipo "transfer"
+        ahora = datetime.now()
+        year = str(ahora.year)
+        month = f"{ahora.month:02d}"
+        fecha = ahora.strftime("%Y-%m-%d")
+
+        tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
+        tx_ref.set({
+            "tipo": "transfer",
+            "monto": float(monto),
+            "account_id": origen_id,
+            "to_account_id": destino_id,
+            "descripcion": descripcion or f"Transferencia {cuenta_origen} → {cuenta_destino}",
+            "fecha": fecha,
+            "tags": [],
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+
+        return tx_ref.id, f"Transferencia de ${float(monto):,.0f} de {cuenta_origen} → {cuenta_destino} completada"
+    except Exception as e:
+        return None, f"Error: {e}"
+
+# ==================== RECURRENTES ====================
+
+def guardar_recurrente(usuario_id, nombre, monto, frecuencia, dia, cuenta_nombre="Efectivo", categoria_nombre="General"):
+    """Crea un gasto/ingreso recurrente."""
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return None
+    try:
+        ensure_user(usuario_id)
+
+        # Buscar cuenta y categoría
+        cuenta_ref = user_ref.collection("accounts").where("nombre", "==", cuenta_nombre).limit(1).stream()
+        cuenta_list = list(cuenta_ref)
+        cuenta_id = cuenta_list[0].id if cuenta_list else None
+
+        cat_id = crear_categoria(usuario_id, categoria_nombre)
+
+        doc_ref = user_ref.collection("recurring").document()
+        doc_ref.set({
+            "nombre": nombre,
+            "monto": float(monto),
+            "frecuencia": frecuencia,  # "monthly", "biweekly", "weekly"
+            "dia": int(dia),  # día del mes (1-31) o de la semana
+            "account_id": cuenta_id,
+            "category_id": cat_id,
+            "activo": True,
+            "ultima_ejecucion": None,
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+        return doc_ref.id
+    except Exception as e:
+        print(f"Error guardando recurrente: {e}")
+        return None
+
+def listar_recurrentes(usuario_id="default"):
+    """Lista todos los recurrentes activos."""
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    try:
+        docs = user_ref.collection("recurring").where("activo", "==", True).stream()
+        return [{**d.to_dict(), "_id": d.id} for d in docs]
+    except Exception as e:
+        print(f"Error listando recurrentes: {e}")
+        return []
+
+def ejecutar_recurrentes(usuario_id="default"):
+    """Ejecuta los recurrentes que tocan hoy (para usar en cron diario)."""
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    try:
+        hoy = datetime.now()
+        dia_hoy = hoy.day
+        dia_semana = hoy.weekday()  # 0=lunes, 6=domingo
+
+        recurrentes = listar_recurrentes(usuario_id)
+        ejecutados = []
+
+        for rec in recurrentes:
+            frecuencia = rec.get("frecuencia", "monthly")
+            dia_rec = int(rec.get("dia", 1))
+            cuenta_id = rec.get("account_id")
+            cat_id = rec.get("category_id")
+            nombre = rec.get("nombre")
+            monto = float(rec.get("monto", 0))
+            ultima = rec.get("ultima_ejecucion")
+
+            # Verificar si toca hoy
+            toca = False
+            if frecuencia == "monthly" and dia_hoy == dia_rec:
+                toca = True
+            elif frecuencia == "biweekly":
+                # Cada 14 días desde ultima_ejecucion
+                if not ultima:
+                    toca = dia_hoy == dia_rec
+                else:
+                    pass  # Lógica compleja, simplificar
+            elif frecuencia == "weekly" and dia_semana == dia_rec:
+                toca = True
+
+            if toca and cuenta_id:
+                # Registrar transacción
+                year = str(hoy.year)
+                month = f"{hoy.month:02d}"
+                fecha = hoy.strftime("%Y-%m-%d")
+
+                tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
+                tx_ref.set({
+                    "tipo": "expense",
+                    "monto": monto,
+                    "account_id": cuenta_id,
+                    "category_id": cat_id,
+                    "descripcion": f"🔁 {nombre} (recurrente)",
+                    "fecha": fecha,
+                    "tags": ["recurrente"],
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "recurring_id": rec["_id"]
+                })
+
+                # Restar del balance
+                user_ref.collection("accounts").document(cuenta_id).update({
+                    "balance": firestore.Increment(-monto)
+                })
+
+                # Marcar como ejecutado
+                user_ref.collection("recurring").document(rec["_id"]).update({
+                    "ultima_ejecucion": firestore.SERVER_TIMESTAMP
+                })
+
+                ejecutados.append(nombre)
+
+        return ejecutados
+    except Exception as e:
+        print(f"Error ejecutando recurrentes: {e}")
+        return []
+
+# ==================== ALERTAS ====================
+
+def obtener_alertas_presupuesto(usuario_id="default"):
+    """Genera alertas cuando el gasto de una categoría supera el 80% del presupuesto."""
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    try:
+        mes = datetime.now().strftime("%Y-%m")
+        year, month = mes.split("-")
+
+        # Obtener categorías con budget
+        cats = listar_categorias(usuario_id)
+        alertas = []
+
+        # Obtener gastos del mes por categoría
+        docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+        gastos_por_cat = {}
+        for d in docs:
+            t = d.to_dict()
+            if t.get("tipo") == "expense":
+                cat_id = t.get("category_id")
+                monto = float(t.get("monto", 0))
+                gastos_por_cat[cat_id] = gastos_por_cat.get(cat_id, 0) + monto
+
+        for cat in cats:
+            budget = float(cat.get("budget", 0))
+            if budget <= 0:
+                continue
+            gastado = gastos_por_cat.get(cat["_id"], 0)
+            pct = (gastado / budget) * 100
+
+            if pct >= 100:
+                alertas.append({
+                    "tipo": "excedido",
+                    "categoria": cat.get("nombre"),
+                    "porcentaje": round(pct, 1),
+                    "mensaje": f"🚨 {cat.get('nombre')} EXCEDIDO: ${gastado:,.0f} de ${budget:,.0f}"
+                })
+            elif pct >= 80:
+                alertas.append({
+                    "tipo": "alerta",
+                    "categoria": cat.get("nombre"),
+                    "porcentaje": round(pct, 1),
+                    "mensaje": f"⚠️ {cat.get('nombre')} al {pct:.0f}%: ${gastado:,.0f} de ${budget:,.0f}"
+                })
+
+        return alertas
+    except Exception as e:
+        print(f"Error generando alertas: {e}")
+        return []

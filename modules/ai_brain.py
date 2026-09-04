@@ -22,7 +22,9 @@ from modules.database import (
 )
 from modules.database_v2 import (
     registrar_transaccion_v2, obtener_balance_v2, obtener_presupuestos_v2,
-    listar_cuentas, crear_cuenta, actualizar_presupuesto_categoria
+    listar_cuentas, crear_cuenta, actualizar_presupuesto_categoria,
+    registrar_transferencia, listar_metas_v2, guardar_meta_v2, agregar_aporte_meta,
+    listar_recurrentes, guardar_recurrente, obtener_alertas_presupuesto
 )
 from datetime import datetime
 
@@ -1019,7 +1021,134 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         emoji = "📈" if accion == "subir" else "📉" if accion == "bajar" else "🔄"
         return f"{emoji} **Presupuesto {accion}do:** *{cat}* = **${nuevo:,.0f}**"
 
-    # 5d-3. Pago fijo mensual
+    # =========================================
+    # 5e. TRANSFERENCIAS ENTRE CUENTAS
+    # =========================================
+    transfer_match = re.search(
+        r'(?:mov[íi]|transfer[íi]|mand[áa])\s+(?:de\s+)?(\d+[\d,.]*)\s*(?:k|m)?\s*(?:de\s+)?(\w+)\s*(?:a|hacia|para)\s+(\w+)',
+        texto_lc
+    )
+    if not transfer_match:
+        # Intentar: "mover 100k de nequi a efectivo"
+        transfer_match = re.search(
+            r'mover\s+(\d+[\d,.]*)\s*(?:k|m)?\s+de\s+(\w+)\s+a\s+(\w+)',
+            texto_lc
+        )
+    if transfer_match:
+        monto = float(transfer_match.group(1).replace(',', ''))
+        origen = transfer_match.group(2).strip().title()
+        destino = transfer_match.group(3).strip().title()
+        # Extender abreviaturas
+        if origen.lower() in ['efect', 'efectivo', 'cash']: origen = 'Efectivo'
+        if destino.lower() in ['efect', 'efectivo', 'cash']: destino = 'Efectivo'
+        tx_id, msg = registrar_transferencia(usuario_id, origen, destino, monto, "Transferencia por voz")
+        if tx_id:
+            return f"✅ {msg}"
+        else:
+            return f"⚠️ {msg}"
+
+    # =========================================
+    # 5f. METAS DE AHORRO
+    # =========================================
+    # Ver metas: "mis metas", "ver metas"
+    if any(k in texto_lc for k in ["meta", "metas", "ahorro"]) and any(k in texto_lc for k in ["mis", "ver", "mostrar", "lista", "cuales"]):
+        metas = listar_metas_v2(usuario_id)
+        if not metas:
+            return "🎯 No tienes metas de ahorro. Di: 'crea meta [nombre] $[monto]'"
+        msg = "🎯 **Tus metas de ahorro:**\n"
+        for m in metas:
+            icono = "✅" if m.get("completada") else "🔄"
+            nombre = m.get("nombre", "")
+            obj = float(m.get("monto_objetivo", 0))
+            cur = float(m.get("current_amount", 0))
+            pct = m.get("porcentaje", 0)
+            msg += f"  {icono} **{nombre}**: ${cur:,.0f} / ${obj:,.0f} ({pct}%)\n"
+        return msg
+
+    # Crear meta: "crea meta viaje 500k"
+    crear_meta_match = re.search(r'crea(?:r)?\s+meta\s+(?:de\s+)?(\w+(?:\s+\w+)?)\s+\$?(\d+[\d,.]*)', texto_lc)
+    if crear_meta_match:
+        nombre = crear_meta_match.group(1).strip().title()
+        monto = float(crear_meta_match.group(2).replace(',', ''))
+        # Detectar fecha límite si se menciona
+        fecha_limite = ""
+        meta_id = guardar_meta_v2(usuario_id, nombre, monto, fecha_limite)
+        if meta_id:
+            return f"🎯 **Meta creada:** *{nombre}* = **${monto:,.0f}**"
+        else:
+            return "⚠️ Error al crear la meta."
+
+    # Aportar a meta: "aportar 50k a viaje", "suma 100k meta ahorro"
+    aporte_match = re.search(r'(?:aportar|sumar|agregar)\s+(\d+[\d,.]*)\s*(?:k|m)?\s+(?:a\s+)?(?:meta\s+)?(\w+)', texto_lc)
+    if not aporte_match:
+        aporte_match = re.search(r'meta\s+(\w+)\s+(?:con\s+)?(?:aportar\s+)?(\d+[\d,.]*)', texto_lc)
+    if aporte_match:
+        monto = float(aporte_match.group(1).replace(',', ''))
+        nombre_meta = aporte_match.group(2).strip().title()
+        ok, msg = agregar_aporte_meta(usuario_id, nombre_meta, monto)
+        if ok:
+            return f"✅ {msg}"
+        else:
+            return f"⚠️ {msg}"
+
+    # =========================================
+    # 5g. RECURRENTES
+    # =========================================
+    # Ver recurrentes: "mis pagos fijos", "pagos recurrentes"
+    if any(k in texto_lc for k in ["recurrente", "recurrentes", "pago fijo", "pagos fijos", "suscripcion", "suscripciones"]):
+        if any(k in texto_lc for k in ["mis", "ver", "mostrar", "lista", "cuales"]):
+            recurrentes = listar_recurrentes(usuario_id)
+            if not recurrentes:
+                return "🔁 No tienes pagos recurrentes configurados."
+            msg = "🔁 **Pagos recurrentes:**\n"
+            for r in recurrentes:
+                nombre = r.get("nombre", "")
+                monto = float(r.get("monto", 0))
+                freq = r.get("frecuencia", "monthly")
+                dia = r.get("dia", 1)
+                freq_emoji = "📅" if freq == "monthly" else "📆" if freq == "biweekly" else "📆"
+                msg += f"  {freq_emoji} **{nombre}**: ${monto:,.0f} / "
+                msg += f"día {dia}" if freq == "monthly" else freq
+                msg += "\n"
+            return msg
+
+    # Crear recurrente: "cada 15 me sale arriendo 1.5M"
+    recurrente_match = re.search(
+        r'cada\s+(\d+)\s+(?:me\s+)?(?:sale|toca|paga)\s+(\w+)\s+(\d+[\d,.]*)',
+        texto_lc
+    )
+    if not recurrente_match:
+        recurrente_match = re.search(
+            r'(?:crea|registrar)\s+(?:pago\s+)?recurrente\s+(?:de\s+)?(\w+)\s+(\d+[\d,.]*)\s+(?:el\s+)?(?:día?\s+)?(\d+)',
+            texto_lc
+        )
+    if recurrente_match:
+        dia = int(recurrente_match.group(1) if texto_lc.startswith("cada") else recurrente_match.group(3))
+        nombre = recurrente_match.group(2).strip().title()
+        monto = float(recurrente_match.group(2) if texto_lc.startswith("cada") else recurrente_match.group(2).replace(',', ''))
+        rec_id = guardar_recurrente(usuario_id, nombre, monto, "monthly", dia)
+        if rec_id:
+            return f"🔁 **Recurrente creado:** *{nombre}* = ${monto:,.0f} el día {dia} de cada mes"
+        else:
+            return "⚠️ Error al crear recurrente."
+
+    # =========================================
+    # 5h. ALERTAS DE PRESUPUESTO
+    # =========================================
+    # "alertas", "cómo voy de presupuesto", "presupuestos alertas"
+    if any(k in texto_lc for k in ["alerta", "alertas", "aviso", "avisos"]) or \
+       ("presupuesto" in texto_lc and "como" in texto_lc) or \
+       ("como" in texto_lc and "voy" in texto_lc and "presupuesto" in texto_lc):
+        alertas = obtener_alertas_presupuesto(usuario_id)
+        if not alertas:
+            return "✅ **Sin alertas.** Todos tus presupuestos van bien."
+        msg = "⚠️ **Alertas de presupuesto:**\n"
+        for a in alertas:
+            msg += f"  {a['mensaje']}\n"
+        return msg
+
+    # =========================================
+    # 5a. Completar tarea
     pago_fijo = _parse_pago_fijo(texto_lc)
     if pago_fijo:
         guardar_pago_fijo(usuario_id, pago_fijo["nombre"], pago_fijo["monto"], pago_fijo["dia_mes"])
