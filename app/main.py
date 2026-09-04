@@ -259,6 +259,20 @@ def api_finanzas_resumen(usuario_id: str = "default"):
 
         user_ref = db.collection("users").document(usuario_id)
 
+        # DEBUG: log para entender qué hay en la DB
+        try:
+            debug_cats = list(user_ref.collection("categories").limit(3).stream())
+            print(f"[resumen] DEBUG cats encontrados: {len(debug_cats)}", flush=True)
+            debug_years = list(user_ref.collection("transactions").list_documents())
+            print(f"[resumen] DEBUG years en transactions: {[y.id for y in debug_years]}", flush=True)
+            if debug_years:
+                debug_months = list(debug_years[0].list_documents())
+                print(f"[resumen] DEBUG months en {debug_years[0].id}: {[m.id for m in debug_months]}", flush=True)
+            debug_budgets = list(user_ref.collection("budgets").list_documents())
+            print(f"[resumen] DEBUG years en budgets: {[b.id for b in debug_budgets]}", flush=True)
+        except Exception as dbg_err:
+            print(f"[resumen] DEBUG error: {dbg_err}", flush=True)
+
         # 1) Mapa de categorías (id -> nombre)
         cat_map = {}
         for c in user_ref.collection("categories").stream():
