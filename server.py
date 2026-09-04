@@ -211,12 +211,18 @@ def ejecutar_comando_shortcut(payload: ComandoPayload):
 
 @app.get("/api/finanzas/resumen")
 def api_finanzas_resumen(usuario_id: str = "default"):
-    """API para widget iPhone Scriptable: resumen con presupuestos, gastado y libre."""
+    """API para widget iPhone Scriptable: resumen del MES ACTUAL con presupuestos y gastado por categoría."""
+    from datetime import datetime
     from modules.database import obtener_balance_financiero, obtener_resumen_presupuestos
-    balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
-    presupuestos = obtener_resumen_presupuestos(usuario_id)
 
-    # Calcular gastos reales por categoría
+    # Mes actual en formato YYYY-MM
+    mes_actual = datetime.now().strftime("%Y-%m")
+
+    # Obtener datos SOLO del mes actual
+    balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id, mes_actual)
+    presupuestos = obtener_resumen_presupuestos(usuario_id, mes_actual)
+
+    # Calcular gastos del mes actual por categoría
     gastos_por_categoria = {}
     for t in movimientos:
         if t.get("tipo") == "gasto":
@@ -242,22 +248,19 @@ def api_finanzas_resumen(usuario_id: str = "default"):
             "categoria": categoria,
             "limite": round(limite),
             "gastado": round(gastado),
-            "libre": round(max(libre, 0)),
+            "libre": round(libre),
             "excedido": excedido
         })
 
-    # Si hay presupuestos pero el usuario no los estableció todos, sumar categorías no presupuestadas
-    # Gastos totales calculados
-    total_gastado_all = sum(gastos_por_categoria.values())
-
     return {
+        "mes": mes_actual,
         "balance": round(balance),
         "ingresos": round(ingresos),
         "gastos": round(gastos),
         "total_limite": round(total_limite),
-        "total_gastado": round(total_gastado_all),
-        "total_libre": round(max(total_libre, 0)),
-        "porcentaje_uso": round((total_gastado_all / max(total_limite, 1)) * 100),
+        "total_gastado": round(total_gastado),
+        "total_libre": round(total_libre),
+        "porcentaje_uso": round((total_gastado / max(total_limite, 1)) * 100),
         "datos_por_categoria": datos_por_categoria
     }
 
