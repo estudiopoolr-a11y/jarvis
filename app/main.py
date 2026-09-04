@@ -1,5 +1,11 @@
 import os
 import sys
+from pathlib import Path
+
+# Agregar el directorio raíz al path para que los imports funcionen desde app/
+ROOT_DIR = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT_DIR))
+
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
 from modules.database import (
@@ -26,7 +32,7 @@ class ComandoPayload(BaseModel):
 def render_dashboard(usuario_id: str = "default"):
     """Sirve el dashboard web estático con datos en tiempo real."""
     import os
-    template_path = os.path.join(os.path.dirname(__file__), "templates", "dashboard.html")
+    template_path = os.path.join(os.path.dirname(__file__), "app", "templates", "dashboard.html")
     try:
         with open(template_path, "r", encoding="utf-8") as f:
             return f.read()
@@ -484,7 +490,7 @@ def cron_ejecutar_recurrentes():
 def cron_monthly_report():
     """Cron mensual: envía reporte del mes anterior a Discord."""
     try:
-        from monthly_report import generar_reporte_mes_anterior, enviar_a_discord
+        from app.services.monthly_report import generar_reporte_mes_anterior, enviar_a_discord
         datos = generar_reporte_mes_anterior("iphone_user")
         if datos:
             ok = enviar_a_discord(datos)
@@ -498,7 +504,7 @@ def cron_monthly_report():
 def cron_reminders():
     """Cron diario: envía recordatorios de pagos recurrentes a Discord."""
     try:
-        from reminders import obtener_pagos_hoy, obtener_recordatorios_personalizados, enviar_recordatorio_discord
+        from app.services.reminders import obtener_pagos_hoy, obtener_recordatorios_personalizados, enviar_recordatorio_discord
         pagos = obtener_pagos_hoy("iphone_user")
         recordatorios = obtener_recordatorios_personalizados("iphone_user")
         ok = enviar_recordatorio_discord(pagos, recordatorios)
@@ -642,7 +648,7 @@ async def subir_recibo_shortcut(file: UploadFile = File(...), usuario_id: str = 
 def cron_daily_summary():
     """Endpoint para Render Cron Job - envía resumen diario al canal de Discord."""
     try:
-        from daily_summary import main as daily_main
+        from app.services.daily_summary import main as daily_main
         daily_main()
         return {"status": "ok", "message": "Resumen enviado"}
     except Exception as e:
