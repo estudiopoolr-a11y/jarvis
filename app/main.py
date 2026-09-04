@@ -259,7 +259,20 @@ def api_finanzas_resumen(usuario_id: str = "default"):
         gastos_por_categoria = {}
 
         try:
-            # Presupuestos legacy
+            # DEBUG: ver TODOS los docs legacy y sus usuario_id
+            all_pres = list(db.collection("presupuestos").limit(20).stream())
+            print(f"[resumen] ALL presupuestos ({len(all_pres)}):", flush=True)
+            for d in all_pres:
+                x = d.to_dict()
+                print(f"[resumen]   pres: id={d.id} usuario_id={x.get('usuario_id')!r} cat={x.get('categoria')!r} limite={x.get('limite')}", flush=True)
+
+            all_fin = list(db.collection("finanzas").limit(20).stream())
+            print(f"[resumen] ALL finanzas ({len(all_fin)}):", flush=True)
+            for d in all_fin:
+                x = d.to_dict()
+                print(f"[resumen]   fin: id={d.id} usuario_id={x.get('usuario_id')!r} cat={x.get('categoria')!r} tipo={x.get('tipo')!r} monto={x.get('monto')}", flush=True)
+
+            # Presupuestos legacy filtrados
             docs_pres = db.collection("presupuestos").where(
                 filter=FieldFilter("usuario_id", "==", str(usuario_id))
             ).stream()
@@ -268,9 +281,9 @@ def api_finanzas_resumen(usuario_id: str = "default"):
                 cat = d.get("categoria")
                 if cat:
                     presupuestos[cat] = float(d.get("limite", 0))
-            print(f"[resumen] Legacy presupuestos: {len(presupuestos)} cats", flush=True)
+            print(f"[resumen] Legacy presupuestos filtrados: {len(presupuestos)} cats", flush=True)
 
-            # Transacciones legacy
+            # Transacciones legacy filtradas
             docs_fin = db.collection("finanzas").where(
                 filter=FieldFilter("usuario_id", "==", str(usuario_id))
             ).stream()
@@ -286,7 +299,7 @@ def api_finanzas_resumen(usuario_id: str = "default"):
                 else:
                     gastos += monto
                     gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + monto
-            print(f"[resumen] Legacy transacciones: {tx_count} docs, ingresos={ingresos}, gastos={gastos}", flush=True)
+            print(f"[resumen] Legacy transacciones filtradas: {tx_count} docs, ingresos={ingresos}, gastos={gastos}", flush=True)
         except Exception as legacy_err:
             print(f"[resumen] Error leyendo legacy: {legacy_err}", flush=True)
 
