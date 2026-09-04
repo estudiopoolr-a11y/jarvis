@@ -1460,6 +1460,95 @@ def api_kebo_load_historico(payload: dict = None):
         return {"error": True, "message": str(e)}
 
 
+@app.get("/api/admin/audit")
+def api_admin_audit(usuario_id: str = "iphone_user"):
+    """Escanea toda la base de datos Firebase y devuelve un reporte completo."""
+    try:
+        from modules.database import inicializar_firebase
+        from modules.migration import auditar_firebase
+        db = inicializar_firebase()
+        if not db:
+            return {"error": "Firebase no disponible"}
+        return auditar_firebase(db, usuario_id)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+
+@app.post("/api/admin/migrate-all")
+def api_admin_migrate_all(usuario_id: str = Form("iphone_user")):
+    """Ejecuta la migración completa de datos legacy a estructura users/iphone_user/."""
+    try:
+        from modules.migration import migrar_todo
+        resultado = migrar_todo(usuario_id)
+        return resultado
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+
+@app.get("/api/admin/presupuestos-tabla")
+def api_admin_presupuestos_tabla(usuario_id: str = "iphone_user"):
+    """Devuelve tabla de presupuestos: categoría, presupuestado, gastado, disponible.
+    Formato listo para el widget rediseñado."""
+    try:
+        from modules.database import (
+            inicializar_firebase, listar_categorias, obtener_presupuestos_v2
+        )
+        from datetime import datetime
+
+        db = inicializar_firebase()
+        if not db:
+            return {"error": "Firebase no disponible"}
+
+        # Obtener presupuestos del mes actual con gastado
+        mes = datetime.now().strftime("%Y-%m")
+        presupuestos = obtener_presupuestos_v2(usuario_id, mes)
+
+        # Obtener todas las categorías (incluso sin presupuesto)
+        categorias = listar_categorias(usuario_id)
+
+        # Construir tabla completa
+        filas = []
+        for cat_nombre, datos in sorted(presupuestos.items()):
+            limite = datos.get("limite", 0)
+            gastado = datos.get("gastado", 0)
+            libre = datos.get("libre", 0)
+            excedido = datos.get("excedido", libre < 0)
+
+            filas.append({
+                "categoria": cat_nombre,
+                "presupuestado": limite,
+                "gastado": gastado,
+                "disponible": libre,
+                "excedido": excedido,
+                "porcentaje": round((gastado / max(limite, 1)) * 100, 1) if limite > 0 else 0
+            })
+
+        # Totales
+        total_presupuestado = sum(f["presupuestado"] for f in filas)
+        total_gastado = sum(f["gastado"] for f in filas)
+        total_disponible = total_presupuestado - total_gastado
+        excedidos_count = sum(1 for f in filas if f["excedido"])
+
+        return {
+            "mes": mes,
+            "filas": filas,
+            "totales": {
+                "presupuestado": total_presupuestado,
+                "gastado": total_gastado,
+                "disponible": total_disponible,
+                "excedidos_count": excedidos_count
+            }
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+
 if __name__ == "__main__":
     # NOTA: El bot de Discord se ejecuta LOCALMENTE (jarvis_discord.py).
     # Render solo ejecuta el dashboard web y API.
