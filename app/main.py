@@ -259,34 +259,31 @@ def api_finanzas_resumen(usuario_id: str = "default"):
         gastos_por_categoria = {}
 
         try:
-            # DEBUG: ver TODOS los docs legacy y sus usuario_id
-            all_pres = list(db.collection("presupuestos").limit(20).stream())
-            print(f"[resumen] ALL presupuestos ({len(all_pres)}):", flush=True)
-            for d in all_pres:
-                x = d.to_dict()
-                print(f"[resumen]   pres: id={d.id} usuario_id={x.get('usuario_id')!r} cat={x.get('categoria')!r} limite={x.get('limite')}", flush=True)
+            # Mapeo de usuario_id: el widget usa 'iphone_user' pero los datos
+            # estan guardados con el ID real de Discord ('1536228767180136498').
+            # Si el parametro es 'iphone_user' o 'default', buscamos TODOS los
+            # datos legacy (porque solo hay un usuario).
+            usar_todos = usuario_id in ("iphone_user", "default", None, "")
 
-            all_fin = list(db.collection("finanzas").limit(20).stream())
-            print(f"[resumen] ALL finanzas ({len(all_fin)}):", flush=True)
-            for d in all_fin:
-                x = d.to_dict()
-                print(f"[resumen]   fin: id={d.id} usuario_id={x.get('usuario_id')!r} cat={x.get('categoria')!r} tipo={x.get('tipo')!r} monto={x.get('monto')}", flush=True)
+            if usar_todos:
+                # Leer todos los docs sin filtrar por usuario
+                docs_pres = db.collection("presupuestos").stream()
+                docs_fin = db.collection("finanzas").stream()
+            else:
+                docs_pres = db.collection("presupuestos").where(
+                    filter=FieldFilter("usuario_id", "==", str(usuario_id))
+                ).stream()
+                docs_fin = db.collection("finanzas").where(
+                    filter=FieldFilter("usuario_id", "==", str(usuario_id))
+                ).stream()
 
-            # Presupuestos legacy filtrados
-            docs_pres = db.collection("presupuestos").where(
-                filter=FieldFilter("usuario_id", "==", str(usuario_id))
-            ).stream()
             for doc in docs_pres:
                 d = doc.to_dict()
                 cat = d.get("categoria")
                 if cat:
                     presupuestos[cat] = float(d.get("limite", 0))
-            print(f"[resumen] Legacy presupuestos filtrados: {len(presupuestos)} cats", flush=True)
+            print(f"[resumen] Legacy presupuestos: {len(presupuestos)} cats (usar_todos={usar_todos})", flush=True)
 
-            # Transacciones legacy filtradas
-            docs_fin = db.collection("finanzas").where(
-                filter=FieldFilter("usuario_id", "==", str(usuario_id))
-            ).stream()
             tx_count = 0
             for t in docs_fin:
                 d = t.to_dict()
@@ -299,7 +296,7 @@ def api_finanzas_resumen(usuario_id: str = "default"):
                 else:
                     gastos += monto
                     gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + monto
-            print(f"[resumen] Legacy transacciones filtradas: {tx_count} docs, ingresos={ingresos}, gastos={gastos}", flush=True)
+            print(f"[resumen] Legacy transacciones: {tx_count} docs, ingresos={ingresos}, gastos={gastos}", flush=True)
         except Exception as legacy_err:
             print(f"[resumen] Error leyendo legacy: {legacy_err}", flush=True)
 
