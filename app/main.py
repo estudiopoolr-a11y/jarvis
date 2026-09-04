@@ -1460,6 +1460,31 @@ def api_kebo_load_historico(payload: dict = None):
         return {"error": True, "message": str(e)}
 
 
+@app.get("/api/admin/debug-finanzas")
+def api_admin_debug_finanzas(usuario_id: str = "iphone_user"):
+    """Debug: ver qué hay en finanzas sin filtros."""
+    try:
+        from modules.database import inicializar_firebase
+        db = inicializar_firebase()
+        if not db:
+            return {"error": "Firebase no disponible"}
+
+        # Leer TODO finanzas sin filtro
+        docs = list(db.collection("finanzas").limit(15).stream())
+        results = []
+        for d in docs:
+            results.append({**d.to_dict(), "_id": d.id})
+
+        return {
+            "total": len(results),
+            "sample": results
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+
 @app.get("/api/admin/audit")
 def api_admin_audit(usuario_id: str = "iphone_user"):
     """Escanea toda la base de datos Firebase y devuelve un reporte completo."""
