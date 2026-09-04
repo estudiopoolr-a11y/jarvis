@@ -1299,6 +1299,108 @@ def cron_alertas():
         print(f"Error en cron alertas: {e}")
         return {"status": "error", "message": str(e)}
 
+
+# ==================== HISTÓRICO KEBO ====================
+
+@app.post("/api/kebo/load-historico")
+def api_kebo_load_historico(payload: dict = None):
+    """Carga presupuestos de meses anteriores (mayo, junio, julio 2026) y
+    registra los préstamos históricos de Kebo.
+
+    Body opcional: {"meses": ["mayo", "junio", "julio"], "prestamos": true}
+    Si no se envía, carga todo.
+    """
+    try:
+        from modules.database import (
+            crear_categoria, establecer_presupuesto_mes, registrar_prestamo, ensure_user
+        )
+        payload = payload or {}
+        usuario_id = payload.get("usuario_id", "iphone_user")
+        meses = payload.get("meses", ["mayo", "junio", "julio"])
+        cargar_prestamos = payload.get("prestamos", True)
+
+        ensure_user(usuario_id, "Pool")
+
+        # Categorías (idempotente, crear_categoria lo maneja)
+        cats = [
+            "Ahorro", "madre", "padre", "Deudas", "gym", "estudio", "Casa",
+            "Alimentación", "Transporte", "Servicios", "Arriendo", "Entretenimiento",
+            "Salud", "Educación", "Ropa", "Hogar", "Mascotas", "Celular", "Internet",
+            "Inversión", "Otros", "Women", "Moto", "use personal", "Prestamos",
+            "Préstamo", "futbol", "Gastos tontos", "Salario",
+        ]
+        for c in cats:
+            crear_categoria(usuario_id, c)
+
+        # Presupuestos por mes (formato: mes -> [(categoria, monto)])
+        presupuestos = {
+            "mayo": {
+                "year": "2026", "month": "05",
+                "cats": [
+                    ("Deudas", 140000), ("Moto", 170000), ("use personal", 50000),
+                    ("Gastos tontos", 20000), ("madre", 185000), ("futbol", 50000),
+                    ("gym", 35000), ("Alimentación", 2000),
+                ],
+            },
+            "junio": {
+                "year": "2026", "month": "06",
+                "cats": [
+                    ("gym", 35000), ("madre", 150000), ("padre", 100000),
+                    ("Ahorro", 100000), ("use personal", 40000), ("Deudas", 140000),
+                    ("Gastos tontos", 40000), ("Prestamos", 20000), ("Moto", 50000),
+                ],
+            },
+            "julio": {
+                "year": "2026", "month": "07",
+                "cats": [
+                    ("Alimentación", 120000), ("Moto", 100000), ("futbol", 50000),
+                    ("use personal", 100000), ("Women", 200000), ("Gastos tontos", 100000),
+                    ("Prestamos", 100000),
+                ],
+            },
+        }
+
+        resultados = {}
+        for mes in meses:
+            if mes not in presupuestos:
+                continue
+            p = presupuestos[mes]
+            for cat, monto in p["cats"]:
+                establecer_presupuesto_mes(usuario_id, cat, monto, p["year"], p["month"])
+            resultados[mes] = {
+                "presupuestos_cargados": len(p["cats"]),
+                "year": p["year"], "month": p["month"],
+            }
+
+        # Préstamos históricos
+        prestamos_cargados = 0
+        if cargar_prestamos:
+            prestamos_historico = [
+                # (persona, monto, fecha, nota)
+                ("Jhostyn", 40000, "2026-08-24", "Préstamo"),
+                ("Mama pañales salo", 20000, "2026-08-24", "Préstamo"),
+                ("Brother", 50000, "2026-07-31", "Préstamo"),
+                ("Cinemark", 32500, "2026-07-31", "Préstamo"),
+                ("Vascula", 50000, "2026-07-31", "Préstamo"),
+                ("Brother", 20000, "2026-07-21", "Préstamo"),
+                ("Brother", 20000, "2026-07-21", "Préstamo"),
+            ]
+            for persona, monto, fecha, nota in prestamos_historico:
+                pid = registrar_prestamo(usuario_id, persona, monto, fecha, nota)
+                if pid:
+                    prestamos_cargados += 1
+
+        return {
+            "status": "ok",
+            "presupuestos": resultados,
+            "prestamos_cargados": prestamos_cargados,
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"error": True, "message": str(e)}
+
+
 if __name__ == "__main__":
     # NOTA: El bot de Discord se ejecuta LOCALMENTE (jarvis_discord.py).
     # Render solo ejecuta el dashboard web y API.
