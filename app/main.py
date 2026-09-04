@@ -233,13 +233,11 @@ def ejecutar_comando_shortcut(payload: ComandoPayload):
 
 @app.get("/api/finanzas/resumen")
 def api_finanzas_resumen(usuario_id: str = "default"):
-    """API para widget iPhone Scriptable: resumen del MES ACTUAL con presupuestos y gastado por categoría.
+    """API para widget iPhone Scriptable: resumen financiero.
 
-    Estructura Kebo:
-      users/{userId}/budgets/{year}/{month}/items  -> presupuestos
-      users/{userId}/transactions/{year}/{month}/items -> tx
-    El campo de categoría en transactions es category_id, así que resolvemos el nombre
-    contra users/{userId}/categories.
+    Lee de la estructura LEGACY top-level ('presupuestos' y 'finanzas') que es
+    donde están los datos reales del usuario. Si no encuentra nada ahí, intenta
+    con la estructura Kebo nueva (users/{userId}/budgets y /transactions).
     """
     import traceback
     from datetime import datetime
@@ -251,101 +249,87 @@ def api_finanzas_resumen(usuario_id: str = "default"):
         if not db:
             return {"error": True, "message": "DB no inicializada"}
 
-        # Mes actual
         ahora = datetime.now()
-        year = str(ahora.year)
-        month = f"{ahora.month:02d}"
-        mes_actual = f"{year}-{month}"
+        mes_actual = ahora.strftime("%Y-%m")
 
-        user_ref = db.collection("users").document(usuario_id)
-
-        # DEBUG: log para entender qué hay en la DB
-        try:
-            debug_cats = list(user_ref.collection("categories").limit(3).stream())
-            print(f"[resumen] DEBUG cats encontrados: {len(debug_cats)}", flush=True)
-            debug_years = list(user_ref.collection("transactions").list_documents())
-            print(f"[resumen] DEBUG years en transactions: {[y.id for y in debug_years]}", flush=True)
-            if debug_years:
-                debug_months = list(debug_years[0].list_documents())
-                print(f"[resumen] DEBUG months en {debug_years[0].id}: {[m.id for m in debug_months]}", flush=True)
-            debug_budgets = list(user_ref.collection("budgets").list_documents())
-            print(f"[resumen] DEBUG years en budgets: {[b.id for b in debug_budgets]}", flush=True)
-
-            # SCAN GLOBAL: top-level collections
-            top_cols = [c.id for c in db.collections()]
-            print(f"[resumen] SCAN top-level collections: {top_cols}", flush=True)
-
-            # SCAN todos los users para encontrar dónde están las tx
-            all_users = list(db.collection("users").limit(20).stream())
-            print(f"[resumen] SCAN users total: {len(all_users)}", flush=True)
-            for u in all_users[:5]:
-                u_tx = list(u.reference.collection("transactions").list_documents())
-                u_bud = list(u.reference.collection("budgets").list_documents())
-                u_cats = list(u.reference.collection("categories").stream())
-                print(f"[resumen]   user={u.id} cats={len(u_cats)} tx_years={[y.id for y in u_tx]} bud_years={[b.id for b in u_bud]}", flush=True)
-
-            # Si no hay en users, revisar colecciones top-level
-            for col_name in ["transactions", "presupuestos", "finanzas", "kebo_data"]:
-                try:
-                    docs = list(db.collection(col_name).limit(5).stream())
-                    if docs:
-                        print(f"[resumen] SCAN {col_name}: {len(docs)} docs, sample fields: {list(docs[0].to_dict().keys())[:8] if docs else []}", flush=True)
-                except Exception:
-                    pass
-        except Exception as dbg_err:
-            print(f"[resumen] DEBUG error: {dbg_err}", flush=True)
-
-        # 1) Mapa de categorías (id -> nombre)
-        cat_map = {}
-        for c in user_ref.collection("categories").stream():
-            cdata = c.to_dict()
-            cat_map[c.id] = cdata.get("nombre", "?")
-
-        # 2) Presupuestos del mes
-        # Estructura Kebo: users/{userId}/budgets/{year}/{month}/items/{id}
+        # ============ ESTRATEGIA 1: Colecciones legacy top-level ============
         presupuestos = {}
-        try:
-            items_ref = user_ref.collection("budgets").document(year).document(month).collection("items")
-            for p in items_ref.stream():
-                pdata = p.to_dict()
-                nombre = pdata.get("category_name") or cat_map.get(pdata.get("category_id"), "?")
-                presupuestos[nombre] = float(pdata.get("amount", 0))
-        except Exception as pres_err:
-            print(f"[resumen] Error leyendo presupuestos: {pres_err}", flush=True)
-
-        # 3) Transacciones — sumamos TODAS las del usuario (no solo el mes actual)
-        # Esto es más útil para el widget porque muestra el estado real,
-        # independientemente de cuándo se cargaron los datos.
         ingresos = 0.0
         gastos = 0.0
         gastos_por_categoria = {}
 
-        # Recorrer todos los años/meses que tengan items
-        # Estructura: users/{userId}/transactions/{year}/{month}/items/{id}
         try:
-            tx_root = user_ref.collection("transactions")
-            for year_doc in tx_root.list_documents():
-                year_id = year_doc.id
-                for month_doc in year_doc.list_documents():
-                    month_id = month_doc.id
-                    for t in user_ref.collection("transactions").document(year_id).document(month_id).collection("items").stream():
-                        tdata = t.to_dict()
-                        monto = float(tdata.get("amount", 0))
-                        tipo = tdata.get("type", "expense")
-                        cat_id = tdata.get("category_id")
-                        nombre = cat_map.get(cat_id, "Sin categoría")
+            # Presupuestos legacy
+            docs_pres = db.collection("presupuestos").where(
+                filter=FieldFilter("usuario_id", "==", str(usuario_id))
+            ).stream()
+            for doc in docs_pres:
+                d = doc.to_dict()
+                cat = d.get("categoria")
+                if cat:
+                    presupuestos[cat] = float(d.get("limite", 0))
+            print(f"[resumen] Legacy presupuestos: {len(presupuestos)} cats", flush=True)
 
-                        if tipo == "income":
-                            ingresos += monto
-                        else:
-                            gastos += monto
-                            gastos_por_categoria[nombre] = gastos_por_categoria.get(nombre, 0) + monto
-        except Exception as tx_err:
-            print(f"[resumen] Error leyendo transacciones: {tx_err}", flush=True)
+            # Transacciones legacy
+            docs_fin = db.collection("finanzas").where(
+                filter=FieldFilter("usuario_id", "==", str(usuario_id))
+            ).stream()
+            tx_count = 0
+            for t in docs_fin:
+                d = t.to_dict()
+                monto = float(d.get("monto", 0))
+                tipo = d.get("tipo", "gasto")
+                cat = d.get("categoria", "General")
+                tx_count += 1
+                if tipo == "ingreso":
+                    ingresos += monto
+                else:
+                    gastos += monto
+                    gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + monto
+            print(f"[resumen] Legacy transacciones: {tx_count} docs, ingresos={ingresos}, gastos={gastos}", flush=True)
+        except Exception as legacy_err:
+            print(f"[resumen] Error leyendo legacy: {legacy_err}", flush=True)
+
+        # ============ ESTRATEGIA 2: Estructura Kebo nueva (si legacy vacío) ============
+        if ingresos == 0 and gastos == 0:
+            try:
+                user_ref = db.collection("users").document(usuario_id)
+                cat_map = {}
+                for c in user_ref.collection("categories").stream():
+                    cdata = c.to_dict()
+                    cat_map[c.id] = cdata.get("nombre", "?")
+
+                # Presupuestos Kebo
+                for year_doc in user_ref.collection("budgets").list_documents():
+                    for month_doc in year_doc.list_documents():
+                        for p in month_doc.collection("items").stream():
+                            pdata = p.to_dict()
+                            cat_name = pdata.get("category_name") or cat_map.get(pdata.get("category_id"), "?")
+                            presupuestos[cat_name] = float(pdata.get("amount", 0))
+
+                # Tx Kebo
+                for year_doc in user_ref.collection("transactions").list_documents():
+                    year_id = year_doc.id
+                    for month_doc in year_doc.list_documents():
+                        month_id = month_doc.id
+                        for t in user_ref.collection("transactions").document(year_id).document(month_id).collection("items").stream():
+                            tdata = t.to_dict()
+                            monto = float(tdata.get("amount", 0))
+                            tipo = tdata.get("type", "expense")
+                            cat_id = tdata.get("category_id")
+                            cat_name = cat_map.get(cat_id, "Sin categoría")
+                            if tipo == "income":
+                                ingresos += monto
+                            else:
+                                gastos += monto
+                                gastos_por_categoria[cat_name] = gastos_por_categoria.get(cat_name, 0) + monto
+                print(f"[resumen] Kebo ingresos={ingresos}, gastos={gastos}", flush=True)
+            except Exception as kebo_err:
+                print(f"[resumen] Error leyendo Kebo: {kebo_err}", flush=True)
 
         balance = ingresos - gastos
 
-        # 4) Construir respuesta
+        # ============ Construir respuesta ============
         datos_por_categoria = []
         total_limite = 0
         total_gastado = 0
