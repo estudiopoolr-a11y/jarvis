@@ -14,7 +14,7 @@ import json
 import firebase_admin
 from firebase_admin import credentials, initialize_app, firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
-from datetime import datetime
+from datetime import datetime, timedelta
 import calendar
 
 # Reutilizar la inicialización de database.py
@@ -582,3 +582,194 @@ def obtener_alertas_presupuesto(usuario_id="default"):
     except Exception as e:
         print(f"Error generando alertas: {e}")
         return []
+
+# ==================== CATEGORÍAS PREDEFINIDAS ====================
+
+CATEGORIAS_PREDEFINIDAS = [
+    {"nombre": "Alimentación", "icono": "🍔", "color": "#f59e0b", "tipo": "variable"},
+    {"nombre": "Transporte", "icono": "🚗", "color": "#6366f1", "tipo": "variable"},
+    {"nombre": "Servicios", "icono": "💡", "color": "#8b5cf6", "tipo": "fijo"},
+    {"nombre": "Arriendo", "icono": "🏠", "color": "#ec4899", "tipo": "fijo"},
+    {"nombre": "Entretenimiento", "icono": "🎬", "color": "#06b6d4", "tipo": "variable"},
+    {"nombre": "Salud", "icono": "🏥", "color": "#ef4444", "tipo": "variable"},
+    {"nombre": "Educación", "icono": "📚", "color": "#3b82f6", "tipo": "variable"},
+    {"nombre": "Ropa", "icono": "👕", "color": "#10b981", "tipo": "variable"},
+    {"nombre": "Hogar", "icono": "🏡", "color": "#84cc16", "tipo": "variable"},
+    {"nombre": "Mascotas", "icono": "🐕", "color": "#f97316", "tipo": "variable"},
+    {"nombre": "Celular", "icono": "📱", "color": "#a855f7", "tipo": "fijo"},
+    {"nombre": "Internet", "icono": "🌐", "color": "#14b8a6", "tipo": "fijo"},
+    {"nombre": "Deudas", "icono": "💳", "color": "#f43f5e", "tipo": "fijo"},
+    {"nombre": "Ahorro", "icono": "🏦", "color": "#22c55e", "tipo": "variable"},
+    {"nombre": "Inversión", "icono": "📈", "color": "#eab308", "tipo": "variable"},
+    {"nombre": "Otros", "icono": "📦", "color": "#6b7280", "tipo": "variable"},
+]
+
+def crear_categorias_predefinidas(usuario_id="default"):
+    """Crea todas las categorías predefinidas para un usuario."""
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return 0
+    try:
+        ensure_user(usuario_id)
+        count = 0
+        for cat in CATEGORIAS_PREDEFINIDAS:
+            # Verificar si ya existe
+            existing = user_ref.collection("categories").where("nombre", "==", cat["nombre"]).limit(1).stream()
+            existing_list = list(existing)
+            if not existing_list:
+                doc_ref = user_ref.collection("categories").document()
+                doc_ref.set({
+                    "nombre": cat["nombre"],
+                    "icono": cat["icono"],
+                    "color": cat["color"],
+                    "tipo": cat["tipo"],
+                    "budget": 0.0,
+                    "created_at": firestore.SERVER_TIMESTAMP
+                })
+                count += 1
+        return count
+    except Exception as e:
+        print(f"Error creando categorías predefinidas: {e}")
+        return 0
+
+# ==================== ESTADÍSTICAS ====================
+
+def obtener_estadisticas(usuario_id="default", meses=6):
+    """Obtiene estadísticas de gastos por categoría y tendencia."""
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return {}
+    try:
+        stats = {
+            "por_categoria": {},
+            "por_mes": {},
+            "tendencia": []
+        }
+
+        ahora = datetime.now()
+        meses_data = {}
+
+        # Obtener transacciones de los últimos N meses
+        for i in range(meses):
+            mes_date = ahora - timedelta(days=30 * i)
+            year = str(mes_date.year)
+            month = f"{mes_date.month:02d}"
+            mes_key = f"{year}-{month}"
+
+            try:
+                docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+                ingresos_mes = 0.0
+                gastos_mes = 0.0
+
+                for d in docs:
+                    t = d.to_dict()
+                    monto = float(t.get("monto", 0))
+                    tipo = t.get("tipo", "expense")
+
+                    if tipo == "income":
+                        ingresos_mes += monto
+                    elif tipo == "expense":
+                        gastos_mes += monto
+                        # Por categoría
+                        cat_id = t.get("category_id")
+                        if cat_id not in stats["por_categoria"]:
+                            stats["por_categoria"][cat_id] = {"total": 0, "nombre": cat_id}
+                        stats["por_categoria"][cat_id]["total"] += monto
+
+                meses_data[mes_key] = {
+                    "ingresos": ingresos_mes,
+                    "gastos": gastos_mes,
+                    "balance": ingresos_mes - gastos_mes
+                }
+            except Exception:
+                pass
+
+        stats["por_mes"] = meses_data
+
+        # Tendencia mensual (últimos 6 meses)
+        for mes_key in sorted(meses_data.keys()):
+            stats["tendencia"].append({
+                "mes": mes_key,
+                **meses_data[mes_key]
+            })
+
+        # Obtener nombres de categorías
+        cats = listar_categorias(usuario_id)
+        cat_nombres = {c["_id"]: c.get("nombre", "Desconocida") for c in cats}
+
+        for cat_id in stats["por_categoria"]:
+            if cat_id in cat_nombres:
+                stats["por_categoria"][cat_id]["nombre"] = cat_nombres[cat_id]
+
+        return stats
+    except Exception as e:
+        print(f"Error obteniendo estadísticas: {e}")
+        return {}
+
+# ==================== EXPORTAR ====================
+
+def exportar_csv(usuario_id="default", mes=None):
+    """Exporta transacciones del mes a CSV."""
+    if not mes:
+        mes = datetime.now().strftime("%Y-%m")
+
+    year, month = mes.split("-")
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return None, "DB no disponible"
+
+    try:
+        docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+        lineas = ["Fecha,Tipo,Monto,Categoría,Descripción"]
+
+        cats = listar_cuentas(usuario_id)  # Reuse para algo?
+
+        for d in docs:
+            t = d.to_dict()
+            fecha = t.get("fecha", "")
+            tipo = t.get("tipo", "")
+            monto = t.get("monto", 0)
+            desc = t.get("descripcion", "").replace(",", ";").replace("\n", " ")
+            linea = f"{fecha},{tipo},{monto},,{desc}"
+            lineas.append(linea)
+
+        csv = "\n".join(lineas)
+        return csv, f"export_{mes}.csv"
+    except Exception as e:
+        return None, f"Error: {e}"
+
+def exportar_json_completo(usuario_id="default"):
+    """Exporta todos los datos del usuario a JSON."""
+    db, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return None
+
+    try:
+        export = {
+            "fecha_export": datetime.now().isoformat(),
+            "usuario_id": usuario_id,
+            "cuentas": listar_cuentas(usuario_id),
+            "categorias": listar_categorias(usuario_id),
+            "metas": listar_metas_v2(usuario_id),
+            "recurrentes": listar_recurrentes(usuario_id),
+            "transacciones": {}
+        }
+
+        # Exportar transacciones por mes
+        ahora = datetime.now()
+        for i in range(12):
+            mes_date = ahora - timedelta(days=30 * i)
+            year = str(mes_date.year)
+            month = f"{mes_date.month:02d}"
+            mes_key = f"{year}-{month}"
+
+            try:
+                docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+                export["transacciones"][mes_key] = [{**d.to_dict(), "_id": d.id} for d in docs]
+            except Exception:
+                pass
+
+        return export
+    except Exception as e:
+        print(f"Error exportando: {e}")
+        return None

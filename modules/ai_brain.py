@@ -24,7 +24,8 @@ from modules.database_v2 import (
     registrar_transaccion_v2, obtener_balance_v2, obtener_presupuestos_v2,
     listar_cuentas, crear_cuenta, actualizar_presupuesto_categoria,
     registrar_transferencia, listar_metas_v2, guardar_meta_v2, agregar_aporte_meta,
-    listar_recurrentes, guardar_recurrente, obtener_alertas_presupuesto
+    listar_recurrentes, guardar_recurrente, obtener_alertas_presupuesto,
+    obtener_estadisticas, crear_categorias_predefinidas
 )
 from datetime import datetime
 
@@ -1110,6 +1111,72 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
                 msg += f"  {freq_emoji} **{nombre}**: ${monto:,.0f} / "
                 msg += f"día {dia}" if freq == "monthly" else freq
                 msg += "\n"
+            return msg
+
+    # =========================================
+    # 5i. ESTADÍSTICAS Y GRÁFICOS
+    # =========================================
+    if any(k in texto_lc for k in ["estadisticas", "estadísticas", "grafica", "gráfica", "grafico", "gráfico", "tendencia", "historial"]):
+        stats = obtener_estadisticas(usuario_id, 6)
+        if not stats or "tendencia" not in stats:
+            return "📊 No hay suficientes datos para mostrar estadísticas."
+
+        msg = "📊 **Estadísticas (últimos 6 meses):**\n\n"
+        msg += "**Tendencia mensual:**\n"
+        for t in stats.get("tendencia", []):
+            mes = t.get("mes", "")
+            ingresos = t.get("ingresos", 0)
+            gastos = t.get("gastos", 0)
+            bal = t.get("balance", 0)
+            emoji = "📈" if bal >= 0 else "📉"
+            msg += f"  {emoji} {mes}: +${ingresos:,.0f} / -${gastos:,.0f} (Net: ${bal:,.0f})\n"
+
+        # Top categorías
+        por_cat = stats.get("por_categoria", {})
+        if por_cat:
+            msg += "\n**Top categorías (gasto histórico):**\n"
+            sorted_cats = sorted(por_cat.items(), key=lambda x: x[1].get("total", 0), reverse=True)[:5]
+            for cat_id, info in sorted_cats:
+                nombre = info.get("nombre", cat_id)[:20]
+                total = info.get("total", 0)
+                msg += f"  • {nombre}: ${total:,.0f}\n"
+        return msg
+
+    # =========================================
+    # 5j. CREAR CATEGORÍAS PREDEFINIDAS
+    # =========================================
+    if any(k in texto_lc for k in ["categorias predefinidas", "categorías predefinidas", "categorias default", "inicializar categorias"]):
+        count = crear_categorias_predefinidas(usuario_id)
+        return f"✅ Se crearon {count} categorías predefinidas (Comida, Arriendo, Transporte, etc.)"
+
+    # =========================================
+    # 5k. COMPARACIÓN MES A MES MEJORADA
+    # =========================================
+    if any(k in texto_lc for k in ["comparar", "comparacion", "comparación", "vs"]) and "mes" in texto_lc:
+        # Detectar dos meses
+        meses_en_texto = []
+        for nombre, num in _MESES.items():
+            if nombre in texto_lc:
+                meses_en_texto.append((nombre, num))
+
+        if len(meses_en_texto) >= 2:
+            from datetime import datetime
+            import re
+            anio_match = re.search(r'20(?:24|25|26)', texto_lc)
+            anio = int(anio_match.group()) if anio_match else datetime.now().year
+
+            m1, m2 = meses_en_texto[0][1], meses_en_texto[1][1]
+            bal1, ing1, gas1, _ = obtener_balance_financiero(usuario_id, f"{anio}-{m1:02d}")
+            bal2, ing2, gas2, _ = obtener_balance_financiero(usuario_id, f"{anio}-{m2:02d}")
+
+            msg = f"📊 **Comparación {_NOMBRES_MESES[m1]} vs {_NOMBRES_MESES[m2]} ({anio}):**\n\n"
+            msg += f"**{_NOMBRES_MESES[m1]}:**\n  Ingresos: +${ing1:,.0f}\n  Gastos: -${gas1:,.0f}\n  Neto: ${bal1:,.0f}\n\n"
+            msg += f"**{_NOMBRES_MESES[m2]}:**\n  Ingresos: +${ing2:,.0f}\n  Gastos: -${gas2:,.0f}\n  Neto: ${bal2:,.0f}\n\n"
+
+            # Diferencia
+            diff_gastos = gas1 - gas2
+            diff_emoji = "📈" if diff_gastos > 0 else "📉" if diff_gastos < 0 else "➡️"
+            msg += f"{diff_emoji} Diferencia gastos: ${abs(diff_gastos):,.0f} ({'más' if diff_gastos > 0 else 'menos' if diff_gastos < 0 else 'igual'})"
             return msg
 
     # Crear recurrente: "cada 15 me sale arriendo 1.5M"

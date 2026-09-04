@@ -453,6 +453,85 @@ def cron_ejecutar_recurrentes():
         return {"error": True, "message": str(e)}
 
 
+@app.get("/api/kebo/seed")
+def api_kebo_seed(usuario_id: str = "default"):
+    """Endpoint one-time: crea categorías predefinidas y cuentas default."""
+    try:
+        from modules.database_v2 import crear_categorias_predefinidas, crear_cuenta, ensure_user
+        ensure_user(usuario_id, "Pool")
+        cats_creadas = crear_categorias_predefinidas(usuario_id)
+
+        # Crear cuentas solo si no existen
+        cuentas_default = [
+            {"nombre": "Efectivo", "tipo": "cash"},
+            {"nombre": "Nequi", "tipo": "debit"},
+            {"nombre": "Crédito", "tipo": "credit"},
+        ]
+        from modules.database_v2 import listar_cuentas
+        existing = [c.get("nombre") for c in listar_cuentas(usuario_id)]
+        cuentas_creadas = 0
+        for c in cuentas_default:
+            if c["nombre"] not in existing:
+                crear_cuenta(usuario_id, c["nombre"], c["tipo"], 0)
+                cuentas_creadas += 1
+
+        return {"status": "ok", "categorias_creadas": cats_creadas, "cuentas_creadas": cuentas_creadas}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/estadisticas")
+def api_kebo_estadisticas(usuario_id: str = "default", meses: int = 6):
+    """Endpoint para gráficos: estadísticas agregadas."""
+    try:
+        from modules.database_v2 import obtener_estadisticas
+        stats = obtener_estadisticas(usuario_id, meses)
+        return stats
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/export")
+def api_kebo_export(usuario_id: str = "default"):
+    """Descarga JSON completo de todos los datos del usuario."""
+    try:
+        from modules.database_v2 import exportar_json_completo
+        import json
+        data = exportar_json_completo(usuario_id)
+        if not data:
+            return {"error": "No se pudo exportar"}
+        from fastapi.responses import Response
+        return Response(
+            content=json.dumps(data, indent=2, default=str),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f"attachment; filename=jarvis_export_{usuario_id}.json"
+            }
+        )
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/export-csv")
+def api_kebo_export_csv(usuario_id: str = "default", mes: str = None):
+    """Descarga CSV de transacciones del mes."""
+    try:
+        from modules.database_v2 import exportar_csv
+        csv_data, filename = exportar_csv(usuario_id, mes)
+        if not csv_data:
+            return {"error": "No se pudo exportar"}
+        from fastapi.responses import Response
+        return Response(
+            content=csv_data,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
 @app.get("/api/kebo/presupuestos")
 def api_kebo_presupuestos(usuario_id: str = "default", mes: str = None):
     """API para widget iPhone: presupuestos con gastado del mes (NUEVA ESTRUCTURA KEBO)."""
