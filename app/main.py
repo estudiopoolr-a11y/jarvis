@@ -635,9 +635,8 @@ def api_kebo_load_agosto(usuario_id: str = "default"):
             (49900, "use personal", "Productos aseo personal", "Nequi", 6),
             (48000, "use personal", "Corte pelo y productos", "Efectivo", 18),
 
-            # Prestamos: 2 tx, total $60.000
-            (30000, "Prestamos", "Préstamo a amigo", "Efectivo", 10),
-            (30000, "Prestamos", "Préstamo a familiar", "Efectivo", 22),
+            # NOTA: Los préstamos a otras personas NO se cuentan como gasto.
+            # Se manejan aparte con el módulo de préstamos (/api/prestamos/*)
 
             # madre: 1 tx, total $50.000
             (50000, "madre", "Ayuda mensual", "Efectivo", 3),
@@ -672,6 +671,48 @@ def api_kebo_load_agosto(usuario_id: str = "default"):
             tags=["agosto-2026"]
         )
 
+        # ===== 5. MIGRAR PRÉSTAMOS EXISTENTES =====
+        # Si hay transacciones viejas en categoría "Prestamos" o "Préstamo",
+        # las movemos al módulo de préstamos y las borramos de transacciones.
+        prestamos_migrados = 0
+        if db:
+            try:
+                from modules.database import registrar_prestamo
+                user_ref = db.collection("users").document(usuario_id)
+                cats_prestamos = ["Prestamos", "Préstamo"]
+                for cat_nombre in cats_prestamos:
+                    # Buscar transacciones con tag agosto-2026 y categoría prestamos
+                    # Recorremos los meses de 2026 buscando items con category_name
+                    for mes in ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]:
+                        items_ref = user_ref.collection("transactions")\
+                            .document("2026").document(mes).collection("items")
+                        docs = list(items_ref.stream())
+                        for d in docs:
+                            data = d.to_dict()
+                            # Verificar si la transacción es de categoría Prestamos
+                            cat_id = data.get("category_id")
+                            if cat_id:
+                                cat_doc = user_ref.collection("categories").document(cat_id).get()
+                                if cat_doc.exists:
+                                    cat_name = cat_doc.to_dict().get("nombre", "")
+                                    if cat_name in cats_prestamos and data.get("type") == "expense":
+                                        monto = float(data.get("amount", 0))
+                                        fecha = data.get("date", f"2026-{mes}-01")
+                                        desc = data.get("description", "Préstamo migrado")
+                                        # Crear en módulo de préstamos
+                                        registrar_prestamo(
+                                            usuario_id,
+                                            persona=desc,
+                                            monto=monto,
+                                            fecha=fecha,
+                                            nota="Migrado desde transacciones"
+                                        )
+                                        # Borrar la transacción original
+                                        d.reference.delete()
+                                        prestamos_migrados += 1
+            except Exception as mig_err:
+                print(f"[load-agosto-2026] Migración de préstamos: {mig_err}", flush=True)
+
         return {
             "status": "ok",
             "message": f"Datos de agosto 2026 cargados correctamente",
@@ -679,6 +720,7 @@ def api_kebo_load_agosto(usuario_id: str = "default"):
             "presupuestos": len(presupuestos_agosto),
             "transacciones_gastos": tx_creadas,
             "transacciones_ingresos": 1,
+            "prestamos_migrados": prestamos_migrados,
             "total_gastos": sum(g[0] for g in gastos_agosto),
             "total_ingresos": 806199.03
         }
