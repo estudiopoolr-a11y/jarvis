@@ -218,9 +218,17 @@ def api_finanzas_resumen(usuario_id: str = "default"):
     # Mes actual en formato YYYY-MM
     mes_actual = datetime.now().strftime("%Y-%m")
 
-    # Obtener datos SOLO del mes actual
-    balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id, mes_actual)
-    presupuestos = obtener_resumen_presupuestos(usuario_id, mes_actual)
+    try:
+        # Intentar con parámetro mes (versión nueva)
+        balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id, mes_actual)
+    except TypeError:
+        # Fallback: versión vieja sin parámetro mes
+        balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
+
+    try:
+        presupuestos = obtener_resumen_presupuestos(usuario_id, mes_actual)
+    except TypeError:
+        presupuestos = obtener_resumen_presupuestos(usuario_id)
 
     # Calcular gastos del mes actual por categoría
     gastos_por_categoria = {}
