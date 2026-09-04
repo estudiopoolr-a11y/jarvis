@@ -1040,6 +1040,53 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         guardar_tarea(usuario_id, tarea_data["tarea"], tarea_data["prioridad"], tarea_data["fecha_limite"])
         return f"📌 Tarea registrada: *{tarea_data['tarea']}* [Prioridad: {tarea_data['prioridad']}, Vence: {tarea_data['fecha_limite']}]"
 
+    # 5b-2. QUERY POR TAG: "transacciones #vacaciones", "gastos con tag #proyecto"
+    tag_match = re.search(r'transacciones?\s+(?:con\s+)?#?tag\s+#(\w+)', texto_lc)
+    if not tag_match:
+        tag_match = re.search(r'(?:gastos?|transacciones?)\s+(?:con\s+)?#(\w+)', texto_lc)
+    if not tag_match:
+        tag_match = re.search(r'ver\s+#(\w+)', texto_lc)
+    if tag_match:
+        tag = f"#{tag_match.group(1)}"
+        from modules.database import listar_transacciones_recientes
+        todas = listar_transacciones_recientes(usuario_id, limite=50)
+        filtradas = [t for t in todas if tag in (t.get("tags", []) or [])]
+        if not filtradas:
+            return f"🔍 No hay transacciones con {tag}."
+        total = sum(float(t.get("amount") or t.get("monto", 0)) for t in filtradas)
+        msg = f"🏷️ **Transacciones con {tag}:**\n"
+        for t in filtradas[:10]:
+            monto = float(t.get("amount") or t.get("monto", 0))
+            tipo = t.get("type") or t.get("tipo", "expense")
+            fecha = t.get("date") or t.get("fecha", "?")
+            desc = t.get("description") or t.get("descripcion", "")
+            icono = "💸" if tipo == "expense" else "💰"
+            msg += f"  {icono} {fecha} {desc}: ${monto:,.0f}\n"
+        msg += f"\n📊 Total: ${total:,.0f}"
+        return msg
+
+    # 5b-3. QUERY POR PAYEE: "gastos en Netflix", "pagos a D1"
+    payee_match = re.search(r'(?:gastos?|pagos?)\s+(?:en|a|en\s+a)\s+(.+?)(?:\s+de|\s+por|\s*$|$)', texto_lc)
+    if not payee_match:
+        payee_match = re.search(r'cuánto\s+gast[oé]\s+en\s+(.+?)(?:\s+de|\s*$|$)', texto_lc)
+    if payee_match:
+        payee_buscar = payee_match.group(1).strip()
+        from modules.database import listar_transacciones_recientes
+        todas = listar_transacciones_recientes(usuario_id, limite=50)
+        filtradas = [t for t in todas
+                     if payee_buscar in (t.get("payee") or "").lower()
+                     or payee_buscar in (t.get("description") or "").lower()]
+        if not filtradas:
+            return f"🔍 No hay gastos en '{payee_buscar}'."
+        total = sum(float(t.get("amount") or t.get("monto", 0)) for t in filtradas)
+        msg = f"🏪 **{payee_buscar.title()}:**\n"
+        for t in filtradas[:10]:
+            monto = float(t.get("amount") or t.get("monto", 0))
+            fecha = t.get("date") or t.get("fecha", "?")
+            msg += f"  💸 {fecha}: ${monto:,.0f}\n"
+        msg += f"\n📊 Total: ${total:,.0f}"
+        return msg
+
     # 5c. Transacción (gasto/ingreso) - USA NUEVA ESTRUCTURA KEBO
     transaccion = _parse_transaccion(texto_lc)
     if transaccion:
@@ -1074,8 +1121,21 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     # 5d. Presupuesto
     presupuesto_data = _parse_presupuesto(texto_lc)
     if presupuesto_data:
-        establecer_presupuesto(usuario_id, presupuesto_data["categoria"], presupuesto_data["limite"])
-        return f"🎯 Presupuesto: *{presupuesto_data['categoria']}* = **${presupuesto_data['limite']:,.0f}**"
+        # Detectar si especifica mes: "presupuesto Comida 300k en septiembre"
+        mes_match = re.search(r'\b(?:en|para|del?)\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b', texto_lc)
+        year_match = re.search(r'\b(20\d{2})\b', texto_lc)
+
+        if mes_match:
+            from modules.database import establecer_presupuesto_mes
+            meses = {"enero":1,"febrero":2,"marzo":3,"abril":4,"mayo":5,"junio":6,
+                     "julio":7,"agosto":8,"septiembre":9,"setiembre":9,"octubre":10,"noviembre":11,"diciembre":12}
+            mes_num = meses[mes_match.group(1)]
+            year = year_match.group(1) if year_match else str(datetime.now().year)
+            establecer_presupuesto_mes(usuario_id, presupuesto_data["categoria"], presupuesto_data["limite"], year, f"{mes_num:02d}")
+            return f"🎯 Presupuesto: *{presupuesto_data['categoria']}* = **${presupuesto_data['limite']:,.0f}** (para {mes_match.group(1).title()} {year})"
+        else:
+            establecer_presupuesto(usuario_id, presupuesto_data["categoria"], presupuesto_data["limite"])
+            return f"🎯 Presupuesto: *{presupuesto_data['categoria']}* = **${presupuesto_data['limite']:,.0f}**"
 
     # 5d-2. Modificar presupuesto (sube/baja/cambia)
     mod_pres = _parse_presupuesto_modificar(texto_lc)
