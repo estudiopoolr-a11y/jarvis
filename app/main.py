@@ -1488,6 +1488,7 @@ def api_admin_debug_finanzas(usuario_id: str = "iphone_user"):
 @app.get("/api/admin/audit")
 def api_admin_audit(usuario_id: str = "iphone_user"):
     """Escanea toda la base de datos Firebase y devuelve un reporte completo."""
+    import traceback
     try:
         from modules.database import inicializar_firebase
         from modules.migration import auditar_firebase
@@ -1496,22 +1497,163 @@ def api_admin_audit(usuario_id: str = "iphone_user"):
             return {"error": "Firebase no disponible"}
         return auditar_firebase(db, usuario_id)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return {"error": str(e)}
+        return {
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "traceback": traceback.format_exc()
+        }
+
+
+@app.get("/api/admin/debug-migration")
+def api_admin_debug_migration(usuario_id: str = "iphone_user"):
+    """Debug: prueba cada llamada a Firestore individualmente."""
+    import traceback
+    resultados = {}
+
+    try:
+        from modules.database import inicializar_firebase, _get_user_ref
+        db = inicializar_firebase()
+        resultados["firebase_init"] = "ok" if db else "FAILED"
+        if not db:
+            return resultados
+
+        # Test 1: Obtener user_ref
+        try:
+            db2, user_ref = _get_user_ref(usuario_id)
+            resultados["user_ref"] = f"ok - id={user_ref.id if user_ref else 'None'}"
+        except Exception as e:
+            resultados["user_ref"] = f"ERROR: {traceback.format_exc()}"
+            return resultados
+
+        # Test 2: Listar accounts
+        try:
+            count = sum(1 for _ in user_ref.collection("accounts").stream())
+            resultados["accounts"] = f"ok count={count}"
+        except Exception as e:
+            resultados["accounts"] = f"ERROR: {traceback.format_exc()}"
+
+        # Test 3: Listar categories
+        try:
+            count = sum(1 for _ in user_ref.collection("categories").stream())
+            resultados["categories"] = f"ok count={count}"
+        except Exception as e:
+            resultados["categories"] = f"ERROR: {traceback.format_exc()}"
+
+        # Test 4: Listar transactions (estructura vieja)
+        try:
+            all_docs = list(user_ref.collection("transactions").get())
+            resultados["transactions_docs"] = f"ok count={len(all_docs)}"
+            for d in all_docs:
+                resultados[f"tx_{d.id}"] = "exists"
+        except Exception as e:
+            resultados["transactions_docs"] = f"ERROR: {traceback.format_exc()}"
+
+        # Test 5: Intentar crear transacción
+        try:
+            from datetime import datetime
+            now = datetime.now()
+            periodo = f"{now.year}-{now.month:02d}"
+            ref = user_ref.collection("transactions").document(periodo).collection("items").document()
+            resultados["tx_create_ref"] = f"ok - ref={ref.id}"
+        except Exception as e:
+            resultados["tx_create_ref"] = f"ERROR: {traceback.format_exc()}"
+
+        return resultados
+    except Exception as e:
+        return {"error_global": str(e), "tb": traceback.format_exc()}
 
 
 @app.post("/api/admin/migrate-all")
 def api_admin_migrate_all(usuario_id: str = Form("iphone_user")):
     """Ejecuta la migración completa de datos legacy a estructura users/iphone_user/."""
+    import traceback
+    import sys
+    steps = {}
     try:
-        from modules.migration import migrar_todo
-        resultado = migrar_todo(usuario_id)
-        return resultado
+        # Step 1: Inicializar Firebase
+        from modules.database import inicializar_firebase, ensure_user, crear_categoria
+        db = inicializar_firebase()
+        if not db:
+            return {"error": "Firebase no disponible"}
+        steps["1_firebase"] = "ok"
+
+        # Step 2: Ensure user
+        ensure_user(usuario_id, "Pool")
+        steps["2_ensure_user"] = "ok"
+
+        # Step 3: Importar funciones de migración
+        from modules.migration import migrar_transacciones_legacy, migrar_presupuestos_legacy
+        from modules.migration import migrar_prestamos_legacy, migrar_metas_legacy
+        from modules.migration import migrar_pagos_fijos_legacy, migrar_tareas_legacy
+        steps["3_import"] = "ok"
+
+        # Step 4: Categorías base
+        cats_base = [
+            "Alimentación", "Transporte", "Servicios", "Arriendo", "Entretenimiento",
+            "Salud", "Educación", "Ropa", "Hogar", "Mascotas", "Celular", "Internet",
+            "Deudas", "Ahorro", "Inversión", "Otros",
+            "Women", "madre", "Moto", "use personal", "futbol", "gym",
+            "estudio", "padre", "Casa", "Préstamo", "Prestamos",
+            "Salario", "General",
+        ]
+        cats_creadas = 0
+        for cat in cats_base:
+            if crear_categoria(usuario_id, cat, 0):
+                cats_creadas += 1
+        steps["4_categorias"] = f"{cats_creadas} creadas"
+
+        # Step 5: Migrar transacciones
+        try:
+            from modules.migration import migrar_transacciones_legacy as mig_tx
+            tx_result = mig_tx(db, usuario_id)
+            steps["5_transacciones"] = tx_result
+        except Exception as ex:
+            steps["5_transacciones"] = f"ERROR: {ex}"
+
+        # Step 6: Migrar presupuestos
+        try:
+            from modules.migration import migrar_presupuestos_legacy as mig_pres
+            pres_result = mig_pres(db, usuario_id)
+            steps["6_presupuestos"] = pres_result
+        except Exception as ex:
+            steps["6_presupuestos"] = f"ERROR: {ex}"
+
+        # Step 7: Préstamos, metas, pagos, tareas
+        try:
+            from modules.migration import migrar_prestamos_legacy as mig_pr
+            steps["7_prestamos"] = mig_pr(db, usuario_id)
+        except Exception as ex:
+            steps["7_prestamos"] = f"ERROR: {ex}"
+
+        try:
+            from modules.migration import migrar_metas_legacy as mig_m
+            steps["8_metas"] = mig_m(db, usuario_id)
+        except Exception as ex:
+            steps["8_metas"] = f"ERROR: {ex}"
+
+        try:
+            from modules.migration import migrar_pagos_fijos_legacy as mig_pf
+            steps["9_pagos"] = mig_pf(db, usuario_id)
+        except Exception as ex:
+            steps["9_pagos"] = f"ERROR: {ex}"
+
+        try:
+            from modules.migration import migrar_tareas_legacy as mig_t
+            steps["10_tareas"] = mig_t(db, usuario_id)
+        except Exception as ex:
+            steps["10_tareas"] = f"ERROR: {ex}"
+
+        return {"status": "ok", "steps": steps}
+
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return {"error": str(e)}
+        exc_info = sys.exc_info()
+        tb_lines = traceback.format_exception(*exc_info)
+        return {
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "steps_completed": steps,
+            "full_traceback": "".join(tb_lines)
+        }
 
 
 @app.get("/api/admin/presupuestos-tabla")

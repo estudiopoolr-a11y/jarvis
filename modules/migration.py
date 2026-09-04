@@ -136,33 +136,43 @@ def auditar_firebase(db, usuario_id="default"):
         resultado["nuevo"]["categories"] = {"count": 0}
 
     # Transactions (todos los meses)
+    # Estructura: transactions/{periodo}/items/{id} donde periodo = "YYYY-MM"
     try:
         total_tx = 0
-        years = list(user_ref.collection("transactions").list_documents())
         months_per_year = {}
-        for year_doc in years:
-            year_id = year_doc.id
-            months = list(year_doc.list_documents())
-            months_per_year[year_id] = [m.id for m in months]
-            for month_doc in months:
-                total_tx += sum(1 for _ in month_doc.collection("items").stream())
+        all_docs = user_ref.collection("transactions").get()
+        for doc in all_docs:
+            doc_id = doc.id
+            if doc_id.startswith("_"):
+                continue
+            if "-" in doc_id:
+                year, month = doc_id.split("-", 1)
+                key = year
+                if key not in months_per_year:
+                    months_per_year[key] = []
+                months_per_year[key].append(month)
+            else:
+                months_per_year[doc_id] = []
+            total_tx += sum(1 for _ in doc.reference.collection("items").stream())
         resultado["nuevo"]["transactions"] = {
             "count": total_tx,
             "years_months": months_per_year
         }
     except Exception as e:
-        resultado["nuevo"]["transactions"] = {"count": 0, "error": str(e)}
+        import traceback
+        resultado["nuevo"]["transactions"] = {"count": 0, "error": str(e), "trace": traceback.format_exc()[-500:]}
 
     # Budgets
     try:
         total_budgets = 0
-        years_b = list(user_ref.collection("budgets").list_documents())
-        for year_doc in years_b:
-            for month_doc in year_doc.list_documents():
-                total_budgets += sum(1 for _ in month_doc.collection("items").stream())
+        all_docs = user_ref.collection("budgets").get()
+        for doc in all_docs:
+            if doc.id.startswith("_"):
+                continue
+            total_budgets += sum(1 for _ in doc.reference.collection("items").stream())
         resultado["nuevo"]["budgets"] = {"count": total_budgets}
-    except:
-        resultado["nuevo"]["budgets"] = {"count": 0}
+    except Exception as e:
+        resultado["nuevo"]["budgets"] = {"count": 0, "error": str(e)}
 
     # Loans
     try:
@@ -201,6 +211,70 @@ def auditar_firebase(db, usuario_id="default"):
     return resultado
 
 
+def _normalizar(texto):
+    """Normaliza texto para matching: lowercase + sin tildes + sin espacios extra."""
+    if not texto:
+        return ""
+    t = texto.lower().strip()
+    # Quitar tildes
+    t = t.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+    t = t.replace("ñ", "n")
+    return t
+
+
+# Mapa de alias: nombre legacy (normalizado) → nombre real en Firebase
+# Esto resuelve casos como "Alimentacion" (legacy) vs "Alimentación" (kebo)
+ALIAS_CATEGORIAS = {
+    "alimentacion": "Alimentación",
+    "madre": "madre",
+    "personal": "use personal",
+    "use personal": "use personal",
+    "futbol": "futbol",
+    "moto": "Moto",
+    "women": "Women",
+    "deudas": "Deudas",
+    "prestamo": "Préstamo",
+    "prestamos": "Prestamos",
+    "salario": "Salario",
+    "inversion": "Inversión",
+    "ahorro": "Ahorro",
+    "casa": "Casa",
+    "padre": "padre",
+    "estudio": "estudio",
+    "gym": "gym",
+    "general": "General",
+}
+
+
+def _buscar_categoria_id(user_ref, nombre_buscado):
+    """Busca categoría por nombre (con normalización y alias)."""
+    if not nombre_buscado:
+        return None
+
+    # 1. Match exacto
+    existing = list(user_ref.collection("categories").where("nombre", "==", nombre_buscado).limit(1).stream())
+    if existing:
+        return existing[0].id
+
+    # 2. Match por alias (legacy → kebo)
+    nombre_norm = _normalizar(nombre_buscado)
+    nombre_real = ALIAS_CATEGORIAS.get(nombre_norm)
+    if nombre_real and nombre_real != nombre_buscado:
+        existing = list(user_ref.collection("categories").where("nombre", "==", nombre_real).limit(1).stream())
+        if existing:
+            return existing[0].id
+
+    # 3. Match normalizado (buscar todas las categorías y comparar normalizadas)
+    todas = list(user_ref.collection("categories").stream())
+    for cat_doc in todas:
+        cat_data = cat_doc.to_dict()
+        nombre_existente = cat_data.get("nombre", "")
+        if _normalizar(nombre_existente) == nombre_norm:
+            return cat_doc.id
+
+    return None
+
+
 def migrar_transacciones_legacy(db, usuario_id="default"):
     """Migra documentos de 'finanzas' a 'transactions/{year}/{month}/items/'."""
     stats = {"leidas": 0, "migradas": 0, "saltadas_prestamo": 0, "errores": 0}
@@ -212,17 +286,18 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
     # (solo hay un usuario en la BD)
     docs = list(db.collection("finanzas").stream())
 
-    # Crear mapa de categorías
+    # Crear mapa de categorías con matching flexible
     cat_map = {}
     for d in docs:
         data = d.to_dict()
         cat_nombre = data.get("categoria", "General")
         if cat_nombre and cat_nombre not in cat_map:
-            # Buscar o crear categoría
-            existing = list(user_ref.collection("categories").where("nombre", "==", cat_nombre).limit(1).stream())
-            if existing:
-                cat_map[cat_nombre] = existing[0].id
+            # Buscar categoría con matching flexible
+            cat_id = _buscar_categoria_id(user_ref, cat_nombre)
+            if cat_id:
+                cat_map[cat_nombre] = cat_id
             else:
+                # Crear nueva
                 new_cat = user_ref.collection("categories").document()
                 new_cat.set({
                     "nombre": cat_nombre,
@@ -262,8 +337,9 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
                 fecha = ahora.strftime("%Y-%m-%d")
 
         # Verificar si ya existe (idempotencia)
+        periodo = f"{year}-{month}"  # ej: "2026-09"
         existing = list(
-            user_ref.collection("transactions").document(year).collection(month).collection("items")
+            user_ref.collection("transactions").document(periodo).collection("items")
             .where("legacy_id", "==", d.id).limit(1).stream()
         )
         if existing:
@@ -282,7 +358,7 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
 
         # Crear transacción
         try:
-            tx_ref = user_ref.collection("transactions").document(year).collection(month).collection("items").document()
+            tx_ref = user_ref.collection("transactions").document(periodo).collection("items").document()
             tx_ref.set({
                 "type": tipo_kebo,
                 "amount": float(data.get("monto", 0)),
@@ -315,6 +391,10 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
     year = str(ahora.year)
     month = f"{ahora.month:02d}"
 
+    # Asegurar que existan los documentos padre
+    periodo = f"{year}-{month}"  # ej: "2026-09"
+    user_ref.collection("budgets").document(periodo).set({"_exists": True}, merge=True)
+
     for d in docs:
         data = d.to_dict()
         stats["leidos"] += 1
@@ -322,15 +402,25 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
         cat_nombre = data.get("categoria", "General")
         limite = float(data.get("limite", 0))
 
-        # Buscar category_id
-        existing = list(user_ref.collection("categories").where("nombre", "==", cat_nombre).limit(1).stream())
-        cat_id = existing[0].id if existing else None
+        # Buscar category_id con matching flexible (legacy "Alimentacion" → kebo "Alimentación")
+        cat_id = _buscar_categoria_id(user_ref, cat_nombre)
+        # Si hay alias, usar el nombre real para guardarlo en el presupuesto
+        if cat_id:
+            todas = list(user_ref.collection("categories").stream())
+            for cd in todas:
+                if cd.id == cat_id:
+                    nombre_real = cd.to_dict().get("nombre", cat_nombre)
+                    break
+            else:
+                nombre_real = cat_nombre
+        else:
+            nombre_real = cat_nombre
 
         # Verificar si ya existe
         existing_budget = None
         if cat_id:
             existing_budget = list(
-                user_ref.collection("budgets").document(year).collection(month).collection("items")
+                user_ref.collection("budgets").document(periodo).collection("items")
                 .where("category_id", "==", cat_id).limit(1).stream()
             )
 
@@ -340,9 +430,9 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
             stats["migrados"] += 1
         else:
             try:
-                user_ref.collection("budgets").document(year).collection(month).collection("items").document().set({
+                user_ref.collection("budgets").document(periodo).collection("items").document().set({
                     "category_id": cat_id,
-                    "category_name": cat_nombre,
+                    "category_name": nombre_real,
                     "amount": limite,
                     "year": year,
                     "month": month,
@@ -456,10 +546,9 @@ def migrar_pagos_fijos_legacy(db, usuario_id="default"):
         if existing:
             continue
 
-        # Buscar categoría
+        # Buscar categoría con matching flexible
         cat_nombre = data.get("categoria", "General")
-        existing_cat = list(user_ref.collection("categories").where("nombre", "==", cat_nombre).limit(1).stream())
-        cat_id = existing_cat[0].id if existing_cat else None
+        cat_id = _buscar_categoria_id(user_ref, cat_nombre)
 
         try:
             rec_ref = user_ref.collection("recurring").document()

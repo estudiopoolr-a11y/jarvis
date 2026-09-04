@@ -54,6 +54,56 @@ function formatMoney(amount) {
     return num < 0 ? `-${formatted}` : formatted
 }
 
+function transformarPresupuestos(raw) {
+    // /api/kebo/presupuestos devuelve {mes, presupuestos: {nombre: {limite, gastado, libre, excedido}}}
+    // Lo convertimos a {filas: [{categoria, presupuestado, gastado, disponible, excedido}], totales}
+    if (!raw || !raw.presupuestos || Object.keys(raw.presupuestos).length === 0) {
+        return { filas: [], totales: { presupuestado: 0, gastado: 0, disponible: 0, excedidos_count: 0 } }
+    }
+
+    const filas = []
+    let totalPres = 0
+    let totalGas = 0
+    let totalDisp = 0
+    let excedidosCount = 0
+
+    for (const [nombre, info] of Object.entries(raw.presupuestos)) {
+        const presupuestado = Number(info.limite) || 0
+        const gastado = Number(info.gastado) || 0
+        const disponible = presupuestado - gastado
+        const excedido = disponible < 0
+        if (excedido) excedidosCount++
+
+        filas.push({
+            categoria: nombre,
+            presupuestado,
+            gastado,
+            disponible,
+            excedido
+        })
+        totalPres += presupuestado
+        totalGas += gastado
+        totalDisp += disponible
+    }
+
+    // Ordenar: excedidos primero, luego por menor disponible
+    filas.sort((a, b) => {
+        if (a.excedido && !b.excedido) return -1
+        if (!a.excedido && b.excedido) return 1
+        return a.disponible - b.disponible
+    })
+
+    return {
+        filas,
+        totales: {
+            presupuestado: totalPres,
+            gastado: totalGas,
+            disponible: totalDisp,
+            excedidos_count: excedidosCount
+        }
+    }
+}
+
 async function main() {
     const w = new ListWidget()
     w.backgroundColor = new Color(COLORS.bg)
@@ -61,13 +111,16 @@ async function main() {
 
     const widgetFamily = config.widgetFamily || "small"
 
-    // Cargar datos en paralelo
-    const [presupuestosData, prestamosData, alertasData, resumenData] = await Promise.all([
-        fetchJSON(`${BASE_URL}/api/admin/presupuestos-tabla?usuario_id=${USUARIO}`),
-        fetchJSON(`${BASE_URL}/api/prestamos/por-cobrar?usuario_id=${USUARIO}`),
+    // Cargar datos en paralelo (usando endpoints existentes)
+    const [presupuestosRaw, prestamosData, alertasData, resumenData] = await Promise.all([
+        fetchJSON(`${BASE_URL}/api/kebo/presupuestos?usuario_id=${USUARIO}`),
+        fetchJSON(`${BASE_URL}/api/prestamos/listar?usuario_id=${USUARIO}&solo_pendientes=true`),
         fetchJSON(`${BASE_URL}/api/kebo/alertas?usuario_id=${USUARIO}`),
         fetchJSON(`${BASE_URL}/api/finanzas/resumen?usuario_id=${USUARIO}`)
     ])
+
+    // Transformar el formato /api/kebo/presupuestos → formato interno {filas, totales}
+    const presupuestosData = transformarPresupuestos(presupuestosRaw)
 
     if (widgetFamily === "small") {
         await renderSmallWidget(w, presupuestosData, prestamosData)
