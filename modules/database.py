@@ -2,9 +2,33 @@
 database.py - JARVIS Database Module
 ====================================
 
-Este archivo maneja TODA la interacción con Firestore:
-- Estructura nueva (Kebo): users/{userId}/accounts, categories, transactions, goals, recurring
-- Funciones legacy: tareas, perfil, pagos_fijos (para compatibilidad)
+Estructura Firestore estilo KEBO:
+users/{userId}/
+  ├── accounts/{accountId}                 # Cuentas con metadata Kebo:
+  │   ├── name, type (cash|savings|checking|credit|investment)
+  │   ├── currency, institution, bank_last4
+  │   ├── balance, icon, color
+  │
+  ├── categories/{categoryId}              # Categorías (sin budget, el budget está separado)
+  │   ├── name, icon, color, type (fijo|variable)
+  │
+  ├── transactions/{year}/{month}/items/{txId}    # Transacciones por mes
+  │   ├── type (income|expense|transfer)
+  │   ├── amount, account_id, category_id
+  │   ├── payee, description, fee, status (pending|cleared)
+  │   ├── tags, date, created_at
+  │
+  ├── budgets/{year}/{month}/items/{id}          # ⭐ Presupuestos por mes+año (Kebo style)
+  │   ├── category_id, category_name, amount
+  │
+  ├── goals/{goalId}                       # Metas de ahorro
+  │   ├── name, target_amount, current_amount, deadline
+  │
+  └── recurring/{recId}                    # Pagos recurrentes
+      ├── name, amount, day, frequency, category_id, account_id
+
+Estructura legacy (compatibilidad):
+- finanzas/, presupuestos/, metas/, pagos_fijos/, tareas/
 
 Autor: JARVIS AI Assistant
 """
@@ -98,19 +122,42 @@ def ensure_user(usuario_id="default", nombre=""):
 # ==================== CUENTAS (KEBO) ====================
 
 def listar_cuentas(usuario_id="default"):
-    """Lista todas las cuentas del usuario."""
+    """Lista todas las cuentas del usuario (estilo Kebo).
+    Incluye: nombre, type, currency, institution, bank_last4, balance, icon, color.
+    """
     _, user_ref = _get_user_ref(usuario_id)
     if not user_ref:
         return []
     try:
         docs = user_ref.collection("accounts").stream()
-        return [{**d.to_dict(), "_id": d.id} for d in docs]
+        cuentas = []
+        for d in docs:
+            data = d.to_dict()
+            # Compatibilidad: viejo (tipo/icono) -> nuevo (type/icon)
+            cuentas.append({
+                "_id": d.id,
+                "nombre": data.get("nombre", ""),
+                "type": data.get("type") or data.get("tipo", "cash"),    # Kebo: type
+                "currency": data.get("currency", "COP"),                   # Kebo: currency
+                "institution": data.get("institution", ""),              # Kebo: institution
+                "bank_last4": data.get("bank_last4", ""),                  # Kebo: bank_last4
+                "balance": float(data.get("balance", 0)),
+                "icon": data.get("icon") or data.get("icono", "💵"),      # Kebo: icon
+                "color": data.get("color", "#10b981"),
+                # Alias legacy
+                "tipo": data.get("type") or data.get("tipo", "cash"),
+                "icono": data.get("icon") or data.get("icono", "💵"),
+            })
+        return cuentas
     except Exception as e:
         print(f"Error listando cuentas: {e}")
         return []
 
-def crear_cuenta(usuario_id, nombre, tipo="cash", balance=0, icono="💵", color="#10b981"):
-    """Crea una nueva cuenta."""
+def crear_cuenta(usuario_id, nombre, tipo="cash", balance=0, icono="💵", color="#10b981",
+                 currency="COP", institution="", bank_last4=""):
+    """Crea una nueva cuenta con metadata estilo Kebo.
+    tipo: cash | savings | checking | credit | investment
+    """
     _, user_ref = _get_user_ref(usuario_id)
     if not user_ref:
         return None
@@ -119,9 +166,12 @@ def crear_cuenta(usuario_id, nombre, tipo="cash", balance=0, icono="💵", color
         doc_ref = user_ref.collection("accounts").document()
         doc_ref.set({
             "nombre": nombre,
-            "tipo": tipo,
+            "type": tipo,                          # Campo Kebo: 'type' en inglés
+            "currency": currency,                  # Campo Kebo: moneda base
+            "institution": institution,            # Campo Kebo: banco (Bancolombia, Davivienda, etc.)
+            "bank_last4": bank_last4,              # Campo Kebo: últimos 4 dígitos
             "balance": float(balance),
-            "icono": icono,
+            "icon": icono,                         # Campo Kebo: 'icon' en inglés
             "color": color,
             "created_at": firestore.SERVER_TIMESTAMP
         })
@@ -229,26 +279,137 @@ def crear_categorias_predefinidas(usuario_id="default"):
         return 0
 
 def actualizar_presupuesto_categoria(usuario_id, nombre, nuevo_budget):
-    """Actualiza el presupuesto de una categoría por nombre."""
+    """Actualiza el presupuesto de una categoría por nombre (compatibilidad).
+    En la nueva estructura Kebo, el budget vive en budgets/{year}/{month}/items/.
+    Esta función actualiza ambos: el default en categories y el mes actual.
+    """
     _, user_ref = _get_user_ref(usuario_id)
     if not user_ref:
         return False
     try:
+        # Actualizar el default en categories
         docs = user_ref.collection("categories").where("nombre", "==", nombre).limit(1).stream()
         docs_list = list(docs)
         if docs_list:
             docs_list[0].reference.update({"budget": float(nuevo_budget)})
-            return True
-        return False
+
+        # Actualizar también el mes actual en budgets/{year}/{month}/items/
+        ahora = datetime.now()
+        year = str(ahora.year)
+        month = f"{ahora.month:02d}"
+        # Buscar presupuesto existente para esta categoría en este mes
+        budget_ref = user_ref.collection("budgets").document(year).document(month).collection("items")
+        existing = budget_ref.where("category_name", "==", nombre).limit(1).stream()
+        existing_list = list(existing)
+        if existing_list:
+            existing_list[0].reference.update({"amount": float(nuevo_budget)})
+        else:
+            # Buscar category_id
+            cat_id = docs_list[0].id if docs_list else None
+            budget_ref.document().set({
+                "category_id": cat_id,
+                "category_name": nombre,
+                "amount": float(nuevo_budget),
+                "created_at": firestore.SERVER_TIMESTAMP
+            })
+        return True
     except Exception as e:
         print(f"Error actualizando presupuesto: {e}")
         return False
 
 
+def establecer_presupuesto_mes(usuario_id, categoria_nombre, monto, year=None, month=None):
+    """Establece un presupuesto para una categoría en un mes específico (Kebo style).
+    Estructura: users/{userId}/budgets/{year}/{month}/items/{id}
+    """
+    if not year:
+        year = str(datetime.now().year)
+    if not month:
+        month = f"{datetime.now().month:02d}"
+
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return False
+    try:
+        ensure_user(usuario_id)
+
+        # Buscar o crear categoría
+        cat_id = crear_categoria(usuario_id, categoria_nombre)
+
+        # Buscar si ya existe un presupuesto para esta categoría en este mes
+        items_ref = user_ref.collection("budgets").document(year).document(month).collection("items")
+        existing = items_ref.where("category_id", "==", cat_id).limit(1).stream()
+        existing_list = list(existing)
+
+        if existing_list:
+            existing_list[0].reference.update({"amount": float(monto)})
+        else:
+            items_ref.document().set({
+                "category_id": cat_id,
+                "category_name": categoria_nombre,
+                "amount": float(monto),
+                "year": year,
+                "month": month,
+                "created_at": firestore.SERVER_TIMESTAMP
+            })
+        return True
+    except Exception as e:
+        print(f"Error estableciendo presupuesto mes: {e}")
+        return False
+
+
+def obtener_presupuestos_mes(usuario_id, year=None, month=None):
+    """Obtiene los presupuestos de un mes específico (Kebo style).
+    Si no hay presupuestos para ese mes, usa los default de categories.
+    """
+    if not year:
+        year = str(datetime.now().year)
+    if not month:
+        month = f"{datetime.now().month:02d}"
+
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+
+    presupuestos_mes = {}
+    try:
+        # Primero intentar leer del mes específico
+        items_ref = user_ref.collection("budgets").document(year).document(month).collection("items")
+        for d in items_ref.stream():
+            data = d.to_dict()
+            presupuestos_mes[data.get("category_name")] = float(data.get("amount", 0))
+    except Exception:
+        pass
+
+    # Si no hay nada en el mes, usar defaults de categories
+    if not presupuestos_mes:
+        try:
+            for d in user_ref.collection("categories").stream():
+                data = d.to_dict()
+                b = float(data.get("budget", 0))
+                if b > 0:
+                    presupuestos_mes[data.get("nombre")] = b
+        except Exception:
+            pass
+
+    return [{"categoria": k, "limite": v, "gastado": 0.0, "year": year, "month": month}
+            for k, v in presupuestos_mes.items()]
+
+
 # ==================== TRANSACCIONES (KEBO) ====================
 
-def registrar_transaccion_v2(usuario_id, tipo, monto, categoria_nombre, descripcion="", cuenta_nombre="Efectivo"):
-    """Registra transacción en nueva estructura Kebo."""
+def registrar_transaccion_v2(usuario_id, tipo, monto, categoria_nombre, descripcion="", cuenta_nombre="Efectivo",
+                             payee="", fee=0.0, status="cleared", tags=None):
+    """Registra transacción en nueva estructura Kebo.
+
+    Campos estilo Kebo:
+    - payee: Beneficiario/comercio (ej. "D1", "Netflix", "Uber")
+    - fee: Comisión adicional (transferencias internacionales, etc.)
+    - status: "pending" | "cleared" (si ya se procesó en el banco)
+    - tags: lista de hashtags transversales (ej. ["#vacaciones", "#proyecto"])
+    """
+    if tags is None:
+        tags = []
     _, user_ref = _get_user_ref(usuario_id)
     if not user_ref:
         return None
@@ -274,29 +435,38 @@ def registrar_transaccion_v2(usuario_id, tipo, monto, categoria_nombre, descripc
 
         tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
         tx_ref.set({
-            "tipo": tipo,
-            "monto": float(monto),
+            "type": tipo,                          # Kebo usa 'type' en inglés
+            "amount": float(monto),                # Kebo usa 'amount' en inglés
             "account_id": cuenta_id,
             "category_id": cat_id,
-            "descripcion": descripcion,
-            "fecha": fecha,
-            "tags": [],
+            "payee": payee,                        # Kebo: beneficiario/comercio
+            "description": descripcion,            # Kebo: 'description' en inglés
+            "fee": float(fee),                     # Kebo: comisión
+            "status": status,                      # Kebo: pending | cleared
+            "tags": tags,                          # Kebo: etiquetas transversales
+            "date": fecha,                         # Kebo: 'date' en inglés
             "created_at": firestore.SERVER_TIMESTAMP
         })
 
-        # Actualizar balance
-        if tipo == "expense":
-            actualizar_balance_cuenta(usuario_id, cuenta_id, -float(monto))
-        else:
-            actualizar_balance_cuenta(usuario_id, cuenta_id, float(monto))
+        # Actualizar balance (considerando fee si es gasto)
+        delta = -float(monto)
+        if tipo == "income":
+            delta = float(monto)
+        if fee and tipo == "expense":
+            delta -= float(fee)
+        actualizar_balance_cuenta(usuario_id, cuenta_id, delta)
 
         return tx_ref.id
     except Exception as e:
         print(f"Error registrando transacción v2: {e}")
         return None
 
-def registrar_transferencia(usuario_id, cuenta_origen, cuenta_destino, monto, descripcion=""):
-    """Registra transferencia entre dos cuentas."""
+def registrar_transferencia(usuario_id, cuenta_origen, cuenta_destino, monto, descripcion="", fee=0.0):
+    """Registra transferencia entre dos cuentas (Kebo style).
+    - tipo: 'transfer' (no cuenta como gasto ni ingreso)
+    - No afecta estadísticas de gastos mensuales
+    - fee: comisión cobrada por el banco
+    """
     _, user_ref = _get_user_ref(usuario_id)
     if not user_ref:
         return None, "DB no disponible"
@@ -318,8 +488,8 @@ def registrar_transferencia(usuario_id, cuenta_origen, cuenta_destino, monto, de
         if origen_id == destino_id:
             return None, "Origen y destino son la misma cuenta"
 
-        # Actualizar balances
-        user_ref.collection("accounts").document(origen_id).update({"balance": firestore.Increment(-float(monto))})
+        # Actualizar balances (con fee si aplica)
+        user_ref.collection("accounts").document(origen_id).update({"balance": firestore.Increment(-(float(monto) + float(fee)))})
         user_ref.collection("accounts").document(destino_id).update({"balance": firestore.Increment(float(monto))})
 
         # Registrar transacción
@@ -330,13 +500,15 @@ def registrar_transferencia(usuario_id, cuenta_origen, cuenta_destino, monto, de
 
         tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
         tx_ref.set({
-            "tipo": "transfer",
-            "monto": float(monto),
+            "type": "transfer",                    # Kebo: type en inglés
+            "amount": float(monto),                # Kebo: amount en inglés
             "account_id": origen_id,
             "to_account_id": destino_id,
-            "descripcion": descripcion or f"Transferencia {cuenta_origen} → {cuenta_destino}",
-            "fecha": fecha,
-            "tags": [],
+            "description": descripcion or f"Transferencia {cuenta_origen} → {cuenta_destino}",
+            "fee": float(fee),                     # Kebo: comisión
+            "status": "cleared",                   # Kebo: status
+            "tags": [],                            # Kebo: tags
+            "date": fecha,                         # Kebo: date en inglés
             "created_at": firestore.SERVER_TIMESTAMP
         })
 
@@ -376,7 +548,9 @@ def listar_transacciones_recientes(usuario_id="default", limite=20):
 # ==================== BALANCE Y PRESUPUESTOS (KEBO) ====================
 
 def obtener_balance_v2(usuario_id="default", mes=None):
-    """Obtiene balance del mes actual o especificado."""
+    """Obtiene balance del mes actual o especificado.
+    Compatible con ambos: campo nuevo (type/amount) y legacy (tipo/monto).
+    """
     _, user_ref = _get_user_ref(usuario_id)
     if not user_ref:
         return 0.0, 0.0, 0.0, []
@@ -393,8 +567,9 @@ def obtener_balance_v2(usuario_id="default", mes=None):
         for d in docs:
             t = d.to_dict()
             t["_id"] = d.id
-            monto = float(t.get("monto", 0))
-            tipo = t.get("tipo", "expense")
+            # Compatibilidad: nuevos campos (amount/type) y legacy (monto/tipo)
+            monto = float(t.get("amount") or t.get("monto", 0))
+            tipo = t.get("type") or t.get("tipo", "expense")
             transacciones.append(t)
             if tipo == "income":
                 ingresos += monto
@@ -406,7 +581,9 @@ def obtener_balance_v2(usuario_id="default", mes=None):
         return 0.0, 0.0, 0.0, []
 
 def obtener_presupuestos_v2(usuario_id="default", mes=None):
-    """Obtiene presupuestos con gastado del mes."""
+    """Obtiene presupuestos con gastado del mes (Kebo style).
+    Lee de budgets/{year}/{month}/items/ primero, luego fallback a categories.budget.
+    """
     _, user_ref = _get_user_ref(usuario_id)
     if not user_ref:
         return {}
@@ -416,27 +593,58 @@ def obtener_presupuestos_v2(usuario_id="default", mes=None):
     year, month = mes.split("-")
 
     try:
-        cats = listar_categorias(usuario_id)
-        presupuestos = {}
+        # Obtener presupuestos del mes (Kebo: budgets/{year}/{month}/items/)
+        presupuestos_mes = {}
+        try:
+            items_ref = user_ref.collection("budgets").document(year).document(month).collection("items")
+            for d in items_ref.stream():
+                data = d.to_dict()
+                presupuestos_mes[data.get("category_name")] = {
+                    "limite": float(data.get("amount", 0)),
+                    "category_id": data.get("category_id"),
+                    "year": year,
+                    "month": month
+                }
+        except Exception:
+            pass
 
+        # Si no hay presupuestos en el mes, usar defaults de categories (compatibilidad)
+        cats = listar_categorias(usuario_id)
+        if not presupuestos_mes:
+            for cat in cats:
+                nombre = cat.get("nombre")
+                budget = float(cat.get("budget", 0))
+                if budget > 0:
+                    presupuestos_mes[nombre] = {
+                        "limite": budget,
+                        "category_id": cat["_id"],
+                        "year": year,
+                        "month": month
+                    }
+
+        # Calcular gasto por categoría
         docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
-        gastos_por_cat = {}
+        gastos_por_cat_id = {}
         for d in docs:
             t = d.to_dict()
-            if t.get("tipo") == "expense":
+            # Compatibilidad: type/tipo y amount/monto
+            tipo = t.get("type") or t.get("tipo", "expense")
+            if tipo == "expense":
                 cat_id = t.get("category_id")
-                monto = float(t.get("monto", 0))
-                gastos_por_cat[cat_id] = gastos_por_cat.get(cat_id, 0) + monto
+                monto = float(t.get("amount") or t.get("monto", 0))
+                gastos_por_cat_id[cat_id] = gastos_por_cat_id.get(cat_id, 0) + monto
 
-        for cat in cats:
-            nombre = cat.get("nombre")
-            budget = float(cat.get("budget", 0))
-            gastado = gastos_por_cat.get(cat["_id"], 0)
+        # Combinar
+        presupuestos = {}
+        for nombre, info in presupuestos_mes.items():
+            gastado = gastos_por_cat_id.get(info["category_id"], 0)
             presupuestos[nombre] = {
-                "limite": budget,
+                "limite": info["limite"],
                 "gastado": gastado,
-                "libre": budget - gastado,
-                "excedido": (budget - gastado) < 0
+                "libre": info["limite"] - gastado,
+                "excedido": (info["limite"] - gastado) < 0,
+                "year": year,
+                "month": month
             }
         return presupuestos
     except Exception as e:
@@ -599,12 +807,13 @@ def ejecutar_recurrentes(usuario_id="default"):
 
                 tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
                 tx_ref.set({
-                    "tipo": "expense",
-                    "monto": monto,
+                    "type": "expense",                              # Kebo: type en inglés
+                    "amount": monto,                                 # Kebo: amount en inglés
                     "account_id": cuenta_id,
-                    "descripcion": f"🔁 {nombre} (recurrente)",
-                    "fecha": fecha,
-                    "tags": ["recurrente"],
+                    "description": f"🔁 {nombre} (recurrente)",     # Kebo: description en inglés
+                    "status": "cleared",                            # Kebo: status
+                    "tags": ["recurrente"],                          # Kebo: tags
+                    "date": fecha,                                   # Kebo: date en inglés
                     "created_at": firestore.SERVER_TIMESTAMP,
                     "recurring_id": rec["_id"]
                 })
@@ -641,9 +850,11 @@ def obtener_alertas_presupuesto(usuario_id="default"):
         gastos_por_cat = {}
         for d in docs:
             t = d.to_dict()
-            if t.get("tipo") == "expense":
+            # Compatibilidad: nuevos campos (type/amount) y legacy (tipo/monto)
+            tipo = t.get("type") or t.get("tipo", "expense")
+            if tipo == "expense":
                 cat_id = t.get("category_id")
-                monto = float(t.get("monto", 0))
+                monto = float(t.get("amount") or t.get("monto", 0))
                 gastos_por_cat[cat_id] = gastos_por_cat.get(cat_id, 0) + monto
 
         for cat in cats:
@@ -699,8 +910,9 @@ def obtener_estadisticas(usuario_id="default", meses=6):
 
                 for d in docs:
                     t = d.to_dict()
-                    monto = float(t.get("monto", 0))
-                    tipo = t.get("tipo", "expense")
+                    # Compatibilidad: nuevos campos (type/amount) y legacy (tipo/monto)
+                    monto = float(t.get("amount") or t.get("monto", 0))
+                    tipo = t.get("type") or t.get("tipo", "expense")
 
                     if tipo == "income":
                         ingresos_mes += monto

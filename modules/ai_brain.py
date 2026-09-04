@@ -415,15 +415,29 @@ def _parse_tarea(texto: str) -> dict | None:
 
 
 def _parse_transaccion(texto: str) -> dict | None:
-    """Extrae tipo (gasto/ingreso), monto y categoría de un mensaje."""
+    """Extrae tipo (gasto/ingreso), monto, categoría, payee, tags y fee de un mensaje.
+    Campos Kebo: payee (beneficiario), fee (comisión), status (cleared/pending), tags.
+    """
     texto_lower = texto.lower()
+
+    # Extraer tags tipo #hashtag
+    tags = re.findall(r'#(\w+)', texto)
+    if tags:
+        tags = [f"#{t}" for t in tags]
+    else:
+        tags = []
+
+    # Extraer fee (comisión): "con comisión 5000" o "fee 5000"
+    fee = 0.0
+    fee_match = re.search(r'(?:con\s+)?(?:comisi[oó]n|fee)\s+([\d,.]+)', texto_lower)
+    if fee_match:
+        fee = float(fee_match.group(1).replace(',', ''))
 
     # Patrones de gasto: "gasto 5000 en comida", "gasté 5000 supermercado", "compré 5000"
     gasto_patterns = [
         r'gast[oáé]\s+([\d,.]+)\s*(?:en\s+)?(.+?)(?:\s*$|$)',
         r'compr[oóé]\s+([\d,.]+)\s*(?:en\s+)?(.+?)(?:\s*$|$)',
         r'pag[uú][oóé]\s+([\d,.]+)\s*(?:en\s+)?(.+?)(?:\s*$|$)',
-        r'compr[oóé]\s+([\d,.]+)\s*(?:en\s+)?(.+?)(?:\s*$|$)',
     ]
     for patron in gasto_patterns:
         match = re.search(patron, texto_lower)
@@ -433,9 +447,19 @@ def _parse_transaccion(texto: str) -> dict | None:
             # Limpiar categoría
             cat = re.sub(r'^(en|del|de|la|el|los|las)\s+', '', cat).strip()
             cat = cat.title() if cat else "General"
-            return {"tipo": "gasto", "monto": monto, "categoria": cat}
+            # El payee = primera palabra en mayúscula (comercio)
+            payee = ""
+            return {
+                "tipo": "gasto",
+                "monto": monto,
+                "categoria": cat,
+                "payee": payee,
+                "fee": fee,
+                "status": "cleared",
+                "tags": tags
+            }
 
-    # Patrones de ingreso: "ingreso 50000", "gané 50000", "recibí 50000", "salario +50000"
+    # Patrones de ingreso
     ingreso_patterns = [
         r'ingreso\s+([\d,.]+)',
         r'gan[oé]\s+([\d,.]+)',
@@ -447,7 +471,15 @@ def _parse_transaccion(texto: str) -> dict | None:
         match = re.search(patron, texto_lower)
         if match:
             monto = float(match.group(1).replace(',', ''))
-            return {"tipo": "ingreso", "monto": monto, "categoria": "Ingreso"}
+            return {
+                "tipo": "ingreso",
+                "monto": monto,
+                "categoria": "Ingreso",
+                "payee": "",
+                "fee": 0.0,
+                "status": "cleared",
+                "tags": tags
+            }
 
     return None
 
@@ -763,11 +795,15 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             msg = "💳 **Tus cuentas:**\n"
             total = 0.0
             for c in cuentas:
-                icono = c.get("icono", "💳")
+                icono = c.get("icon") or c.get("icono", "💳")
                 balance = float(c.get("balance", 0))
                 total += balance
                 signo = "+" if balance >= 0 else ""
-                msg += f"  {icono} {c.get('nombre')}: {signo}${balance:,.0f}\n"
+                nombre = c.get('nombre')
+                institution = c.get("institution", "")
+                last4 = c.get("bank_last4", "")
+                banco_str = f" ({institution}{' ****' + last4 if last4 else ''})" if institution else ""
+                msg += f"  {icono} {nombre}{banco_str}: {signo}${balance:,.0f}\n"
             msg += f"\n💰 **Balance total: ${total:,.0f}**"
             return msg
 
@@ -806,10 +842,25 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             if not nombre:
                 return "⚠️ Necesito el nombre. Ej: 'crea cuenta Nequi tipo débito'"
 
-            cuenta_id = crear_cuenta(usuario_id, nombre, tipo, saldo_inicial, icono, color)
+            # Detectar banco (institution) y últimos 4 dígitos
+            institution = ""
+            bank_last4 = ""
+            bancos_conocidos = ["bancolombia", "davivienda", "bbva", "colpatria", "bogota", "popular", "nequi", "daviplata"]
+            for banco in bancos_conocidos:
+                if banco in resto:
+                    institution = banco.title()
+                    break
+            last4_match = re.search(r'(?:terminada|acabada)\s+en\s+(\d{4})', resto)
+            if last4_match:
+                bank_last4 = last4_match.group(1)
+
+            cuenta_id = crear_cuenta(usuario_id, nombre, tipo, saldo_inicial, icono, color,
+                                     currency="COP", institution=institution, bank_last4=bank_last4)
             if cuenta_id:
                 saldo_str = f" con ${saldo_inicial:,.0f}" if saldo_inicial else ""
-                return f"✅ Cuenta creada: {icono} **{nombre}** ({tipo}){saldo_str}."
+                banco_str = f" ({institution})" if institution else ""
+                last4_str = f" **** {bank_last4}" if bank_last4 else ""
+                return f"✅ Cuenta creada: {icono} **{nombre}** ({tipo}){saldo_str}{banco_str}{last4_str}."
             else:
                 return "⚠️ Error al crear la cuenta."
 
@@ -997,10 +1048,24 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         tipo = transaccion["tipo"]
         # Mapear: gasto -> expense, ingreso -> income
         tipo_db = "expense" if tipo == "gasto" else "income"
-        tx_id = registrar_transaccion_v2(usuario_id, tipo_db, monto, cat, "Registro por voz", "Efectivo")
+        # Pasar campos Kebo: payee, fee, status, tags
+        tx_id = registrar_transaccion_v2(
+            usuario_id, tipo_db, monto, cat,
+            descripcion=transaccion.get("payee", "Registro por voz"),
+            cuenta_nombre="Efectivo",
+            payee=transaccion.get("payee", ""),
+            fee=transaccion.get("fee", 0.0),
+            status=transaccion.get("status", "cleared"),
+            tags=transaccion.get("tags", [])
+        )
         if tx_id:
             if tipo == "gasto":
-                return f"💸 Gasto registrado: **-${monto:,.0f}** en *{cat}*."
+                msg = f"💸 Gasto registrado: **-${monto:,.0f}** en *{cat}*."
+                if transaccion.get("fee"):
+                    msg += f" (Comisión: ${transaccion['fee']:,.0f})"
+                if transaccion.get("tags"):
+                    msg += f" {' '.join(transaccion['tags'])}"
+                return msg
             else:
                 return f"💰 Ingreso registrado: **+${monto:,.0f}** en *{cat}*."
         else:
