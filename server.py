@@ -232,7 +232,7 @@ def api_finanzas_resumen(usuario_id: str = "default"):
             d = doc.to_dict()
             presupuestos[d.get("categoria")] = float(d.get("limite", 0))
 
-        # 2) Obtener transacciones y filtrar por mes actual
+        # 2) Obtener TODAS las transacciones (sin filtro de mes porque no todas tienen campo mes)
         ingresos = 0.0
         gastos = 0.0
         gastos_por_categoria = {}
@@ -241,16 +241,6 @@ def api_finanzas_resumen(usuario_id: str = "default"):
         docs_fin = db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", usuario_id)).stream()
         for t in docs_fin:
             d = t.to_dict()
-            # Filtrar por mes si tiene campo fecha o mes
-            fecha_str = d.get("fecha", "") or d.get("timestamp", "")
-            mes_doc = d.get("mes", "")
-            if not mes_doc and fecha_str and len(fecha_str) >= 7:
-                mes_doc = fecha_str[:7]
-
-            # Solo contar los del mes actual
-            if mes_doc and mes_doc != mes_actual:
-                continue
-
             monto = float(d.get("monto", 0))
             tipo = d.get("tipo", "gasto")
             cat = d.get("categoria", "General")
@@ -303,6 +293,34 @@ def api_finanzas_resumen(usuario_id: str = "default"):
             "message": str(e),
             "traceback": traceback.format_exc()[:1000]
         }
+
+
+@app.get("/api/finanzas/debug")
+def api_finanzas_debug(usuario_id: str = "default"):
+    """Endpoint debug: muestra 1 muestra de cada coleccion."""
+    try:
+        from modules.database import inicializar_firebase
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        db = inicializar_firebase()
+        if not db:
+            return {"error": "DB no inicializada"}
+
+        # 1 presupuesto
+        docs_p = db.collection("presupuestos").where(filter=FieldFilter("usuario_id", "==", usuario_id)).limit(2).stream()
+        presupuesto_sample = [d.to_dict() for d in docs_p]
+
+        # 2 finanzas
+        docs_f = db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", usuario_id)).limit(3).stream()
+        finanzas_sample = [d.to_dict() for d in docs_f]
+
+        return {
+            "presupuesto_sample": presupuesto_sample,
+            "finanzas_sample": finanzas_sample,
+            "num_presupuestos": len(presupuesto_sample),
+            "num_finanzas": len(finanzas_sample)
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.post("/api/recibo")
 async def subir_recibo_shortcut(file: UploadFile = File(...), usuario_id: str = Form("iphone_user")):
