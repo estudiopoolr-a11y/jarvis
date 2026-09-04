@@ -53,6 +53,28 @@ function formatMoneyFull(amount) {
     return `$${num.toLocaleString('es-CO')}`
 }
 
+async function fetchJSONWithTimeout(url, timeoutMs = 4000) {
+    // Timeout manual: si el endpoint tarda mas de X ms, devolvemos null
+    // para que el widget no se quede colgado.
+    return new Promise((resolve) => {
+        let done = false
+        const timer = setTimeout(() => {
+            if (!done) {
+                done = true
+                console.error(`Timeout ${timeoutMs}ms: ${url}`)
+                resolve(null)
+            }
+        }, timeoutMs)
+        fetchJSON(url).then(result => {
+            if (!done) {
+                done = true
+                clearTimeout(timer)
+                resolve(result)
+            }
+        })
+    })
+}
+
 async function main() {
     const w = new ListWidget()
     w.backgroundColor = new Color(COLORS.bg)
@@ -61,12 +83,13 @@ async function main() {
     // Obtener tamaño del widget
     const widgetFamily = config.widgetFamily || "small"
 
-    // Cargar datos en paralelo
+    // Cargar datos en paralelo con TIMEOUT de 5s por endpoint
+    // para evitar que el widget se cuelgue si un endpoint falla
     const [cuentasData, resumenData, prestamosData, alertasData] = await Promise.all([
-        fetchJSON(`${BASE_URL}/api/kebo/cuentas?usuario_id=${USUARIO}`),
-        fetchJSON(`${BASE_URL}/api/finanzas/resumen?usuario_id=${USUARIO}`),
-        fetchJSON(`${BASE_URL}/api/prestamos/por-cobrar?usuario_id=${USUARIO}`),
-        fetchJSON(`${BASE_URL}/api/kebo/alertas?usuario_id=${USUARIO}`)
+        fetchJSONWithTimeout(`${BASE_URL}/api/kebo/cuentas?usuario_id=${USUARIO}`, 5000),
+        fetchJSONWithTimeout(`${BASE_URL}/api/finanzas/resumen?usuario_id=${USUARIO}`, 5000),
+        fetchJSONWithTimeout(`${BASE_URL}/api/prestamos/por-cobrar?usuario_id=${USUARIO}`, 5000),
+        fetchJSONWithTimeout(`${BASE_URL}/api/kebo/alertas?usuario_id=${USUARIO}`, 3000)
     ])
 
     if (widgetFamily === "small") {

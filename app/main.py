@@ -266,7 +266,6 @@ def api_finanzas_resumen(usuario_id: str = "default"):
             usar_todos = usuario_id in ("iphone_user", "default", None, "")
 
             if usar_todos:
-                # Leer todos los docs sin filtrar por usuario
                 docs_pres = db.collection("presupuestos").stream()
                 docs_fin = db.collection("finanzas").stream()
             else:
@@ -282,21 +281,17 @@ def api_finanzas_resumen(usuario_id: str = "default"):
                 cat = d.get("categoria")
                 if cat:
                     presupuestos[cat] = float(d.get("limite", 0))
-            print(f"[resumen] Legacy presupuestos: {len(presupuestos)} cats (usar_todos={usar_todos})", flush=True)
 
-            tx_count = 0
             for t in docs_fin:
                 d = t.to_dict()
                 monto = float(d.get("monto", 0))
                 tipo = d.get("tipo", "gasto")
                 cat = d.get("categoria", "General")
-                tx_count += 1
                 if tipo == "ingreso":
                     ingresos += monto
                 else:
                     gastos += monto
                     gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + monto
-            print(f"[resumen] Legacy transacciones: {tx_count} docs, ingresos={ingresos}, gastos={gastos}", flush=True)
         except Exception as legacy_err:
             print(f"[resumen] Error leyendo legacy: {legacy_err}", flush=True)
 
