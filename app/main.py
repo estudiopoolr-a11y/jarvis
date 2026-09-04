@@ -607,6 +607,127 @@ def api_kebo_presupuestos(usuario_id: str = "default", mes: str = None):
         return {"error": True, "message": str(e)}
 
 
+# ==================== ENDPOINTS NUEVAS FEATURES KEBO ====================
+
+@app.get("/api/kebo/subcategorias")
+def api_kebo_subcategorias(usuario_id: str = "default", categoria: str = ""):
+    """Lista sub-categorías de una categoría padre."""
+    try:
+        from modules.database import listar_subcategorias, crear_subcategorias_predefinidas
+        if not categoria:
+            return {"error": True, "message": "Parámetro 'categoria' requerido"}
+        subs = listar_subcategorias(usuario_id, categoria)
+        return {"categoria": categoria, "subcategorias": subs}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/seed-completo")
+def api_kebo_seed_completo(usuario_id: str = "default"):
+    """Inicializa categorías + sub-categorías predefinidas."""
+    try:
+        from modules.database import crear_categorias_predefinidas, crear_subcategorias_predefinidas
+        cats = crear_categorias_predefinidas(usuario_id)
+        subs = crear_subcategorias_predefinidas(usuario_id)
+        return {"categorias_creadas": cats, "subcategorias_creadas": subs}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/buscar")
+def api_kebo_buscar(usuario_id: str = "default", texto: str = "", categoria: str = "",
+                    cuenta: str = "", status: str = "", fecha_desde: str = "",
+                    fecha_hasta: str = "", tipo: str = ""):
+    """Búsqueda avanzada de transacciones."""
+    try:
+        from modules.database import buscar_transacciones
+        resultados = buscar_transacciones(
+            usuario_id,
+            texto=texto, categoria=categoria, cuenta=cuenta,
+            status=status, fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta, tipo=tipo
+        )
+        return {"total": len(resultados), "transacciones": resultados}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/futuras")
+def api_kebo_futuras(usuario_id: str = "default"):
+    """Lista transacciones programadas (futuras)."""
+    try:
+        from modules.database import listar_transacciones_futuras, ejecutar_transacciones_futuras
+        # Ejecutar las que ya tocaron
+        ejecutadas = ejecutar_transacciones_futuras(usuario_id)
+        futuras = listar_transacciones_futuras(usuario_id)
+        return {"ejecutadas": ejecutadas, "pendientes": futuras}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/recordatorios")
+def api_kebo_recordatorios(usuario_id: str = "default"):
+    """Lista recordatorios del usuario."""
+    try:
+        from modules.database import listar_recordatorios, obtener_recordatorios_hoy
+        return {
+            "hoy": obtener_recordatorios_hoy(usuario_id),
+            "todos": listar_recordatorios(usuario_id)
+        }
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/tasas")
+def api_kebo_tasas(usuario_id: str = "default"):
+    """Lista tasas de cambio guardadas."""
+    try:
+        from modules.database import obtener_tasas_cambio, TASAS_DEFAULT
+        tasas = obtener_tasas_cambio(usuario_id)
+        # Combinar con defaults
+        for m, rate in TASAS_DEFAULT.items():
+            if m not in tasas:
+                tasas[m] = {"rate": rate}
+        return {"tasas": tasas}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/balance-multimoneda")
+def api_kebo_balance_multimoneda(usuario_id: str = "default", moneda: str = "COP"):
+    """Balance total convertido a una moneda específica."""
+    try:
+        from modules.database import obtener_balance_total_multimoneda
+        total = obtener_balance_total_multimoneda(usuario_id, moneda)
+        return {"moneda": moneda, "total": total}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/sugerencias")
+def api_kebo_sugerencias(usuario_id: str = "default", prefijo: str = ""):
+    """Sugerencias de payee y categoría basadas en historial."""
+    try:
+        from modules.database import obtener_sugerencias_payee, obtener_sugerencias_categoria
+        return {
+            "payees": obtener_sugerencias_payee(usuario_id, prefijo) if prefijo else [],
+            "categorias": obtener_sugerencias_categoria(usuario_id, prefijo) if prefijo else []
+        }
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/kebo/rollover")
+def api_kebo_rollover(usuario_id: str = "default"):
+    """Aplica rollover del presupuesto del mes anterior."""
+    try:
+        from modules.database import aplicar_rollover_presupuesto
+        rollovers = aplicar_rollover_presupuesto(usuario_id)
+        return {"rollovers_aplicados": rollovers}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
 @app.get("/api/finanzas/debug")
 def api_finanzas_debug(usuario_id: str = "default"):
     """Endpoint debug: muestra 1 muestra de cada coleccion."""

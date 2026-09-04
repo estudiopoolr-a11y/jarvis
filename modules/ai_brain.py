@@ -25,7 +25,14 @@ from modules.database import (
     registrar_transferencia, listar_metas_v2, guardar_meta_v2, agregar_aporte_meta,
     listar_recurrentes, guardar_recurrente, obtener_alertas_presupuesto,
     obtener_estadisticas, crear_categorias_predefinidas,
-    listar_transacciones_recientes
+    listar_transacciones_recientes,
+    # Nuevas features Kebo
+    crear_subcategoria, listar_subcategorias, crear_subcategorias_predefinidas,
+    registrar_split, registrar_transaccion_futura, listar_transacciones_futuras,
+    buscar_transacciones, aplicar_rollover_presupuesto,
+    guardar_recordatorio, listar_recordatorios, obtener_recordatorios_hoy,
+    marcar_recordatorio_hecho, obtener_sugerencias_payee, obtener_sugerencias_categoria,
+    guardar_tasa_cambio, obtener_tasas_cambio, convertir_monto, obtener_balance_total_multimoneda
 )
 from datetime import datetime
 
@@ -647,6 +654,121 @@ def _parse_perfil(texto: str) -> dict | None:
     return None
 
 
+def _parse_subcategoria(texto: str) -> dict | None:
+    """Detecta 'subcategoría X de Y' o 'agregar X a Y'."""
+    import re
+    texto_lower = texto.lower()
+    # "subcategoría Restaurantes de Alimentación"
+    m = re.search(r'subcategor[ií]a\s+(.+?)\s+(?:de|en|para)\s+(.+)', texto_lower)
+    if m:
+        return {"sub_nombre": m.group(1).strip().title(), "cat_nombre": m.group(2).strip().title()}
+    # "agregar Restaurantes a Alimentación"
+    m = re.search(r'agregar\s+(.+?)\s+a\s+la?\s+(?:categor[ií]a\s+)?(.+)', texto_lower)
+    if m and any(k in texto_lower for k in ["subcategoría", "categoría", "comida", "transporte"]):
+        return {"sub_nombre": m.group(1).strip().title(), "cat_nombre": m.group(2).strip().title()}
+    return None
+
+
+def _parse_split(texto: str) -> dict | None:
+    """Detecta 'dividir 100k entre Comida:50k y Transporte:50k'."""
+    import re
+    texto_lower = texto.lower()
+    m = re.search(r'dividir\s+([\d,.]+)\s+entre\s+(.+)', texto_lower)
+    if m:
+        total = float(m.group(1).replace(',', ''))
+        resto = m.group(2)
+        # "Comida:50k y Transporte:50k"
+        partes = re.findall(r'([\wáéíóúñ]+)\s*:?\s*([\d,.]+)\s*(k|mil|m)?', resto)
+        splits = []
+        for cat, monto, mult in partes:
+            if cat and monto:
+                m_float = float(monto.replace(',', ''))
+                if mult and mult.startswith(('k', 'm')):
+                    m_float *= 1000
+                splits.append({"categoria": cat.title(), "monto": m_float})
+        if splits:
+            return {"monto_total": total, "splits": splits}
+    return None
+
+
+def _parse_transaccion_futura(texto: str) -> dict | None:
+    """Detecta 'gasto 50k mañana en comida' o 'el 15 pagaré arriendo 1.5M'."""
+    import re
+    from datetime import datetime, timedelta
+    texto_lower = texto.lower()
+    meses = {"enero":1,"febrero":2,"marzo":3,"abril":4,"mayo":5,"junio":6,
+             "julio":7,"agosto":8,"septiembre":9,"setiembre":9,"octubre":10,"noviembre":11,"diciembre":12}
+
+    # "el 15 pagar arriendo 1.5M"
+    m = re.search(r'el\s+(\d{1,2})\s+(?:de\s+)?(\w+)?\s*(?:pagar|gastar|gasto)\s+([\d,.]+)\s*(k|mil|m)?\s*(?:en\s+)?(.+)?', texto_lower)
+    if m:
+        dia = int(m.group(1))
+        mes_nombre = m.group(2)
+        monto = float(m.group(3).replace(',', ''))
+        if m.group(4) and m.group(4).startswith(('k', 'm')):
+            monto *= 1000
+        cat = (m.group(5) or "General").strip().title()
+        if mes_nombre and mes_nombre in meses:
+            mes_num = meses[mes_nombre]
+            year = datetime.now().year
+        else:
+            mes_num = datetime.now().month
+            year = datetime.now().year
+            if dia < datetime.now().day:
+                mes_num += 1
+                if mes_num > 12:
+                    mes_num = 1
+                    year += 1
+        fecha = f"{year}-{mes_num:02d}-{dia:02d}"
+        return {"tipo": "expense", "monto": monto, "categoria": cat, "fecha": fecha}
+
+    # "gasto 50k mañana en comida"
+    m = re.search(r'gast[oáé]\s+([\d,.]+)\s*(k|mil|m)?\s+ma[ñn]ana\s+(?:en\s+)?(.+)', texto_lower)
+    if m:
+        monto = float(m.group(1).replace(',', ''))
+        if m.group(2) and m.group(2).startswith(('k', 'm')):
+            monto *= 1000
+        cat = m.group(3).strip().title()
+        manana = datetime.now() + timedelta(days=1)
+        fecha = manana.strftime("%Y-%m-%d")
+        return {"tipo": "expense", "monto": monto, "categoria": cat, "fecha": fecha}
+
+    return None
+
+
+def _parse_recordatorio(texto: str) -> dict | None:
+    """Detecta 'recuerda pagar arriendo el día 1' o 'recuérdame X el 5'."""
+    import re
+    texto_lower = texto.lower()
+    m = re.search(r'recu[eé]rda(?:me)?\s+(?:pagar\s+|que\s+)?(.+?)\s+(?:el\s+d[ií]a\s+|el\s+)(\d{1,2})', texto_lower)
+    if m:
+        return {"texto": m.group(1).strip().title(), "dia": int(m.group(2))}
+    return None
+
+
+def _parse_busqueda(texto: str) -> dict | None:
+    """Detecta 'buscar gastos de comida en septiembre'."""
+    import re
+    texto_lower = texto.lower()
+    m = re.search(r'buscar?\s+(.+?)\s+(?:en|entre|del?)\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)', texto_lower)
+    if m:
+        return {"texto": m.group(1).strip(), "mes": m.group(2).title()}
+    m = re.search(r'buscar?\s+(.+)', texto_lower)
+    if m:
+        return {"texto": m.group(1).strip()}
+    return None
+
+
+def _parse_tasa_cambio(texto: str) -> dict | None:
+    """Detecta 'tasa USD 4500' o 'guardar tasa EUR 5000'."""
+    import re
+    texto_lower = texto.lower()
+    m = re.search(r'tasa\s+(\w{3})\s+([\d,.]+)', texto_lower)
+    if m:
+        return {"moneda": m.group(1).upper(), "tasa": float(m.group(2).replace(',', ''))}
+    return None
+
+
 # ============================================================
 # ASESOR DE INVERSIONES COLOMBIA
 # ============================================================
@@ -1085,6 +1207,102 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             fecha = t.get("date") or t.get("fecha", "?")
             msg += f"  💸 {fecha}: ${monto:,.0f}\n"
         msg += f"\n📊 Total: ${total:,.0f}"
+        return msg
+
+    # 5b-4. SUB-CATEGORÍAS: "agregar Restaurantes a Comida"
+    sub_data = _parse_subcategoria(texto_lc)
+    if sub_data:
+        sub_id = crear_subcategoria(usuario_id, sub_data["cat_nombre"], sub_data["sub_nombre"])
+        if sub_id:
+            return f"✅ Subcategoría *{sub_data['sub_nombre']}* agregada a *{sub_data['cat_nombre']}*."
+        return "⚠️ No se pudo crear la subcategoría."
+
+    # 5b-5. SPLIT: "dividir 100k entre Comida:50k y Transporte:50k"
+    split_data = _parse_split(texto_lc)
+    if split_data:
+        cuenta_match = re.search(r'(?:de|en)\s+(?:cuenta\s+)?(\w+)', texto_lc)
+        cuenta = cuenta_match.group(1).title() if cuenta_match else "Efectivo"
+        parent_id, msg_resp = registrar_split(
+            usuario_id, split_data["monto_total"],
+            split_data["splits"], cuenta_nombre=cuenta
+        )
+        if parent_id:
+            return f"✅ {msg_resp}"
+        return f"⚠️ {msg_resp}"
+
+    # 5b-6. TRANSACCIÓN FUTURA: "el 15 pagaré arriendo 1.5M"
+    futura_data = _parse_transaccion_futura(texto_lc)
+    if futura_data:
+        tx_id = registrar_transaccion_futura(
+            usuario_id,
+            futura_data["tipo"], futura_data["monto"],
+            futura_data["categoria"], futura_data["fecha"]
+        )
+        if tx_id:
+            from datetime import datetime
+            fecha_dt = datetime.strptime(futura_data["fecha"], "%Y-%m-%d")
+            return f"📅 Transacción programada para *{fecha_dt.strftime('%d/%m/%Y')}*: ${futura_data['monto']:,.0f} en *{futura_data['categoria']}*."
+        return "⚠️ No se pudo programar la transacción."
+
+    # 5b-7. RECORDATORIO: "recuerda pagar arriendo el día 1"
+    recordatorio_data = _parse_recordatorio(texto_lc)
+    if recordatorio_data:
+        rem_id = guardar_recordatorio(usuario_id, recordatorio_data["texto"], recordatorio_data["dia"])
+        if rem_id:
+            return f"🔔 Recordatorio guardado: *{recordatorio_data['texto']}* el día *{recordatorio_data['dia']}*."
+        return "⚠️ No se pudo guardar el recordatorio."
+
+    # 5b-8. TASA DE CAMBIO: "tasa USD 4500"
+    tasa_data = _parse_tasa_cambio(texto_lc)
+    if tasa_data:
+        guardar_tasa_cambio(usuario_id, tasa_data["moneda"], tasa_data["tasa"])
+        return f"💱 Tasa de {tasa_data['moneda']} actualizada a *{tasa_data['tasa']:,.2f}* COP."
+
+    # 5b-9. ROLLOVER: "aplicar rollover" o "lo que no gasté pasa al siguiente mes"
+    if "rollover" in texto_lc or ("lo que no gast" in texto_lc and "siguiente mes" in texto_lc):
+        rollovers = aplicar_rollover_presupuesto(usuario_id)
+        if rollovers:
+            msg = "♻️ **Rollover aplicado:**\n"
+            for cat, sobrante in rollovers.items():
+                msg += f"  • {cat}: +${sobrante:,.0f} transferido\n"
+            return msg
+        return "ℹ️ No hay presupuesto con sobrante para aplicar rollover."
+
+    # 5b-10. TRANSACCIONES PROGRAMADAS: "ver transacciones programadas"
+    if "transacciones programadas" in texto_lc or "ver pendientes" in texto_lc:
+        futuras = listar_transacciones_futuras(usuario_id)
+        if not futuras:
+            return "📅 No hay transacciones programadas."
+        msg = "📅 **Transacciones pendientes:**\n"
+        for f in futuras:
+            msg += f"  📌 {f.get('scheduled_date')}: ${f.get('amount', 0):,.0f} - {f.get('description', '')}\n"
+        return msg
+
+    # 5b-11. RECORDATORIOS: "mis recordatorios", "recordatorios pendientes"
+    if any(k in texto_lc for k in ["mis recordatorios", "recordatorios pendientes"]):
+        recordatorios = listar_recordatorios(usuario_id)
+        if not recordatorios:
+            return "🔔 No tienes recordatorios pendientes."
+        msg = "🔔 **Tus recordatorios:**\n"
+        for r in recordatorios:
+            msg += f"  📌 Día {r.get('day')}/{r.get('month')}: {r.get('text')}\n"
+        return msg
+
+    # 5b-12. BALANCE MULTIMONEDA: "balance total en USD"
+    multimoneda = re.search(r'balance\s+(?:total\s+)?(?:en|convertido\s+a)\s+(\w{3})', texto_lc)
+    if multimoneda:
+        moneda = multimoneda.group(1).upper()
+        total = obtener_balance_total_multimoneda(usuario_id, moneda_base=moneda)
+        return f"💰 **Balance total en {moneda}:** ${total:,.2f}"
+
+    # 5b-13. TASAS: "ver tasas" o "mostrar tasas"
+    if "ver tasas" in texto_lc or "mostrar tasas" in texto_lc:
+        from modules.database import TASAS_DEFAULT
+        tasas = obtener_tasas_cambio(usuario_id)
+        msg = "💱 **Tasas de cambio:**\n"
+        for m, rate in TASAS_DEFAULT.items():
+            actual = tasas.get(m, {}).get("rate", rate)
+            msg += f"  {m}: ${actual:,.2f} COP\n"
         return msg
 
     # 5c. Transacción (gasto/ingreso) - USA NUEVA ESTRUCTURA KEBO

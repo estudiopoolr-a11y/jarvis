@@ -9,8 +9,10 @@ users/{userId}/
   │   ├── currency, institution, bank_last4
   │   ├── balance, icon, color
   │
-  ├── categories/{categoryId}              # Categorías (sin budget, el budget está separado)
+  ├── categories/{categoryId}              # Categorías con sub-categorías
   │   ├── name, icon, color, type (fijo|variable)
+  │   └── subcategories/{subId}: name, icon, color
+  │       ⭐ Ejemplo: "Comida" → "Restaurantes", "Mercado", "Panadería"
   │
   ├── transactions/{year}/{month}/items/{txId}    # Transacciones por mes
   │   ├── type (income|expense|transfer)
@@ -103,6 +105,101 @@ def _get_user_ref(usuario_id="default"):
     if not db:
         return None, None
     return db, db.collection("users").document(usuario_id)
+
+
+# ==================== MONEDAS Y CONVERSIONES (KEBO) ====================
+
+# Tasas de cambio default (COP base). Se pueden actualizar con tasas reales.
+# Estructura: users/{userId}/exchange_rates/{currency}/ (rate, updated_at)
+TASAS_DEFAULT = {
+    "COP": 1.0,
+    "USD": 4100.0,   # 1 USD = 4100 COP
+    "EUR": 4500.0,   # 1 EUR = 4500 COP
+    "GBP": 5200.0,   # 1 GBP = 5200 COP
+    "MXN": 230.0,    # 1 MXN = 230 COP
+    "ARS": 4.5,      # 1 ARS = 4.5 COP
+}
+
+MONEDAS_SIMBOLO = {
+    "COP": "$",
+    "USD": "US$",
+    "EUR": "€",
+    "GBP": "£",
+    "MXN": "$",
+    "ARS": "$",
+}
+
+
+def convertir_monto(monto, de_moneda, a_moneda="COP"):
+    """Convierte un monto entre monedas usando tasas guardadas o default."""
+    if de_moneda == a_moneda:
+        return float(monto)
+    _, user_ref = _get_user_ref()
+    if not user_ref:
+        return float(monto)
+    try:
+        # Intentar leer tasa guardada
+        rate_doc = user_ref.collection("exchange_rates").document(de_moneda).get()
+        if rate_doc.exists:
+            rate = rate_doc.to_dict().get("rate", TASAS_DEFAULT.get(de_moneda, 1.0))
+        else:
+            rate = TASAS_DEFAULT.get(de_moneda, 1.0)
+        # Convertir a COP primero, luego a la moneda destino
+        en_cop = float(monto) * rate
+        if a_moneda == "COP":
+            return en_cop
+        # Leer tasa destino
+        rate_dest = user_ref.collection("exchange_rates").document(a_moneda).get()
+        if rate_dest.exists:
+            rate_dest_val = rate_dest.to_dict().get("rate", TASAS_DEFAULT.get(a_moneda, 1.0))
+        else:
+            rate_dest_val = TASAS_DEFAULT.get(a_moneda, 1.0)
+        return en_cop / rate_dest_val
+    except Exception:
+        return float(monto)
+
+
+def guardar_tasa_cambio(usuario_id, moneda, tasa):
+    """Guarda una tasa de cambio personalizada para el usuario."""
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return False
+    try:
+        user_ref.collection("exchange_rates").document(moneda).set({
+            "rate": float(tasa),
+            "updated_at": firestore.SERVER_TIMESTAMP
+        }, merge=True)
+        return True
+    except Exception as e:
+        print(f"Error guardando tasa: {e}")
+        return False
+
+
+def obtener_tasas_cambio(usuario_id):
+    """Obtiene todas las tasas de cambio guardadas."""
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return {}
+    try:
+        tasas = {}
+        for d in user_ref.collection("exchange_rates").stream():
+            tasas[d.id] = d.to_dict()
+        return tasas
+    except Exception:
+        return {}
+
+
+def obtener_balance_total_multimoneda(usuario_id, moneda_base="COP"):
+    """Obtiene el balance total convertido a una moneda base.
+    Suma balances de todas las cuentas, convirtiendo cada una a la moneda base.
+    """
+    cuentas = listar_cuentas(usuario_id)
+    total = 0.0
+    for c in cuentas:
+        balance = float(c.get("balance", 0))
+        currency = c.get("currency", "COP")
+        total += convertir_monto(balance, currency, moneda_base)
+    return total
 
 
 # ==================== USUARIOS (KEBO) ====================
@@ -277,6 +374,106 @@ def crear_categorias_predefinidas(usuario_id="default"):
     except Exception as e:
         print(f"Error creando categorías predefinidas: {e}")
         return 0
+
+
+# ==================== SUB-CATEGORÍAS (KEBO) ====================
+
+SUB_CATEGORIAS_PREDEFINIDAS = {
+    "Alimentación": [
+        {"nombre": "Restaurantes", "icono": "🍽️", "color": "#f59e0b"},
+        {"nombre": "Mercado", "icono": "🛒", "color": "#10b981"},
+        {"nombre": "Panadería", "icono": "🥖", "color": "#eab308"},
+        {"nombre": "Café", "icono": "☕", "color": "#8b5cf6"},
+        {"nombre": "Delivery", "icono": "🛵", "color": "#06b6d4"},
+    ],
+    "Transporte": [
+        {"nombre": "Uber/DiDi", "icono": "🚗", "color": "#6366f1"},
+        {"nombre": "Gasolina", "icono": "⛽", "color": "#ef4444"},
+        {"nombre": "Transporte público", "icono": "🚌", "color": "#3b82f6"},
+        {"nombre": "Parqueadero", "icono": "🅿️", "color": "#6b7280"},
+    ],
+    "Entretenimiento": [
+        {"nombre": "Cine", "icono": "🎬", "color": "#ec4899"},
+        {"nombre": "Streaming", "icono": "📺", "color": "#ef4444"},
+        {"nombre": "Videojuegos", "icono": "🎮", "color": "#8b5cf6"},
+        {"nombre": "Conciertos", "icono": "🎵", "color": "#f59e0b"},
+    ],
+    "Salud": [
+        {"nombre": "Medicamentos", "icono": "💊", "color": "#ef4444"},
+        {"nombre": "Doctor", "icono": "👨‍⚕️", "color": "#3b82f6"},
+        {"nombre": "Gimnasio", "icono": "🏋️", "color": "#10b981"},
+        {"nombre": "Veterinaria", "icono": "🐕", "color": "#f97316"},
+    ],
+}
+
+
+def listar_subcategorias(usuario_id, categoria_nombre):
+    """Lista sub-categorías de una categoría padre."""
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    try:
+        # Buscar categoría padre
+        cats = user_ref.collection("categories").where("nombre", "==", categoria_nombre).limit(1).stream()
+        cats_list = list(cats)
+        if not cats_list:
+            return []
+        cat_id = cats_list[0].id
+        docs = user_ref.collection("categories").document(cat_id).collection("subcategories").stream()
+        return [{**d.to_dict(), "_id": d.id} for d in docs]
+    except Exception as e:
+        print(f"Error listando subcategorías: {e}")
+        return []
+
+
+def crear_subcategoria(usuario_id, categoria_nombre, sub_nombre, icono="📁", color="#6b7280"):
+    """Crea una sub-categoría dentro de una categoría padre."""
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return None
+    try:
+        cats = user_ref.collection("categories").where("nombre", "==", categoria_nombre).limit(1).stream()
+        cats_list = list(cats)
+        if not cats_list:
+            return None
+        cat_id = cats_list[0].id
+        doc_ref = user_ref.collection("categories").document(cat_id).collection("subcategories").document()
+        doc_ref.set({
+            "nombre": sub_nombre,
+            "icono": icono,
+            "color": color,
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+        return doc_ref.id
+    except Exception as e:
+        print(f"Error creando subcategoría: {e}")
+        return None
+
+
+def crear_subcategorias_predefinidas(usuario_id):
+    """Crea todas las sub-categorías predefinidas para un usuario."""
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return 0
+    count = 0
+    for cat_nombre, subcats in SUB_CATEGORIAS_PREDEFINIDAS.items():
+        cats = user_ref.collection("categories").where("nombre", "==", cat_nombre).limit(1).stream()
+        cats_list = list(cats)
+        if not cats_list:
+            continue
+        cat_id = cats_list[0].id
+        for sub in subcats:
+            existing = user_ref.collection("categories").document(cat_id).collection("subcategories").where("nombre", "==", sub["nombre"]).limit(1).stream()
+            if not list(existing):
+                user_ref.collection("categories").document(cat_id).collection("subcategories").document().set({
+                    "nombre": sub["nombre"],
+                    "icono": sub["icono"],
+                    "color": sub["color"],
+                    "created_at": firestore.SERVER_TIMESTAMP
+                })
+                count += 1
+    return count
+
 
 def actualizar_presupuesto_categoria(usuario_id, nombre, nuevo_budget):
     """Actualiza el presupuesto de una categoría por nombre (compatibilidad).
@@ -516,6 +713,367 @@ def registrar_transferencia(usuario_id, cuenta_origen, cuenta_destino, monto, de
     except Exception as e:
         return None, f"Error: {e}"
 
+
+def registrar_split(usuario_id, monto_total, splits, cuenta_nombre="Efectivo", descripcion="",
+                   status="cleared", tags=None):
+    """Registra un gasto dividido en varias categorías (Kebo split transaction).
+
+    splits: lista de dicts [{categoria: str, monto: float, descripcion: str}, ...]
+    El total de los splits debe coincidir con monto_total.
+
+    Estructura en BD:
+    - transactions/{year}/{month}/items/{id} con splits=[...]
+
+    También crea transacciones individuales linkeadas por parent_id.
+    """
+    if tags is None:
+        tags = []
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return None, "DB no disponible"
+    try:
+        ensure_user(usuario_id)
+
+        # Buscar cuenta
+        cuenta_ref = user_ref.collection("accounts").where("nombre", "==", cuenta_nombre).limit(1).stream()
+        cuenta_list = list(cuenta_ref)
+        if not cuenta_list:
+            return None, f"No existe la cuenta '{cuenta_nombre}'"
+        cuenta_id = cuenta_list[0].id
+
+        ahora = datetime.now()
+        year = str(ahora.year)
+        month = f"{ahora.month:02d}"
+        fecha = ahora.strftime("%Y-%m-%d")
+
+        # Crear transacción padre (split)
+        parent_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
+        parent_ref.set({
+            "type": "expense",
+            "amount": float(monto_total),
+            "account_id": cuenta_id,
+            "description": descripcion or "Gasto dividido",
+            "status": status,
+            "tags": tags + ["split"],
+            "date": fecha,
+            "is_split": True,
+            "splits": [{"category": s["categoria"], "amount": float(s["monto"])} for s in splits],
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+
+        # Crear transacciones individuales por categoría
+        child_ids = []
+        for split in splits:
+            cat_id = crear_categoria(usuario_id, split["categoria"])
+            child_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
+            child_ref.set({
+                "type": "expense",
+                "amount": float(split["monto"]),
+                "account_id": cuenta_id,
+                "category_id": cat_id,
+                "description": split.get("descripcion", descripcion),
+                "parent_id": parent_ref.id,
+                "is_split_child": True,
+                "status": status,
+                "tags": tags,
+                "date": fecha,
+                "created_at": firestore.SERVER_TIMESTAMP
+            })
+            child_ids.append(child_ref.id)
+            # No actualizamos balance aquí (se hace con el parent)
+
+        # Actualizar balance de la cuenta una sola vez
+        actualizar_balance_cuenta(usuario_id, cuenta_id, -float(monto_total))
+
+        return parent_ref.id, f"Gasto dividido en {len(splits)} categorías: ${float(monto_total):,.0f}"
+    except Exception as e:
+        return None, f"Error: {e}"
+
+
+# ==================== TRANSACCIONES FUTURAS (KEBO) ====================
+
+def registrar_transaccion_futura(usuario_id, tipo, monto, categoria_nombre, fecha_futura,
+                                 descripcion="", cuenta_nombre="Efectivo",
+                                 payee="", tags=None, auto_post=True):
+    """Registra una transacción programada para una fecha futura.
+
+    Estructura: users/{userId}/scheduled_transactions/{id}
+    - Si auto_post=True y la fecha ya pasó, se registra inmediatamente
+    - Si no, queda pendiente y se ejecuta cuando llegue la fecha
+    """
+    if tags is None:
+        tags = []
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return None
+    try:
+        ensure_user(usuario_id)
+
+        # Si auto_post y fecha ya pasó, registrar inmediatamente
+        fecha_dt = datetime.strptime(fecha_futura, "%Y-%m-%d")
+        if auto_post and fecha_dt.date() <= datetime.now().date():
+            return registrar_transaccion_v2(
+                usuario_id, tipo, monto, categoria_nombre, descripcion, cuenta_nombre,
+                payee=payee, tags=tags
+            )
+
+        # Buscar o crear categoría
+        cat_id = crear_categoria(usuario_id, categoria_nombre)
+
+        # Buscar cuenta
+        cuenta_ref = user_ref.collection("accounts").where("nombre", "==", cuenta_nombre).limit(1).stream()
+        cuenta_list = list(cuenta_ref)
+        if cuenta_list:
+            cuenta_id = cuenta_list[0].id
+        else:
+            cuenta_id = crear_cuenta(usuario_id, cuenta_nombre, "cash")
+
+        # Guardar como transacción programada
+        doc_ref = user_ref.collection("scheduled_transactions").document()
+        doc_ref.set({
+            "type": tipo,
+            "amount": float(monto),
+            "account_id": cuenta_id,
+            "category_id": cat_id,
+            "categoria_nombre": categoria_nombre,
+            "cuenta_nombre": cuenta_nombre,
+            "payee": payee,
+            "description": descripcion,
+            "scheduled_date": fecha_futura,
+            "status": "pending",  # pending, executed, cancelled
+            "tags": tags,
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+        return doc_ref.id
+    except Exception as e:
+        print(f"Error registrando transacción futura: {e}")
+        return None
+
+
+def ejecutar_transacciones_futuras(usuario_id):
+    """Ejecuta las transacciones programadas cuya fecha ya llegó.
+    Llamar vía cron diariamente.
+    """
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    ejecutadas = []
+    try:
+        hoy = datetime.now().strftime("%Y-%m-%d")
+        docs = user_ref.collection("scheduled_transactions").where("status", "==", "pending").stream()
+        for d in docs:
+            data = d.to_dict()
+            fecha = data.get("scheduled_date", "")
+            if fecha <= hoy:
+                # Ejecutar
+                tx_id = registrar_transaccion_v2(
+                    usuario_id,
+                    data.get("type", "expense"),
+                    data.get("amount", 0),
+                    data.get("categoria_nombre", "General"),
+                    data.get("description", ""),
+                    data.get("cuenta_nombre", "Efectivo"),
+                    payee=data.get("payee", ""),
+                    tags=data.get("tags", [])
+                )
+                if tx_id:
+                    d.reference.update({"status": "executed", "executed_at": firestore.SERVER_TIMESTAMP, "tx_id": tx_id})
+                    ejecutadas.append(data.get("description", ""))
+        return ejecutadas
+    except Exception as e:
+        print(f"Error ejecutando futuras: {e}")
+        return []
+
+
+def listar_transacciones_futuras(usuario_id="default", solo_pendientes=True):
+    """Lista transacciones programadas (futuras)."""
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    try:
+        docs = user_ref.collection("scheduled_transactions").stream()
+        result = []
+        for d in docs:
+            data = d.to_dict()
+            if solo_pendientes and data.get("status") != "pending":
+                continue
+            data["_id"] = d.id
+            result.append(data)
+        return sorted(result, key=lambda x: x.get("scheduled_date", ""))
+    except Exception:
+        return []
+
+
+# ==================== BÚSQUEDA AVANZADA (KEBO) ====================
+
+def buscar_transacciones(usuario_id, texto="", categoria="", cuenta="", status="",
+                       fecha_desde="", fecha_hasta="", tipo="", tags=None,
+                       limite=100):
+    """Búsqueda avanzada de transacciones con múltiples filtros.
+
+    Filtros:
+    - texto: búsqueda en description/payee
+    - categoria: nombre de categoría exacto
+    - cuenta: nombre de cuenta
+    - status: pending | cleared
+    - fecha_desde/hasta: rango de fechas (YYYY-MM-DD)
+    - tipo: income | expense | transfer
+    - tags: lista de tags a filtrar
+    """
+    if tags is None:
+        tags = []
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    try:
+        # Obtener categorías y cuentas para mapear IDs
+        cats = listar_categorias(usuario_id)
+        cat_nombres = {c["_id"]: c.get("nombre", "") for c in cats}
+        cuentas = listar_cuentas(usuario_id)
+        cuenta_nombres = {c["_id"]: c.get("nombre", "") for c in cuentas}
+
+        resultados = []
+        ahora = datetime.now()
+
+        # Buscar en últimos 12 meses
+        for i in range(12):
+            mes_date = ahora - timedelta(days=30 * i)
+            year = str(mes_date.year)
+            month = f"{mes_date.month:02d}"
+            try:
+                docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+                for d in docs:
+                    t = d.to_dict()
+                    t["_id"] = d.id
+                    t["_year"] = year
+                    t["_month"] = month
+
+                    # Filtro por texto
+                    if texto:
+                        desc = (t.get("description") or "").lower()
+                        payee = (t.get("payee") or "").lower()
+                        if texto.lower() not in desc and texto.lower() not in payee:
+                            continue
+
+                    # Filtro por categoría
+                    if categoria:
+                        cat_id = t.get("category_id", "")
+                        cat_nombre = cat_nombres.get(cat_id, "")
+                        if categoria.lower() not in cat_nombre.lower():
+                            continue
+
+                    # Filtro por cuenta
+                    if cuenta:
+                        acc_id = t.get("account_id", "")
+                        acc_nombre = cuenta_nombres.get(acc_id, "")
+                        if cuenta.lower() not in acc_nombre.lower():
+                            continue
+
+                    # Filtro por status
+                    if status and t.get("status", "cleared") != status:
+                        continue
+
+                    # Filtro por tipo
+                    tipo_val = t.get("type") or t.get("tipo", "expense")
+                    if tipo and tipo_val != tipo:
+                        continue
+
+                    # Filtro por rango de fechas
+                    fecha_tx = t.get("date") or t.get("fecha", "")
+                    if fecha_desde and fecha_tx < fecha_desde:
+                        continue
+                    if fecha_hasta and fecha_tx > fecha_hasta:
+                        continue
+
+                    # Filtro por tags
+                    if tags:
+                        t_tags = t.get("tags", [])
+                        if not any(tag in t_tags for tag in tags):
+                            continue
+
+                    resultados.append(t)
+            except Exception:
+                pass
+
+        # Ordenar por fecha descendente
+        resultados.sort(key=lambda x: x.get("date") or x.get("fecha", ""), reverse=True)
+        return resultados[:limite]
+    except Exception as e:
+        print(f"Error en búsqueda avanzada: {e}")
+        return []
+
+
+# ==================== SUGERENCIAS DE PAYEE (KEBO) ====================
+
+def obtener_sugerencias_payee(usuario_id, prefijo, limite=10):
+    """Obtiene sugerencias de payee basadas en el historial.
+
+    Busca en transactions los payees que coinciden con el prefijo
+    y los ordena por frecuencia de uso.
+    """
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    try:
+        # Contar frecuencia de cada payee
+        ahora = datetime.now()
+        conteo = {}
+
+        for i in range(12):
+            mes_date = ahora - timedelta(days=30 * i)
+            year = str(mes_date.year)
+            month = f"{mes_date.month:02d}"
+            try:
+                docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+                for d in docs:
+                    t = d.to_dict()
+                    payee = t.get("payee", "")
+                    if payee and prefijo.lower() in payee.lower():
+                        conteo[payee] = conteo.get(payee, 0) + 1
+            except Exception:
+                pass
+
+        # Ordenar por frecuencia
+        sugeridos = sorted(conteo.items(), key=lambda x: x[1], reverse=True)
+        return [{"payee": p, "frecuencia": f} for p, f in sugeridos[:limite]]
+    except Exception:
+        return []
+
+
+def obtener_sugerencias_categoria(usuario_id, prefijo, limite=10):
+    """Obtiene sugerencias de categoría basadas en el historial."""
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    try:
+        conteo = {}
+        ahora = datetime.now()
+
+        for i in range(12):
+            mes_date = ahora - timedelta(days=30 * i)
+            year = str(mes_date.year)
+            month = f"{mes_date.month:02d}"
+            try:
+                docs = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+                for d in docs:
+                    t = d.to_dict()
+                    cat_id = t.get("category_id", "")
+                    if not cat_id:
+                        continue
+                    # Obtener nombre de categoría
+                    cats = listar_categorias(usuario_id)
+                    cat_nombre = next((c.get("nombre", "") for c in cats if c.get("_id") == cat_id), "")
+                    if cat_nombre and prefijo.lower() in cat_nombre.lower():
+                        conteo[cat_nombre] = conteo.get(cat_nombre, 0) + 1
+            except Exception:
+                pass
+
+        sugeridos = sorted(conteo.items(), key=lambda x: x[1], reverse=True)
+        return [{"categoria": c, "frecuencia": f} for c, f in sugeridos[:limite]]
+    except Exception:
+        return []
+
+
 def listar_transacciones_recientes(usuario_id="default", limite=20):
     """Lista las últimas N transacciones."""
     _, user_ref = _get_user_ref(usuario_id)
@@ -546,6 +1104,80 @@ def listar_transacciones_recientes(usuario_id="default", limite=20):
 
 
 # ==================== BALANCE Y PRESUPUESTOS (KEBO) ====================
+
+def aplicar_rollover_presupuesto(usuario_id, year=None, month=None):
+    """Aplica rollover de presupuesto del mes anterior al actual.
+    Lo que no se gastó se suma al presupuesto del nuevo mes.
+    Estructura: budgets/{year}/{month}/items/{id} con campo rollover_from
+    """
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return {}
+    try:
+        ahora = datetime.now()
+        if not year:
+            year = str(ahora.year)
+        if not month:
+            month = f"{ahora.month:02d}"
+
+        # Mes anterior
+        mes_anterior = ahora.replace(day=1) - timedelta(days=1)
+        ant_year = str(mes_anterior.year)
+        ant_month = f"{mes_anterior.month:02d}"
+
+        rollovers = {}
+
+        # Leer presupuestos del mes anterior
+        try:
+            docs_ant = user_ref.collection("budgets").document(ant_year).document(ant_month).collection("items").stream()
+            for d in docs_ant:
+                data = d.to_dict()
+                cat_id = data.get("category_id")
+                cat_nombre = data.get("category_name", "")
+                limite_ant = float(data.get("amount", 0))
+
+                # Calcular gastado del mes anterior
+                docs_tx = user_ref.collection("transactions").document(ant_year).document(ant_month).collection("items").stream()
+                gastado_ant = 0.0
+                for tx in docs_tx:
+                    t = tx.to_dict()
+                    if (t.get("category_id") == cat_id and
+                            (t.get("type") or t.get("tipo", "expense")) == "expense"):
+                        gastado_ant += float(t.get("amount") or t.get("monto", 0))
+
+                sobrante = limite_ant - gastado_ant
+                if sobrante > 0:
+                    rollovers[cat_nombre] = sobrante
+
+                    # Buscar o crear presupuesto del mes actual
+                    mes_items = user_ref.collection("budgets").document(year).document(month).collection("items")
+                    existing = mes_items.where("category_id", "==", cat_id).limit(1).stream()
+                    existing_list = list(existing)
+                    if existing_list:
+                        nuevo_limite = float(existing_list[0].to_dict().get("amount", 0)) + sobrante
+                        existing_list[0].reference.update({
+                            "amount": nuevo_limite,
+                            "rollover_from": f"{ant_year}-{ant_month}"
+                        })
+                    else:
+                        mes_items.document().set({
+                            "category_id": cat_id,
+                            "category_name": cat_nombre,
+                            "amount": limite_ant + sobrante,  # original + rollover
+                            "year": year,
+                            "month": month,
+                            "rollover_from": f"{ant_year}-{ant_month}",
+                            "rollover_amount": sobrante,
+                            "created_at": firestore.SERVER_TIMESTAMP
+                        })
+        except Exception as e:
+            print(f"Error en rollover: {e}")
+
+        return rollovers
+    except Exception as e:
+        print(f"Error aplicando rollover: {e}")
+        return {}
+
 
 def obtener_balance_v2(usuario_id="default", mes=None):
     """Obtiene balance del mes actual o especificado.
@@ -732,6 +1364,113 @@ def agregar_aporte_meta(usuario_id, meta_nombre, monto):
 
 
 # ==================== RECURRENTES (KEBO) ====================
+
+# ==================== RECORDATORIOS POR VOZ (KEBO) ====================
+
+def guardar_recordatorio(usuario_id, texto, dia, month=None, year=None, categoria="", monto=0):
+    """Guarda un recordatorio único (no recurrente).
+
+    texto: descripción del recordatorio (ej. "Pagar arriendo")
+    dia: día del mes (1-31)
+    categoria: categoría asociada (ej. "Arriendo")
+    monto: monto asociado si aplica (ej. 1500000)
+    """
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return None
+    try:
+        ensure_user(usuario_id)
+        ahora = datetime.now()
+        if not year:
+            year = str(ahora.year)
+        if not month:
+            month = f"{ahora.month:02d}"
+
+        # Si el día ya pasó este mes, mover al siguiente
+        dia_int = int(dia) if isinstance(dia, str) else dia
+        if dia_int < ahora.day:
+            # Avanzar al siguiente mes
+            proximo = ahora.replace(day=1) + timedelta(days=32)
+            year = str(proximo.year)
+            month = f"{proximo.month:02d}"
+
+        doc_ref = user_ref.collection("reminders").document()
+        doc_ref.set({
+            "text": texto,
+            "day": dia_int,
+            "month": month,
+            "year": year,
+            "categoria": categoria,
+            "monto": float(monto),
+            "done": False,
+            "notified_at": None,
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+        return doc_ref.id
+    except Exception as e:
+        print(f"Error guardando recordatorio: {e}")
+        return None
+
+
+def listar_recordatorios(usuario_id, pendientes=True):
+    """Lista recordatorios pendientes o todos."""
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    try:
+        docs = user_ref.collection("reminders").stream()
+        result = []
+        for d in docs:
+            data = d.to_dict()
+            if pendientes and data.get("done"):
+                continue
+            data["_id"] = d.id
+            result.append(data)
+        result.sort(key=lambda x: (int(x.get("year", 0)), int(x.get("month", 0)), int(x.get("day", 1))))
+        return result
+    except Exception:
+        return []
+
+
+def obtener_recordatorios_hoy(usuario_id):
+    """Obtiene los recordatorios que tocan hoy."""
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return []
+    try:
+        ahora = datetime.now()
+        hoy = ahora.day
+        mes_actual = f"{ahora.month:02d}"
+        year_actual = str(ahora.year)
+
+        docs = user_ref.collection("reminders").where("done", "==", False).stream()
+        result = []
+        for d in docs:
+            data = d.to_dict()
+            if data.get("day") == hoy:
+                # Coincide con mes actual O es mensual (month="*")
+                if data.get("month") in [mes_actual, "*"] and data.get("year") in [year_actual, "*"]:
+                    data["_id"] = d.id
+                    result.append(data)
+        return result
+    except Exception:
+        return []
+
+
+def marcar_recordatorio_hecho(usuario_id, reminder_id):
+    """Marca un recordatorio como completado."""
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return False
+    try:
+        user_ref.collection("reminders").document(reminder_id).update({
+            "done": True,
+            "done_at": firestore.SERVER_TIMESTAMP
+        })
+        return True
+    except Exception:
+        return False
+
 
 def guardar_recurrente(usuario_id, nombre, monto, frecuencia, dia, cuenta_nombre="Efectivo", categoria_nombre="General"):
     """Crea un gasto/ingreso recurrente."""
