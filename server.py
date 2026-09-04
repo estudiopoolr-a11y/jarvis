@@ -316,7 +316,7 @@ def api_kebo_cuentas(usuario_id: str = "default"):
     """API para widget iPhone: lista de cuentas con balances (NUEVA ESTRUCTURA KEBO)."""
     import traceback
     try:
-        from modules.database_v2 import listar_cuentas
+        from modules.database import listar_cuentas
         cuentas = listar_cuentas(usuario_id)
         return {
             "cuentas": cuentas,
@@ -330,7 +330,7 @@ def api_kebo_cuentas(usuario_id: str = "default"):
 def api_kebo_transacciones(usuario_id: str = "default", limite: int = 20):
     """API para widget: últimas transacciones."""
     try:
-        from modules.database_v2 import listar_transacciones_recientes
+        from modules.database import listar_transacciones_recientes
         transacciones = listar_transacciones_recientes(usuario_id, limite)
         return {"transacciones": transacciones}
     except Exception as e:
@@ -385,7 +385,7 @@ def api_backup_migrate(usuario_id: str = "default"):
     import json
     from datetime import datetime
     from google.cloud.firestore_v1.base_query import FieldFilter
-    from modules.database_v2 import (
+    from modules.database import (
         ensure_user, crear_cuenta, crear_categoria, registrar_transaccion_v2
     )
 
@@ -440,7 +440,7 @@ def api_backup_migrate(usuario_id: str = "default"):
 def api_kebo_metas(usuario_id: str = "default"):
     """API para widget: lista de metas de ahorro."""
     try:
-        from modules.database_v2 import listar_metas_v2
+        from modules.database import listar_metas_v2
         metas = listar_metas_v2(usuario_id)
         return {"metas": metas}
     except Exception as e:
@@ -451,7 +451,7 @@ def api_kebo_metas(usuario_id: str = "default"):
 def api_kebo_recurrentes(usuario_id: str = "default"):
     """API para widget: lista de recurrentes activos."""
     try:
-        from modules.database_v2 import listar_recurrentes
+        from modules.database import listar_recurrentes
         recurrentes = listar_recurrentes(usuario_id)
         return {"recurrentes": recurrentes}
     except Exception as e:
@@ -462,7 +462,7 @@ def api_kebo_recurrentes(usuario_id: str = "default"):
 def api_kebo_alertas(usuario_id: str = "default"):
     """API para widget: alertas de presupuesto activas."""
     try:
-        from modules.database_v2 import obtener_alertas_presupuesto
+        from modules.database import obtener_alertas_presupuesto
         alertas = obtener_alertas_presupuesto(usuario_id)
         return {"alertas": alertas}
     except Exception as e:
@@ -473,7 +473,7 @@ def api_kebo_alertas(usuario_id: str = "default"):
 def cron_ejecutar_recurrentes():
     """Cron diario: ejecuta recurrentes que tocan hoy."""
     try:
-        from modules.database_v2 import ejecutar_recurrentes
+        from modules.database import ejecutar_recurrentes
         ejecutados = ejecutar_recurrentes("iphone_user")
         return {"status": "ok", "ejecutados": ejecutados}
     except Exception as e:
@@ -511,7 +511,7 @@ def cron_reminders():
 def api_kebo_seed(usuario_id: str = "default"):
     """Endpoint one-time: crea categorías predefinidas y cuentas default."""
     try:
-        from modules.database_v2 import crear_categorias_predefinidas, crear_cuenta, ensure_user
+        from modules.database import crear_categorias_predefinidas, crear_cuenta, ensure_user
         ensure_user(usuario_id, "Pool")
         cats_creadas = crear_categorias_predefinidas(usuario_id)
 
@@ -521,7 +521,7 @@ def api_kebo_seed(usuario_id: str = "default"):
             {"nombre": "Nequi", "tipo": "debit"},
             {"nombre": "Crédito", "tipo": "credit"},
         ]
-        from modules.database_v2 import listar_cuentas
+        from modules.database import listar_cuentas
         existing = [c.get("nombre") for c in listar_cuentas(usuario_id)]
         cuentas_creadas = 0
         for c in cuentas_default:
@@ -538,7 +538,7 @@ def api_kebo_seed(usuario_id: str = "default"):
 def api_kebo_estadisticas(usuario_id: str = "default", meses: int = 6):
     """Endpoint para gráficos: estadísticas agregadas."""
     try:
-        from modules.database_v2 import obtener_estadisticas
+        from modules.database import obtener_estadisticas
         stats = obtener_estadisticas(usuario_id, meses)
         return stats
     except Exception as e:
@@ -549,7 +549,7 @@ def api_kebo_estadisticas(usuario_id: str = "default", meses: int = 6):
 def api_kebo_export(usuario_id: str = "default"):
     """Descarga JSON completo de todos los datos del usuario."""
     try:
-        from modules.database_v2 import exportar_json_completo
+        from modules.database import exportar_json_completo
         import json
         data = exportar_json_completo(usuario_id)
         if not data:
@@ -570,7 +570,7 @@ def api_kebo_export(usuario_id: str = "default"):
 def api_kebo_export_csv(usuario_id: str = "default", mes: str = None):
     """Descarga CSV de transacciones del mes."""
     try:
-        from modules.database_v2 import exportar_csv
+        from modules.database import exportar_csv
         csv_data, filename = exportar_csv(usuario_id, mes)
         if not csv_data:
             return {"error": "No se pudo exportar"}
@@ -592,7 +592,7 @@ def api_kebo_presupuestos(usuario_id: str = "default", mes: str = None):
     import traceback
     from datetime import datetime
     try:
-        from modules.database_v2 import obtener_presupuestos_v2
+        from modules.database import obtener_presupuestos_v2
         if not mes:
             mes = datetime.now().strftime("%Y-%m")
         presupuestos = obtener_presupuestos_v2(usuario_id, mes)

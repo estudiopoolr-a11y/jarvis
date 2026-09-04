@@ -18,9 +18,8 @@ from modules.database import (
     obtener_tareas_pendientes, obtener_balance_financiero, obtener_resumen_presupuestos,
     guardar_meta, obtener_metas, eliminar_meta, actualizar_progreso_meta, proyectar_meta,
     modificar_presupuesto, guardar_pago_fijo, obtener_pagos_fijos, eliminar_pago_fijo,
-    guardar_perfil, obtener_perfil
-)
-from modules.database_v2 import (
+    guardar_perfil, obtener_perfil,
+    # Kebo functions
     registrar_transaccion_v2, obtener_balance_v2, obtener_presupuestos_v2,
     listar_cuentas, crear_cuenta, actualizar_presupuesto_categoria,
     registrar_transferencia, listar_metas_v2, guardar_meta_v2, agregar_aporte_meta,
