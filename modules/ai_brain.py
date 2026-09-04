@@ -749,6 +749,81 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         return msg
 
     # =========================================
+    # 4a. GESTIÓN DE CUENTAS (estructura Kebo)
+    # =========================================
+    if any(k in texto_lc for k in ["cuenta", "cuentas"]):
+        # Listar cuentas: "mis cuentas", "lista mis cuentas", "ver cuentas"
+        if any(k in texto_lc for k in ["mis", "lista", "mostrar", "ver", "cuales", "cuáles"]):
+            cuentas = listar_cuentas(usuario_id)
+            if not cuentas:
+                return "💳 No tienes cuentas registradas. Di: 'crea cuenta [nombre]' para agregar una."
+            msg = "💳 **Tus cuentas:**\n"
+            total = 0.0
+            for c in cuentas:
+                icono = c.get("icono", "💳")
+                balance = float(c.get("balance", 0))
+                total += balance
+                signo = "+" if balance >= 0 else ""
+                msg += f"  {icono} {c.get('nombre')}: {signo}${balance:,.0f}\n"
+            msg += f"\n💰 **Balance total: ${total:,.0f}**"
+            return msg
+
+        # Crear cuenta: "crea cuenta Nequi", "nueva cuenta débito 200k"
+        crear_match = re.search(
+            r'(?:crea|crear|nueva|agrega|agregar)\s+cuenta\s+(?:llamada\s+|de\s+)?(.+?)(?:\s+con\s+([\d,.]+))?\s*$',
+            texto_lc
+        )
+        if crear_match:
+            resto = crear_match.group(1).strip()
+            saldo_inicial = 0.0
+            if crear_match.group(2):
+                saldo_inicial = float(crear_match.group(2).replace(',', ''))
+
+            # Detectar tipo
+            tipo = "cash"
+            icono = "💵"
+            color = "#10b981"
+            if any(k in resto for k in ["credito", "crédito", "credit"]):
+                tipo = "credit"
+                icono = "💳"
+                color = "#ef4444"
+            elif any(k in resto for k in ["debito", "débito", "debit", "nequi", "daviplata", "bancolombia"]):
+                tipo = "debit"
+                icono = "💜"
+                color = "#8b5cf6"
+            elif any(k in resto for k in ["ahorro", "ahorros", "savings"]):
+                tipo = "savings"
+                icono = "🏦"
+                color = "#3b82f6"
+
+            # Limpiar nombre (quitar la palabra "tipo X")
+            nombre = re.sub(r'\s+tipo\s+\w+', '', resto).strip()
+            nombre = nombre.title()
+
+            if not nombre:
+                return "⚠️ Necesito el nombre. Ej: 'crea cuenta Nequi tipo débito'"
+
+            cuenta_id = crear_cuenta(usuario_id, nombre, tipo, saldo_inicial, icono, color)
+            if cuenta_id:
+                saldo_str = f" con ${saldo_inicial:,.0f}" if saldo_inicial else ""
+                return f"✅ Cuenta creada: {icono} **{nombre}** ({tipo}){saldo_str}."
+            else:
+                return "⚠️ Error al crear la cuenta."
+
+        # Ver saldo de cuenta específica: "saldo nequi", "cuanto tengo en efectivo"
+        saldo_match = re.search(r'(?:saldo|balance|cuanto\s+tengo|cuánto\s+tengo)\s+(?:en\s+|de\s+)?(.+)', texto_lc)
+        if saldo_match:
+            nombre_buscar = saldo_match.group(1).strip().title()
+            cuentas = listar_cuentas(usuario_id)
+            for c in cuentas:
+                if nombre_buscar.lower() in c.get('nombre', '').lower():
+                    balance = float(c.get("balance", 0))
+                    icono = c.get("icono", "💳")
+                    signo = "+" if balance >= 0 else ""
+                    return f"{icono} **{c.get('nombre')}**: {signo}${balance:,.0f}"
+            return f"⚠️ No encontré la cuenta '{nombre_buscar}'."
+
+    # =========================================
     # 4b. VER PRESUPUESTOS DE UN MES ESPECÍFICO
     # =========================================
     if "presupuesto" in texto_lc or "presupuestos" in texto_lc:
