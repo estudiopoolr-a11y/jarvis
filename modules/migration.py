@@ -27,7 +27,6 @@ Autor: JARVIS AI Assistant
 """
 
 from datetime import datetime
-from google.cloud.firestore_v1.base_query import FieldFilter
 
 
 def auditar_firebase(db, usuario_id="default"):
@@ -74,8 +73,7 @@ def auditar_firebase(db, usuario_id="default"):
 
     # ===== LEGACY: presupuestos =====
     try:
-        filter_usr = FieldFilter("usuario_id", "==", str(usuario_id))
-        docs_p = list(db.collection("presupuestos").where(filter=filter_usr).stream())
+        docs_p = list(db.collection("presupuestos").stream())
         cats = {}
         for d in docs_p:
             data = d.to_dict()
@@ -91,8 +89,7 @@ def auditar_firebase(db, usuario_id="default"):
 
     # ===== LEGACY: metas =====
     try:
-        filter_usr = FieldFilter("usuario_id", "==", str(usuario_id))
-        docs_m = list(db.collection("metas").where(filter=filter_usr).stream())
+        docs_m = list(db.collection("metas").stream())
         resultado["legacy"]["metas"] = {
             "count": len(docs_m),
             "sample": [d.to_dict().get("nombre", "?") for d in docs_m[:3]]
@@ -102,8 +99,7 @@ def auditar_firebase(db, usuario_id="default"):
 
     # ===== LEGACY: tareas =====
     try:
-        filter_usr = FieldFilter("usuario_id", "==", str(usuario_id))
-        docs_t = list(db.collection("tareas").where(filter=filter_usr).stream())
+        docs_t = list(db.collection("tareas").stream())
         resultado["legacy"]["tareas"] = {
             "count": len(docs_t)
         }
@@ -112,8 +108,7 @@ def auditar_firebase(db, usuario_id="default"):
 
     # ===== LEGACY: pagos_fijos =====
     try:
-        filter_usr = FieldFilter("usuario_id", "==", str(usuario_id))
-        docs_pf = list(db.collection("pagos_fijos").where(filter=filter_usr).stream())
+        docs_pf = list(db.collection("pagos_fijos").stream())
         resultado["legacy"]["pagos_fijos"] = {
             "count": len(docs_pf)
         }
@@ -213,8 +208,9 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
 
     # Primero, asegurar que todas las categorías existan
     user_ref = db.collection("users").document(usuario_id)
-    filter_usr = FieldFilter("usuario_id", "==", str(usuario_id))
-    docs = list(db.collection("finanzas").where(filter=filter_usr).stream())
+    # Sin filtro de usuario_id porque las finanzas legacy no tienen ese campo
+    # (solo hay un usuario en la BD)
+    docs = list(db.collection("finanzas").stream())
 
     # Crear mapa de categorías
     cat_map = {}
@@ -311,8 +307,8 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
     """Migra documentos de 'presupuestos' a 'budgets/{year}/{month}/items/'."""
     stats = {"leidos": 0, "migrados": 0, "errores": 0}
 
-    filter_usr = FieldFilter("usuario_id", "==", str(usuario_id))
-    docs = list(db.collection("presupuestos").where(filter=filter_usr).stream())
+    # Sin filtro: presupuestos legacy no tienen usuario_id
+    docs = list(db.collection("presupuestos").stream())
 
     user_ref = db.collection("users").document(usuario_id)
     ahora = datetime.now()
@@ -363,8 +359,8 @@ def migrar_prestamos_legacy(db, usuario_id="default"):
     """Migra transacciones legacy con categoría 'Préstamo'/'Prestamos' a la colección loans/."""
     stats = {"encontrados": 0, "migrados": 0, "errores": 0}
 
-    filter_usr = FieldFilter("usuario_id", "==", str(usuario_id))
-    docs = list(db.collection("finanzas").where(filter=filter_usr).stream())
+    # Sin filtro: finanzas legacy no tienen usuario_id
+    docs = list(db.collection("finanzas").stream())
 
     user_ref = db.collection("users").document(usuario_id)
     categoria_prestamos = ["préstamo", "prestamo", "prestamos"]
@@ -411,8 +407,8 @@ def migrar_metas_legacy(db, usuario_id="default"):
     """Migra metas legacy a goals/."""
     stats = {"leidas": 0, "migradas": 0, "errores": 0}
 
-    filter_usr = FieldFilter("usuario_id", "==", str(usuario_id))
-    docs = list(db.collection("metas").where(filter=filter_usr).stream())
+    # Sin filtro
+    docs = list(db.collection("metas").stream())
 
     user_ref = db.collection("users").document(usuario_id)
 
@@ -447,8 +443,8 @@ def migrar_pagos_fijos_legacy(db, usuario_id="default"):
     """Migra pagos_fijos legacy a recurring/."""
     stats = {"leidos": 0, "migrados": 0, "errores": 0}
 
-    filter_usr = FieldFilter("usuario_id", "==", str(usuario_id))
-    docs = list(db.collection("pagos_fijos").where(filter=filter_usr).stream())
+    # Sin filtro
+    docs = list(db.collection("pagos_fijos").stream())
 
     user_ref = db.collection("users").document(usuario_id)
 
@@ -488,9 +484,8 @@ def migrar_tareas_legacy(db, usuario_id="default"):
     """Migra tareas legacy a reminders/."""
     stats = {"leidas": 0, "migradas": 0, "errores": 0}
 
-    filter_usr = FieldFilter("usuario_id", "==", str(usuario_id))
-    filter_done = FieldFilter("completada", "==", False)
-    docs = list(db.collection("tareas").where(filter=filter_usr).where(filter=filter_done).stream())
+    # Sin filtro
+    docs = list(db.collection("tareas").stream())
 
     user_ref = db.collection("users").document(usuario_id)
 
