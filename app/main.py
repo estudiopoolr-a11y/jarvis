@@ -270,6 +270,28 @@ def api_finanzas_resumen(usuario_id: str = "default"):
                 print(f"[resumen] DEBUG months en {debug_years[0].id}: {[m.id for m in debug_months]}", flush=True)
             debug_budgets = list(user_ref.collection("budgets").list_documents())
             print(f"[resumen] DEBUG years en budgets: {[b.id for b in debug_budgets]}", flush=True)
+
+            # SCAN GLOBAL: top-level collections
+            top_cols = [c.id for c in db.collections()]
+            print(f"[resumen] SCAN top-level collections: {top_cols}", flush=True)
+
+            # SCAN todos los users para encontrar dónde están las tx
+            all_users = list(db.collection("users").limit(20).stream())
+            print(f"[resumen] SCAN users total: {len(all_users)}", flush=True)
+            for u in all_users[:5]:
+                u_tx = list(u.reference.collection("transactions").list_documents())
+                u_bud = list(u.reference.collection("budgets").list_documents())
+                u_cats = list(u.reference.collection("categories").stream())
+                print(f"[resumen]   user={u.id} cats={len(u_cats)} tx_years={[y.id for y in u_tx]} bud_years={[b.id for b in u_bud]}", flush=True)
+
+            # Si no hay en users, revisar colecciones top-level
+            for col_name in ["transactions", "presupuestos", "finanzas", "kebo_data"]:
+                try:
+                    docs = list(db.collection(col_name).limit(5).stream())
+                    if docs:
+                        print(f"[resumen] SCAN {col_name}: {len(docs)} docs, sample fields: {list(docs[0].to_dict().keys())[:8] if docs else []}", flush=True)
+                except Exception:
+                    pass
         except Exception as dbg_err:
             print(f"[resumen] DEBUG error: {dbg_err}", flush=True)
 
