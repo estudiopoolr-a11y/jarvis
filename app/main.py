@@ -233,7 +233,14 @@ def ejecutar_comando_shortcut(payload: ComandoPayload):
 
 @app.get("/api/finanzas/resumen")
 def api_finanzas_resumen(usuario_id: str = "default"):
-    """API para widget iPhone Scriptable: resumen del MES ACTUAL con presupuestos y gastado por categoría."""
+    """API para widget iPhone Scriptable: resumen del MES ACTUAL con presupuestos y gastado por categoría.
+
+    Estructura Kebo:
+      users/{userId}/budgets/{year}/{month}/items  -> presupuestos
+      users/{userId}/transactions/{year}/{month}/items -> tx
+    El campo de categoría en transactions es category_id, así que resolvemos el nombre
+    contra users/{userId}/categories.
+    """
     import traceback
     from datetime import datetime
     from google.cloud.firestore_v1.base_query import FieldFilter
@@ -244,38 +251,50 @@ def api_finanzas_resumen(usuario_id: str = "default"):
         if not db:
             return {"error": True, "message": "DB no inicializada"}
 
-        # Mes actual en formato YYYY-MM
-        mes_actual = datetime.now().strftime("%Y-%m")
+        # Mes actual
+        ahora = datetime.now()
+        year = str(ahora.year)
+        month = f"{ahora.month:02d}"
+        mes_actual = f"{year}-{month}"
 
-        # 1) Obtener TODOS los presupuestos (no tienen campo mes en la estructura actual)
-        docs_pres = db.collection("presupuestos").where(filter=FieldFilter("usuario_id", "==", usuario_id)).stream()
+        user_ref = db.collection("users").document(usuario_id)
+
+        # 1) Mapa de categorías (id -> nombre)
+        cat_map = {}
+        for c in user_ref.collection("categories").stream():
+            cdata = c.to_dict()
+            cat_map[c.id] = cdata.get("nombre", "?")
+
+        # 2) Presupuestos del mes
         presupuestos = {}
-        for doc in docs_pres:
-            d = doc.to_dict()
-            presupuestos[d.get("categoria")] = float(d.get("limite", 0))
+        items_pres = user_ref.collection("budgets").document(year).document(month).collection("items").stream()
+        for p in items_pres:
+            pdata = p.to_dict()
+            nombre = pdata.get("category_name") or cat_map.get(pdata.get("category_id"), "?")
+            presupuestos[nombre] = float(pdata.get("amount", 0))
 
-        # 2) Obtener TODAS las transacciones (sin filtro de mes porque no todas tienen campo mes)
+        # 3) Transacciones del mes
         ingresos = 0.0
         gastos = 0.0
         gastos_por_categoria = {}
-        balance = 0.0
 
-        docs_fin = db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", usuario_id)).stream()
-        for t in docs_fin:
-            d = t.to_dict()
-            monto = float(d.get("monto", 0))
-            tipo = d.get("tipo", "gasto")
-            cat = d.get("categoria", "General")
+        items_tx = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
+        for t in items_tx:
+            tdata = t.to_dict()
+            monto = float(tdata.get("amount", 0))
+            tipo = tdata.get("type", "expense")
+            cat_id = tdata.get("category_id")
+            nombre = cat_map.get(cat_id, "Sin categoría")
 
-            if tipo == "ingreso":
+            if tipo == "income":
                 ingresos += monto
             else:
                 gastos += monto
-                gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0) + monto
+                gastos_por_categoria[nombre] = gastos_por_categoria.get(nombre, 0) + monto
 
         balance = ingresos - gastos
 
-        # 3) Construir respuesta
+        # 4) Construir respuesta
         datos_por_categoria = []
         total_limite = 0
         total_gastado = 0
