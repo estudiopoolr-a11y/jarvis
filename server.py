@@ -24,6 +24,22 @@ class ComandoPayload(BaseModel):
 @app.get("/dashboard", response_class=HTMLResponse)
 @app.head("/dashboard", response_class=HTMLResponse)
 def render_dashboard(usuario_id: str = "default"):
+    """Sirve el dashboard web estático con datos en tiempo real."""
+    import os
+    template_path = os.path.join(os.path.dirname(__file__), "templates", "dashboard.html")
+    try:
+        with open(template_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse("<h1>Dashboard no disponible</h1>", status_code=500)
+
+
+# Mantener endpoint legacy (se conserva por compatibilidad)
+@app.get("/dashboard/v1", response_class=HTMLResponse)
+def render_dashboard_v1(usuario_id: str = "default"):
+    balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
+    tareas = obtener_tareas_pendientes(usuario_id)
+    presupuestos = obtener_resumen_presupuestos(usuario_id)
     balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
     tareas = obtener_tareas_pendientes(usuario_id)
     presupuestos = obtener_resumen_presupuestos(usuario_id)
@@ -460,6 +476,33 @@ def cron_ejecutar_recurrentes():
         from modules.database_v2 import ejecutar_recurrentes
         ejecutados = ejecutar_recurrentes("iphone_user")
         return {"status": "ok", "ejecutados": ejecutados}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/cron/monthly-report")
+def cron_monthly_report():
+    """Cron mensual: envía reporte del mes anterior a Discord."""
+    try:
+        from monthly_report import generar_reporte_mes_anterior, enviar_a_discord
+        datos = generar_reporte_mes_anterior("iphone_user")
+        if datos:
+            ok = enviar_a_discord(datos)
+            return {"status": "ok" if ok else "error", "mes": datos.get("mes_nombre")}
+        return {"status": "no_data"}
+    except Exception as e:
+        return {"error": True, "message": str(e)}
+
+
+@app.get("/api/cron/reminders")
+def cron_reminders():
+    """Cron diario: envía recordatorios de pagos recurrentes a Discord."""
+    try:
+        from reminders import obtener_pagos_hoy, obtener_recordatorios_personalizados, enviar_recordatorio_discord
+        pagos = obtener_pagos_hoy("iphone_user")
+        recordatorios = obtener_recordatorios_personalizados("iphone_user")
+        ok = enviar_recordatorio_discord(pagos, recordatorios)
+        return {"status": "ok" if ok else "no_data", "pagos": len(pagos), "recordatorios": len(recordatorios)}
     except Exception as e:
         return {"error": True, "message": str(e)}
 

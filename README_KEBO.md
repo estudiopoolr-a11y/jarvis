@@ -116,6 +116,57 @@ Esto:
 ## 🎯 Estado actual
 
 ✅ Migración completada en código
-⏸️ **Migración de datos: pausada esperando confirmación del dueño**
 ✅ Comandos de voz funcionando con nueva estructura
-✅ Widget actualizado listo
+✅ Widget Scriptable actualizado (3 tamaños)
+✅ Dashboard web completo con gráficos
+✅ Reporte mensual automático por Discord
+✅ Sistema de recordatorios
+
+## 🌐 Dashboard Web
+
+Accede desde el navegador:
+
+```
+https://jarvis-h20g.onrender.com/dashboard
+```
+
+Incluye:
+- Resumen de balance/ingresos/gastos
+- Lista de cuentas con balances
+- Gráfico de donut por categoría
+- Gráfico de tendencia 6 meses
+- Alertas de presupuesto
+- Metas de ahorro con progreso
+- Pagos recurrentes
+- Últimas transacciones
+
+## 📅 Automatización Discord
+
+| Cron | Script | Frecuencia |
+|------|--------|------------|
+| Resumen diario | `daily_summary.py` | Cada 30 min |
+| Reporte mensual | `monthly_report.py` | Día 1 de cada mes |
+| Recordatorios | `reminders.py` | Diario |
+
+### Endpoints de cron:
+
+| URL | Descripción |
+|-----|-------------|
+| `/api/cron/daily-summary` | Resumen diario |
+| `/api/cron/monthly-report` | Reporte mensual |
+| `/api/cron/reminders` | Recordatorios del día |
+| `/api/cron/recurrentes` | Ejecuta pagos recurrentes |
+
+## 📁 Archivos nuevos
+
+| Archivo | Propósito |
+|---------|-----------|
+| `modules/database_v2.py` | Capa nueva de BD con funciones Kebo |
+| `jarvis_widget.js` | Widget Scriptable para iPhone |
+| `templates/dashboard.html` | Dashboard web completo |
+| `monthly_report.py` | Reporte mensual para Discord |
+| `reminders.py` | Sistema de recordatorios |
+| `daily_summary.py` | Resumen diario (ya existía) |
+| `backup_datos.py` | Script de backup local |
+| `migrar_a_kebo.py` | Script de migración local |
+| `README_KEBO.md` | Este archivo |
