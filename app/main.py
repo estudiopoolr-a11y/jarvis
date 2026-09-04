@@ -556,15 +556,20 @@ def api_kebo_load_agosto(usuario_id: str = "default"):
 
         ensure_user(usuario_id, "Pool")
 
-        # Verificar si ya se cargó agosto
+        # Verificar si ya se cargó agosto (buscando por tag)
         from modules.database import inicializar_firebase
         db = inicializar_firebase()
         if db:
-            existing = db.collection("users").document(usuario_id)\
-                .collection("transactions").document("2026").document("08")\
-                .collection("items").limit(1).stream()
-            if list(existing):
-                return {"status": "already_loaded", "message": "Agosto 2026 ya está cargado"}
+            try:
+                existing = db.collection("users").document(usuario_id)\
+                    .collection("transactions")\
+                    .where(filter=FieldFilter("tags", "array_contains", "agosto-2026"))\
+                    .limit(1).stream()
+                if list(existing):
+                    return {"status": "already_loaded", "message": "Agosto 2026 ya está cargado"}
+            except Exception as check_err:
+                # Si falla la verificación, seguimos y dejamos que se cargue
+                print(f"[load-agosto-2026] Check previo falló (continúa): {check_err}", flush=True)
 
         # ===== 1. CREAR CATEGORÍAS =====
         # Categorías predefinidas + personalizadas de Kebo
