@@ -174,6 +174,35 @@
             .grid { grid-template-columns: 1fr; }
             .card-value { font-size: 24px; }
         }
+
+        /* Pronóstico */
+        .pronostico-card {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 1px solid #6366f1;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .pronostico-title { font-size: 14px; color: #8b8b9e; text-transform: uppercase; }
+        .pronostico-value { font-size: 28px; font-weight: bold; color: #6366f1; margin: 8px 0; }
+        .pronostico-msg { font-size: 13px; color: #aaa; }
+        .tendencia-badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; }
+        .tendencia-alza { background: #2d1f1f; color: #ef4444; }
+        .tendencia-baja { background: #1f2d1f; color: #10b981; }
+        .tendencia-estable { background: #2d2a1f; color: #f59e0b; }
+
+        /* PDF button */
+        .pdf-btn {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+        }
+        .pdf-btn:hover { background: #059669; }
     </style>
 </head>
 <body>
@@ -183,8 +212,18 @@
                 <h1>🤖 JARVIS Dashboard</h1>
                 <p class="date" id="currentDate"></p>
             </div>
-            <button class="refresh-btn" onclick="loadData()">🔄 Actualizar</button>
+            <div>
+                <button class="pdf-btn" onclick="window.open(`${BASE_URL}/api/kebo/export-pdf?usuario_id=${usuario}`, '_blank')">📄 Generar Reporte</button>
+                <button class="refresh-btn" onclick="loadData()">🔄 Actualizar</button>
+            </div>
         </header>
+
+        <!-- Pronóstico de gastos -->
+        <div class="pronostico-card" id="pronosticoCard" style="display:none">
+            <span class="pronostico-title">🔮 Pronóstico de gastos este mes</span>
+            <div class="pronostico-value" id="pronosticoValue">$0</div>
+            <div class="pronostico-msg" id="pronosticoMsg"></div>
+        </div>
 
         <!-- Resumen Cards -->
         <div class="grid">
@@ -313,11 +352,12 @@
                 fetch(`${BASE_URL}/api/kebo/metas?usuario_id=${usuario}`).then(r => r.json()),
                 fetch(`${BASE_URL}/api/kebo/recurrentes?usuario_id=${usuario}`).then(r => r.json()),
                 fetch(`${BASE_URL}/api/kebo/transacciones?usuario_id=${usuario}&limite=15`).then(r => r.json()),
-                fetch(`${BASE_URL}/api/kebo/estadisticas?usuario_id=${usuario}&meses=6`).then(r => r.json())
+                fetch(`${BASE_URL}/api/kebo/estadisticas?usuario_id=${usuario}&meses=6`).then(r => r.json()),
+                fetch(`${BASE_URL}/api/kebo/pronostico?usuario_id=${usuario}`).then(r => r.json())
             ];
 
             try {
-                const [resumen, cuentas, alertas, metas, recurrentes, transacciones, stats] = await Promise.all(promises);
+                const [resumen, cuentas, alertas, metas, recurrentes, transacciones, stats, pronostico] = await Promise.all(promises);
                 updateResumen(resumen);
                 updateCuentas(cuentas);
                 updateAlertas(alertas);
@@ -325,6 +365,7 @@
                 updateRecurrentes(recurrentes);
                 updateTransacciones(transacciones);
                 updateCharts(resumen, stats);
+                updatePronostico(pronostico);
             } catch(e) {
                 console.error('Error cargando datos:', e);
                 alert('Error al cargar datos. Revisa la consola.');
@@ -431,6 +472,17 @@
             `}).join('');
         }
 
+        function updatePronostico(data) {
+            if (data.error || !data.pronostico_mensual) return;
+            const card = document.getElementById('pronosticoCard');
+            card.style.display = 'block';
+            document.getElementById('pronosticoValue').textContent = formatMoney(data.pronostico_mensual);
+            const tendenciaClass = data.tendencia.includes('Al alza') ? 'tendencia-alza' :
+                                    data.tendencia.includes('A la baja') ? 'tendencia-baja' : 'tendencia-estable';
+            document.getElementById('pronosticoMsg').innerHTML =
+                `${data.mensaje}<br><span class="tendencia-badge ${tendenciaClass}">${data.tendencia} (${data.cambio_vs_mes_anterior_pct}%)</span>`;
+        }
+
         function updateCharts(resumen, stats) {
             // Chart 1: Distribución por categoría
             const ctx1 = document.getElementById('categoryChart').getContext('2d');
@@ -463,7 +515,7 @@
                 });
             }
 
-            // Chart 2: Tendencia mensual
+            // Chart 2: Tendencia mensual con ahorro como línea
             const ctx2 = document.getElementById('trendChart').getContext('2d');
             if (trendChart) trendChart.destroy();
 
@@ -475,14 +527,30 @@
                         labels: tendencia.map(t => t.mes),
                         datasets: [
                             {
+                                type: 'bar',
                                 label: 'Ingresos',
                                 data: tendencia.map(t => t.ingresos),
-                                backgroundColor: '#10b981'
+                                backgroundColor: '#10b981',
+                                borderRadius: 4
                             },
                             {
+                                type: 'bar',
                                 label: 'Gastos',
                                 data: tendencia.map(t => t.gastos),
-                                backgroundColor: '#ef4444'
+                                backgroundColor: '#ef4444',
+                                borderRadius: 4
+                            },
+                            {
+                                type: 'line',
+                                label: 'Ahorro',
+                                data: tendencia.map(t => t.balance),
+                                borderColor: '#6366f1',
+                                backgroundColor: 'rgba(99,102,241,0.2)',
+                                fill: true,
+                                tension: 0.3,
+                                pointBackgroundColor: '#6366f1',
+                                pointRadius: 5,
+                                yAxisID: 'y2'
                             }
                         ]
                     },
@@ -491,9 +559,26 @@
                         maintainAspectRatio: false,
                         scales: {
                             x: { ticks: { color: '#8b8b9e' }, grid: { color: '#2a2a4e' } },
-                            y: { ticks: { color: '#8b8b9e', callback: v => '$' + (v/1000000).toFixed(1) + 'M' }, grid: { color: '#2a2a4e' } }
+                            y: {
+                                ticks: { color: '#8b8b9e', callback: v => '$' + (v/1000000).toFixed(1) + 'M' },
+                                grid: { color: '#2a2a4e' },
+                                stacked: false
+                            },
+                            y2: {
+                                position: 'right',
+                                ticks: { color: '#6366f1', callback: v => '$' + (v/1000000).toFixed(1) + 'M' },
+                                grid: { display: false },
+                                title: { display: true, text: 'Ahorro', color: '#6366f1' }
+                            }
                         },
-                        plugins: { legend: { labels: { color: '#fff' } } }
+                        plugins: {
+                            legend: { labels: { color: '#fff' } },
+                            tooltip: {
+                                callbacks: {
+                                    label: ctx => `${ctx.dataset.label}: $${(ctx.raw/1000).toFixed(0)}K`
+                                }
+                            }
+                        }
                     }
                 });
             }

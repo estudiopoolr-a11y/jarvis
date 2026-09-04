@@ -1305,6 +1305,36 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             msg += f"  {m}: ${actual:,.2f} COP\n"
         return msg
 
+    # 5b-14. PRONÓSTICO: "pronóstico", "cuánto voy a gastar este mes"
+    if any(k in texto_lc for k in ["pronóstico", "pronostico", "pronosticar", "cuánto voy a gastar", "cuanto voy a gastar"]):
+        from modules.database import obtener_estadisticas
+        stats = obtener_estadisticas(usuario_id, meses=6)
+        tendencia = stats.get("tendencia", [])
+        if len(tendencia) < 2:
+            return "📊 Necesito al menos 2 meses de historial para darte un pronóstico."
+
+        gastos_recientes = [t["gastos"] for t in tendencia[-3:]]
+        promedio = sum(gastos_recientes) / len(gastos_recientes)
+        pronostico = (tendencia[-1]["gastos"] * 0.5 + promedio * 0.5) if len(tendencia) >= 1 else promedio
+
+        mes_actual = tendencia[-1]["gastos"]
+        mes_anterior = tendencia[-2]["gastos"] if len(tendencia) > 1 else 0
+        cambio = ((mes_actual - mes_anterior) / max(mes_anterior, 1)) * 100
+
+        return (f"📊 **Pronóstico de gastos para este mes:**\n\n"
+                f"  🔮 Basado en tus últimos 3 meses: **${pronostico:,.0f}**\n"
+                f"  📈 Promedio últimos 3 meses: ${promedio:,.0f}\n"
+                f"  📅 Mes actual (parcial): ${mes_actual:,.0f}\n"
+                f"  📅 Mes anterior: ${mes_anterior:,.0f}\n"
+                f"  {tendencia[-1]['mes']} vs {tendencia[-2]['mes']}: {cambio:+.1f}%")
+
+    # 5b-15. EXPORTAR PDF: "generar reporte pdf", "exportar reporte mensual"
+    if any(k in texto_lc for k in ["generar reporte", "exportar pdf", "descargar reporte", "reporte mensual"]):
+        return ("📄 Para generar tu reporte mensual en PDF:\n"
+                "👉 Abre en el navegador:\n"
+                f"`https://jarvis-h20g.onrender.com/api/kebo/export-pdf?usuario_id={usuario_id}`\n\n"
+                "Usa Ctrl+P o el botón 🖨️ para guardar como PDF.")
+
     # 5c. Transacción (gasto/ingreso) - USA NUEVA ESTRUCTURA KEBO
     transaccion = _parse_transaccion(texto_lc)
     if transaccion:
