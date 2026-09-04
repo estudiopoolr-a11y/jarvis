@@ -273,24 +273,32 @@ def api_finanzas_resumen(usuario_id: str = "default"):
             nombre = pdata.get("category_name") or cat_map.get(pdata.get("category_id"), "?")
             presupuestos[nombre] = float(pdata.get("amount", 0))
 
-        # 3) Transacciones del mes
+        # 3) Transacciones — sumamos TODAS las del usuario (no solo el mes actual)
+        # Esto es más útil para el widget porque muestra el estado real,
+        # independientemente de cuándo se cargaron los datos.
         ingresos = 0.0
         gastos = 0.0
         gastos_por_categoria = {}
 
-        items_tx = user_ref.collection("transactions").document(year).document(month).collection("items").stream()
-        for t in items_tx:
-            tdata = t.to_dict()
-            monto = float(tdata.get("amount", 0))
-            tipo = tdata.get("type", "expense")
-            cat_id = tdata.get("category_id")
-            nombre = cat_map.get(cat_id, "Sin categoría")
+        # Recorrer todos los años/meses que tengan items
+        # Estructura: transactions/{year}/{month}/items/{id}
+        tx_root = user_ref.collection("transactions")
+        for year_doc in tx_root.list_documents():
+            # year_doc es un DocumentReference del año
+            for month_doc in year_doc.list_documents():
+                # month_doc es un DocumentReference del mes
+                for t in month_doc.collection("items").stream():
+                    tdata = t.to_dict()
+                    monto = float(tdata.get("amount", 0))
+                    tipo = tdata.get("type", "expense")
+                    cat_id = tdata.get("category_id")
+                    nombre = cat_map.get(cat_id, "Sin categoría")
 
-            if tipo == "income":
-                ingresos += monto
-            else:
-                gastos += monto
-                gastos_por_categoria[nombre] = gastos_por_categoria.get(nombre, 0) + monto
+                    if tipo == "income":
+                        ingresos += monto
+                    else:
+                        gastos += monto
+                        gastos_por_categoria[nombre] = gastos_por_categoria.get(nombre, 0) + monto
 
         balance = ingresos - gastos
 
