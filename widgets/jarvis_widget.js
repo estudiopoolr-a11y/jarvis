@@ -1,6 +1,6 @@
 // JARVIS Widget para Scriptable
-// Muestra tabla de presupuestos (presupuestado vs gastado vs disponible)
-// + préstamos por cobrar al final
+// Muestra tabla de presupuestos + préstamos por cobrar
+// Usa /api/widget/dashboard (UNA sola llamada HTTP)
 //
 // TAMAÑO PEQUEÑO: Total por cobrar + balance total
 // TAMAÑO MEDIANO: Resumen mes + total por cobrar + alertas
@@ -54,56 +54,6 @@ function formatMoney(amount) {
     return num < 0 ? `-${formatted}` : formatted
 }
 
-function transformarPresupuestos(raw) {
-    // /api/kebo/presupuestos devuelve {mes, presupuestos: {nombre: {limite, gastado, libre, excedido}}}
-    // Lo convertimos a {filas: [{categoria, presupuestado, gastado, disponible, excedido}], totales}
-    if (!raw || !raw.presupuestos || Object.keys(raw.presupuestos).length === 0) {
-        return { filas: [], totales: { presupuestado: 0, gastado: 0, disponible: 0, excedidos_count: 0 } }
-    }
-
-    const filas = []
-    let totalPres = 0
-    let totalGas = 0
-    let totalDisp = 0
-    let excedidosCount = 0
-
-    for (const [nombre, info] of Object.entries(raw.presupuestos)) {
-        const presupuestado = Number(info.limite) || 0
-        const gastado = Number(info.gastado) || 0
-        const disponible = presupuestado - gastado
-        const excedido = disponible < 0
-        if (excedido) excedidosCount++
-
-        filas.push({
-            categoria: nombre,
-            presupuestado,
-            gastado,
-            disponible,
-            excedido
-        })
-        totalPres += presupuestado
-        totalGas += gastado
-        totalDisp += disponible
-    }
-
-    // Ordenar: excedidos primero, luego por menor disponible
-    filas.sort((a, b) => {
-        if (a.excedido && !b.excedido) return -1
-        if (!a.excedido && b.excedido) return 1
-        return a.disponible - b.disponible
-    })
-
-    return {
-        filas,
-        totales: {
-            presupuestado: totalPres,
-            gastado: totalGas,
-            disponible: totalDisp,
-            excedidos_count: excedidosCount
-        }
-    }
-}
-
 async function main() {
     const w = new ListWidget()
     w.backgroundColor = new Color(COLORS.bg)
@@ -111,23 +61,26 @@ async function main() {
 
     const widgetFamily = config.widgetFamily || "small"
 
-    // Cargar datos en paralelo (usando endpoints existentes)
-    const [presupuestosRaw, prestamosData, alertasData, resumenData] = await Promise.all([
-        fetchJSON(`${BASE_URL}/api/kebo/presupuestos?usuario_id=${USUARIO}`),
-        fetchJSON(`${BASE_URL}/api/prestamos/listar?usuario_id=${USUARIO}&solo_pendientes=true`),
-        fetchJSON(`${BASE_URL}/api/kebo/alertas?usuario_id=${USUARIO}`),
-        fetchJSON(`${BASE_URL}/api/finanzas/resumen?usuario_id=${USUARIO}`)
-    ])
+    // UNA SOLA LLAMADA HTTP — todo en /api/widget/dashboard
+    const data = await fetchJSON(
+        `${BASE_URL}/api/widget/dashboard?usuario_id=${USUARIO}`
+    )
 
-    // Transformar el formato /api/kebo/presupuestos → formato interno {filas, totales}
-    const presupuestosData = transformarPresupuestos(presupuestosRaw)
+    if (!data || data.error) {
+        const errMsg = w.addText("Error cargando datos")
+        errMsg.font = Font.systemFont(12)
+        errMsg.textColor = new Color(COLORS.danger)
+        Script.setWidget(w)
+        Script.complete()
+        return
+    }
 
     if (widgetFamily === "small") {
-        await renderSmallWidget(w, presupuestosData, prestamosData)
+        await renderSmallWidget(w, data)
     } else if (widgetFamily === "medium") {
-        await renderMediumWidget(w, presupuestosData, prestamosData, resumenData, alertasData)
+        await renderMediumWidget(w, data)
     } else {
-        await renderLargeWidget(w, presupuestosData, prestamosData, resumenData, alertasData)
+        await renderLargeWidget(w, data)
     }
 
     Script.setWidget(w)
@@ -135,24 +88,34 @@ async function main() {
 }
 
 // ============ TAMAÑO PEQUEÑO ============
-async function renderSmallWidget(w, presupuestosData, prestamosData) {
+// Muestra: logo + total por cobrar + balance del mes
+async function renderSmallWidget(w, data) {
     // Header
     const header = w.addText("🤖 JARVIS")
     header.font = Font.boldSystemFont(14)
     header.textColor = new Color(COLORS.accent)
     w.addSpacer(4)
 
-    // Por cobrar (lo más importante)
-    if (prestamosData && prestamosData.total_por_cobrar > 0) {
+    // Mes actual
+    const mesLabel = w.addText(data.mes || "")
+    mesLabel.font = Font.systemFont(9)
+    mesLabel.textColor = new Color(COLORS.subtitle)
+    w.addSpacer(6)
+
+    // Por cobrar
+    const numPrestamos = (data.prestamos_pendientes || []).length
+    if (data.total_por_cobrar > 0) {
         const label = w.addText("💰 POR COBRAR")
         label.font = Font.boldSystemFont(9)
         label.textColor = new Color(COLORS.loan)
+        w.addSpacer(2)
 
-        const total = w.addText(formatMoney(prestamosData.total_por_cobrar))
+        const total = w.addText(formatMoney(data.total_por_cobrar))
         total.font = Font.boldSystemFont(22)
         total.textColor = new Color(COLORS.loan)
+        w.addSpacer(2)
 
-        const numTxt = w.addText(`${prestamosData.total || 0} préstamo${(prestamosData.total || 0) !== 1 ? 's' : ''}`)
+        const numTxt = w.addText(`${numPrestamos} préstamo${numPrestamos !== 1 ? 's' : ''}`)
         numTxt.font = Font.systemFont(9)
         numTxt.textColor = new Color(COLORS.subtitle)
     } else {
@@ -161,23 +124,30 @@ async function renderSmallWidget(w, presupuestosData, prestamosData) {
         empty.textColor = new Color(COLORS.subtitle)
     }
 
-    w.addSpacer(4)
+    w.addSpacer(6)
 
-    // Total disponible del mes
-    if (presupuestosData && presupuestosData.totales) {
-        const t = presupuestosData.totales
-        const dispLabel = w.addText("💵 DISPONIBLE")
-        dispLabel.font = Font.boldSystemFont(9)
-        dispLabel.textColor = new Color(COLORS.subtitle)
+    // Balance del mes
+    if (data.balance_general) {
+        const bg = data.balance_general
+        const balLabel = w.addText("📊 BALANCE")
+        balLabel.font = Font.boldSystemFont(9)
+        balLabel.textColor = new Color(COLORS.subtitle)
+        w.addSpacer(2)
 
-        const dispValue = w.addText(formatMoney(t.disponible))
-        dispValue.font = Font.boldSystemFont(18)
-        dispValue.textColor = t.disponible >= 0 ? new Color(COLORS.income) : new Color(COLORS.danger)
+        const balValue = w.addText(formatMoney(bg.balance))
+        balValue.font = Font.boldSystemFont(18)
+        balValue.textColor = bg.balance >= 0 ? new Color(COLORS.income) : new Color(COLORS.danger)
+        w.addSpacer(1)
+
+        const subTxt = w.addText(`${formatMoney(bg.ingresos)} in — ${formatMoney(bg.gastos)} out`)
+        subTxt.font = Font.systemFont(8)
+        subTxt.textColor = new Color(COLORS.subtitle)
     }
 }
 
 // ============ TAMAÑO MEDIANO ============
-async function renderMediumWidget(w, presupuestosData, prestamosData, resumenData, alertasData) {
+// Muestra: header + por cobrar + tabla top 5 + totales
+async function renderMediumWidget(w, data) {
     // Header con fecha
     const headerRow = w.addStack()
     headerRow.layoutHorizontal()
@@ -197,7 +167,8 @@ async function renderMediumWidget(w, presupuestosData, prestamosData, resumenDat
     w.addSpacer(6)
 
     // Por cobrar
-    if (prestamosData && prestamosData.total_por_cobrar > 0) {
+    const numPrestamos = (data.prestamos_pendientes || []).length
+    if (data.total_por_cobrar > 0) {
         const card = w.addStack()
         card.backgroundColor = new Color(COLORS.card_loan)
         card.cornerRadius = 6
@@ -210,11 +181,11 @@ async function renderMediumWidget(w, presupuestosData, prestamosData, resumenDat
         label.font = Font.boldSystemFont(9)
         label.textColor = new Color(COLORS.loan)
 
-        const total = content.addText(formatMoney(prestamosData.total_por_cobrar))
+        const total = content.addText(formatMoney(data.total_por_cobrar))
         total.font = Font.boldSystemFont(20)
         total.textColor = new Color(COLORS.loan)
 
-        const sub = content.addText(`${prestamosData.total || 0} préstamo${(prestamosData.total || 0) !== 1 ? 's' : ''} pendiente${(prestamosData.total || 0) !== 1 ? 's' : ''}`)
+        const sub = content.addText(`${numPrestamos} préstamo${numPrestamos !== 1 ? 's' : ''} pendiente${numPrestamos !== 1 ? 's' : ''}`)
         sub.font = Font.systemFont(9)
         sub.textColor = new Color(COLORS.subtitle)
 
@@ -222,14 +193,21 @@ async function renderMediumWidget(w, presupuestosData, prestamosData, resumenDat
     }
 
     // Tabla compacta: top 5 categorías
-    if (presupuestosData && presupuestosData.filas && presupuestosData.filas.length > 0) {
+    const presupuestos = data.presupuestos || []
+    if (presupuestos.length > 0) {
         const label = w.addText("📋 PRESUPUESTOS")
         label.font = Font.boldSystemFont(9)
         label.textColor = new Color(COLORS.subtitle)
         w.addSpacer(3)
 
-        // Mostrar top 5
-        const top = presupuestosData.filas.slice(0, 5)
+        // Ordenar: excedidos primero, luego por menor disponible
+        const ordenados = [...presupuestos].sort((a, b) => {
+            if (a.excedido && !b.excedido) return -1
+            if (!a.excedido && b.excedido) return 1
+            return a.disponible - b.disponible
+        })
+
+        const top = ordenados.slice(0, 5)
         for (const fila of top) {
             const row = w.addStack()
             row.layoutHorizontal()
@@ -243,7 +221,9 @@ async function renderMediumWidget(w, presupuestosData, prestamosData, resumenDat
 
             const valText = row.addText(formatMoney(fila.disponible))
             valText.font = Font.boldSystemFont(10)
-            valText.textColor = fila.disponible < 0 ? new Color(COLORS.danger) : (fila.disponible < fila.presupuestado * 0.2 ? new Color(COLORS.warning) : new Color(COLORS.income))
+            valText.textColor = fila.disponible < 0
+                ? new Color(COLORS.danger)
+                : (fila.disponible < fila.limite * 0.2 ? new Color(COLORS.warning) : new Color(COLORS.income))
 
             w.addSpacer(1)
         }
@@ -252,41 +232,37 @@ async function renderMediumWidget(w, presupuestosData, prestamosData, resumenDat
     }
 
     // Totales
-    if (presupuestosData && presupuestosData.totales) {
-        const t = presupuestosData.totales
-        const sep = w.addText("─".repeat(20))
-        sep.font = Font.systemFont(8)
-        sep.textColor = new Color(COLORS.border)
-        w.addSpacer(2)
+    const sep = w.addText("─".repeat(20))
+    sep.font = Font.systemFont(8)
+    sep.textColor = new Color(COLORS.border)
+    w.addSpacer(2)
 
-        const totalRow = w.addStack()
-        totalRow.layoutHorizontal()
+    const totalRow = w.addStack()
+    totalRow.layoutHorizontal()
 
-        const totalLabel = totalRow.addText("DISPONIBLE")
-        totalLabel.font = Font.boldSystemFont(9)
-        totalLabel.textColor = new Color(COLORS.subtitle)
+    const totalLabel = totalRow.addText("DISPONIBLE")
+    totalLabel.font = Font.boldSystemFont(9)
+    totalLabel.textColor = new Color(COLORS.subtitle)
 
-        totalRow.addSpacer()
+    totalRow.addSpacer()
 
-        const totalVal = totalRow.addText(formatMoney(t.disponible))
-        totalVal.font = Font.boldSystemFont(14)
-        totalVal.textColor = t.disponible >= 0 ? new Color(COLORS.income) : new Color(COLORS.danger)
-    }
+    const totalVal = totalRow.addText(formatMoney(data.total_disponible))
+    totalVal.font = Font.boldSystemFont(14)
+    totalVal.textColor = data.total_disponible >= 0 ? new Color(COLORS.income) : new Color(COLORS.danger)
 
     // Alerta si hay excedidos
-    if (alertasData && alertasData.alertas) {
-        const excedidos = alertasData.alertas.filter(a => a.tipo === "excedido")
-        if (excedidos.length > 0) {
-            w.addSpacer(2)
-            const alert = w.addText(`🚨 ${excedidos.length} presupuesto${excedidos.length !== 1 ? 's' : ''} excedido${excedidos.length !== 1 ? 's' : ''}`)
-            alert.font = Font.systemFont(9)
-            alert.textColor = new Color(COLORS.danger)
-        }
+    const excedidas = data.excedidas || []
+    if (excedidas.length > 0) {
+        w.addSpacer(2)
+        const alert = w.addText(`🚨 ${excedidas.length} presupuesto${excedidas.length !== 1 ? 's' : ''} excedido${excedidas.length !== 1 ? 's' : ''}`)
+        alert.font = Font.systemFont(9)
+        alert.textColor = new Color(COLORS.danger)
     }
 }
 
 // ============ TAMAÑO GRANDE ============
-async function renderLargeWidget(w, presupuestosData, prestamosData, resumenData, alertasData) {
+// Muestra: header + préstamos + tabla completa presupuestos + totales
+async function renderLargeWidget(w, data) {
     // Header
     const header = w.addStack()
     header.layoutHorizontal()
@@ -306,7 +282,8 @@ async function renderLargeWidget(w, presupuestosData, prestamosData, resumenData
     w.addSpacer(4)
 
     // ===== PRÉSTAMOS POR COBRAR =====
-    if (prestamosData && prestamosData.total_por_cobrar > 0) {
+    const prestamos = data.prestamos_pendientes || []
+    if (data.total_por_cobrar > 0) {
         const card = w.addStack()
         card.backgroundColor = new Color(COLORS.card_loan)
         card.cornerRadius = 6
@@ -321,18 +298,18 @@ async function renderLargeWidget(w, presupuestosData, prestamosData, resumenData
         label.font = Font.boldSystemFont(9)
         label.textColor = new Color(COLORS.loan)
         labelRow.addSpacer()
-        const numLabel = labelRow.addText(`${prestamosData.total || 0} préstamo${(prestamosData.total || 0) !== 1 ? 's' : ''}`)
+        const numLabel = labelRow.addText(`${prestamos.length} préstamo${prestamos.length !== 1 ? 's' : ''}`)
         numLabel.font = Font.systemFont(9)
         numLabel.textColor = new Color(COLORS.subtitle)
 
-        const total = content.addText(formatMoney(prestamosData.total_por_cobrar))
+        const total = content.addText(formatMoney(data.total_por_cobrar))
         total.font = Font.boldSystemFont(20)
         total.textColor = new Color(COLORS.loan)
 
         // Top 2 préstamos
-        if (prestamosData.prestamos && prestamosData.prestamos.length > 0) {
+        if (prestamos.length > 0) {
             content.addSpacer(2)
-            for (const p of prestamosData.prestamos.slice(0, 2)) {
+            for (const p of prestamos.slice(0, 2)) {
                 const pRow = content.addStack()
                 pRow.layoutHorizontal()
                 const left = pRow.addText(`• ${p.persona || '?'}`)
@@ -340,7 +317,7 @@ async function renderLargeWidget(w, presupuestosData, prestamosData, resumenData
                 left.textColor = new Color(COLORS.text_dim)
                 left.lineLimit = 1
                 pRow.addSpacer()
-                const right = pRow.addText(formatMoney(p.monto_pendiente))
+                const right = pRow.addText(formatMoney(p.pendiente))
                 right.font = Font.boldSystemFont(9)
                 right.textColor = new Color(COLORS.loan)
             }
@@ -350,7 +327,15 @@ async function renderLargeWidget(w, presupuestosData, prestamosData, resumenData
     }
 
     // ===== TABLA DE PRESUPUESTOS =====
-    if (presupuestosData && presupuestosData.filas && presupuestosData.filas.length > 0) {
+    const presupuestos = data.presupuestos || []
+    if (presupuestos.length > 0) {
+        // Ordenar: excedidos primero, luego por menor disponible
+        const ordenados = [...presupuestos].sort((a, b) => {
+            if (a.excedido && !b.excedido) return -1
+            if (!a.excedido && b.excedido) return 1
+            return a.disponible - b.disponible
+        })
+
         const label = w.addText("📋 PRESUPUESTOS DEL MES")
         label.font = Font.boldSystemFont(10)
         label.textColor = new Color(COLORS.subtitle)
@@ -376,11 +361,10 @@ async function renderLargeWidget(w, presupuestosData, prestamosData, resumenData
         w.addSpacer(1)
 
         // Filas
-        for (const fila of presupuestosData.filas) {
+        for (const fila of ordenados) {
             const row = w.addStack()
             row.layoutHorizontal()
 
-            // Categoría
             const catText = row.addText(fila.categoria)
             catText.font = Font.systemFont(9)
             catText.textColor = fila.excedido ? new Color(COLORS.danger) : new Color(COLORS.text)
@@ -388,64 +372,67 @@ async function renderLargeWidget(w, presupuestosData, prestamosData, resumenData
 
             row.addSpacer()
 
-            // Valores en línea: Presup / Gastado / Disp
-            const vals = row.addText(`${formatMoney(fila.presupuestado)}  ${formatMoney(fila.gastado)}  ${formatMoney(fila.disponible)}`)
-            vals.font = Font.systemFont(9)
-            vals.textColor = fila.disponible < 0
+            const vals = row.addStack()
+            vals.layoutHorizontal()
+
+            const presText = vals.addText(formatMoney(fila.limite))
+            presText.font = Font.systemFont(9)
+            presText.textColor = new Color(COLORS.text_dim)
+            vals.addSpacer(4)
+            const gasText = vals.addText(formatMoney(fila.gastado))
+            gasText.font = Font.systemFont(9)
+            gasText.textColor = new Color(COLORS.expense)
+            vals.addSpacer(4)
+            const dispText = vals.addText(formatMoney(fila.disponible))
+            dispText.font = Font.boldSystemFont(9)
+            dispText.textColor = fila.disponible < 0
                 ? new Color(COLORS.danger)
-                : (fila.disponible < fila.presupuestado * 0.2 ? new Color(COLORS.warning) : new Color(COLORS.text_dim))
-            vals.lineLimit = 1
+                : (fila.disponible < fila.limite * 0.2 ? new Color(COLORS.warning) : new Color(COLORS.income))
 
             w.addSpacer(1)
         }
 
-        w.addSpacer(3)
+        w.addSpacer(4)
 
-        // Separador
+        // Separador + Totales
         const sep2 = w.addText("─".repeat(40))
         sep2.font = Font.systemFont(6)
         sep2.textColor = new Color(COLORS.border)
         w.addSpacer(2)
 
-        // Total
-        const t = presupuestosData.totales
-        const totalRow = w.addStack()
-        totalRow.layoutHorizontal()
+        const totRow = w.addStack()
+        totRow.layoutHorizontal()
+        const totLabel = totRow.addText("TOTALES")
+        totLabel.font = Font.boldSystemFont(9)
+        totLabel.textColor = new Color(COLORS.subtitle)
+        totRow.addSpacer()
+        const totVals = totRow.addStack()
+        totVals.layoutHorizontal()
+        const tPres = totVals.addText(formatMoney(data.total_presupuestado))
+        tPres.font = Font.boldSystemFont(9)
+        tPres.textColor = new Color(COLORS.text)
+        totVals.addSpacer(4)
+        const tGas = totVals.addText(formatMoney(data.total_gastado))
+        tGas.font = Font.boldSystemFont(9)
+        tGas.textColor = new Color(COLORS.expense)
+        totVals.addSpacer(4)
+        const tDisp = totVals.addText(formatMoney(data.total_disponible))
+        tDisp.font = Font.boldSystemFont(9)
+        tDisp.textColor = data.total_disponible >= 0 ? new Color(COLORS.income) : new Color(COLORS.danger)
 
-        const totalLabel = totalRow.addText("💵 DISPONIBLE")
-        totalLabel.font = Font.boldSystemFont(10)
-        totalLabel.textColor = new Color(COLORS.text)
-
-        totalRow.addSpacer()
-
-        const totalText = totalRow.addText(formatMoney(t.disponible))
-        totalText.font = Font.boldSystemFont(14)
-        totalText.textColor = t.disponible >= 0 ? new Color(COLORS.income) : new Color(COLORS.danger)
-
-        w.addSpacer(2)
-
-        // Excedidos
-        if (t.excedidos_count > 0) {
-            const excTxt = w.addText(`🚨 ${t.excedidos_count} categoría${t.excedidos_count !== 1 ? 's' : ''} excedida${t.excedidos_count !== 1 ? 's' : ''}`)
-            excTxt.font = Font.systemFont(9)
-            excTxt.textColor = new Color(COLORS.danger)
-        } else {
-            const okTxt = w.addText("✅ Todo en orden")
-            okTxt.font = Font.systemFont(9)
-            okTxt.textColor = new Color(COLORS.income)
+        // Excedidos count
+        const excedidas = (data.excedidas || [])
+        if (excedidas.length > 0) {
+            w.addSpacer(2)
+            const alert = w.addText(`🚨 ${excedidas.length} presupuesto${excedidas.length !== 1 ? 's' : ''} excedido${excedidas.length !== 1 ? 's' : ''}`)
+            alert.font = Font.systemFont(9)
+            alert.textColor = new Color(COLORS.danger)
         }
     } else {
-        const empty = w.addText("Sin presupuestos configurados")
+        const empty = w.addText("Sin presupuestos")
         empty.font = Font.systemFont(11)
         empty.textColor = new Color(COLORS.subtitle)
     }
-
-    // Footer
-    w.addSpacer()
-    const footer = w.addText("JARVIS · " + new Date().toLocaleTimeString('es-ES', {hour: '2-digit', minute:'2-digit'}))
-    footer.font = Font.systemFont(8)
-    footer.textColor = new Color(COLORS.subtitle)
-    footer.centerAlignText()
 }
 
 main()
