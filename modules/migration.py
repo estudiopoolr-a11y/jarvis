@@ -151,44 +151,48 @@ def auditar_firebase(db, usuario_id="default"):
     try:
         total_tx = 0
         months_per_year = {}
+        debug_info = {"all_ids": [], "format_check": [], "nuevos": [], "antiguos": []}
         all_tx_docs = user_ref.collection("transactions").get()
         for tx_doc in all_tx_docs:
             periodo_id = tx_doc.id
+            debug_info["all_ids"].append(periodo_id)
             if periodo_id.startswith("_"):
                 continue
             # Determinar si es estructura nueva (YYYY-MM) o antigua (año solo)
             parts = periodo_id.split("-") if "-" in periodo_id else []
             if len(parts) == 2 and len(parts[0]) == 4 and parts[0].isdigit():
                 # Nueva estructura: transactions/YYYY-MM/items/{id}
+                debug_info["nuevos"].append(periodo_id)
                 year_id, month_id = parts[0], parts[1]
                 if year_id not in months_per_year:
                     months_per_year[year_id] = []
                 if month_id not in months_per_year[year_id]:
                     months_per_year[year_id].append(month_id)
-                total_tx += sum(1 for _ in tx_doc.reference.collection("items").stream())
+                n_items = sum(1 for _ in tx_doc.reference.collection("items").stream())
+                debug_info["format_check"].append(f"{periodo_id}={n_items}items")
+                total_tx += n_items
             else:
                 # Estructura antigua: transactions/year/(col)month/items/{id}
-                # "09" es una sub-coleccion de "2026", no un documento
-                # Para acceder a items: tx_doc.reference.collection("09").document(item_id)
+                debug_info["antiguos"].append(periodo_id)
                 year_id = periodo_id
                 if year_id not in months_per_year:
                     months_per_year[year_id] = []
-                # Buscar sub-colecciones mes (01-12)
                 for m in range(1, 13):
                     month_id = f"{m:02d}"
                     try:
                         month_col = tx_doc.reference.collection(month_id)
-                        # month_col es CollectionReference, items son docs directos
                         items = list(month_col.stream())
                         if items:
                             if month_id not in months_per_year[year_id]:
                                 months_per_year[year_id].append(month_id)
                             total_tx += len(items)
+                            debug_info["format_check"].append(f"{periodo_id}/{month_id}={len(items)}items")
                     except Exception:
                         pass
         resultado["nuevo"]["transactions"] = {
             "count": total_tx,
-            "years_months": months_per_year
+            "years_months": months_per_year,
+            "_debug": debug_info
         }
     except Exception as e:
         import traceback
