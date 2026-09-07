@@ -361,7 +361,7 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
 
         # Verificar si ya existe (idempotencia)
         existing = list(
-            user_ref.collection("transactions").document(year).document(month).collection("items")
+            user_ref.collection("transactions").document(year).collection(month).collection("items")
             .where("legacy_id", "==", d.id).limit(1).stream()
         )
         if existing:
@@ -380,7 +380,7 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
 
         # Crear transacción
         try:
-            tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
+            tx_ref = user_ref.collection("transactions").document(year).collection(month).collection("items").document()
             tx_ref.set({
                 "type": tipo_kebo,
                 "amount": float(data.get("monto", 0)),
@@ -413,9 +413,8 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
     year = str(ahora.year)
     month = f"{ahora.month:02d}"
 
-    # Asegurar que existan los documentos padre (estructura anidada: budgets/{year}/{month}/items/)
+    # Asegurar que existan los documentos padre (estructura anidada: budgets/{year}/month/{month}/items/)
     user_ref.collection("budgets").document(year).set({"_exists": True}, merge=True)
-    user_ref.collection("budgets").document(year).collection(month).document("_meta").set({"_exists": True}, merge=True)
 
     for d in docs:
         data = d.to_dict()
