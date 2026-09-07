@@ -1717,26 +1717,41 @@ def api_admin_clean_user_data(usuario_id: str = Form("iphone_user")):
                 # Primero: listar y eliminar documentos
                 docs = list(user_ref.collection(col_name).list_documents())
                 for doc in docs:
-                    # Eliminar sub-colecciones (como "items")
-                    for m in range(1, 13):
-                        for sub_col_name in ["items"]:
-                            try:
-                                sub_col = doc.collection(f"{m:02d}").collection(sub_col_name)
-                                sub_docs = list(sub_col.list_documents())
-                                for sd in sub_docs:
-                                    sd.delete()
-                                    count += 1
-                            except Exception:
-                                pass
-                    # Eliminar sub-colecciones "items" directas (periodo como YYYY-MM)
+                    # Estructura: {col}/{YYYY-MM}/items/{id} (periodo como doc, items como sub-col)
+                    # Tambien estructura mala: {col}/{year}/{month}/items/{id} (3 niveles)
+                    # Eliminar sub-coleccion "items" directa (patron YYYY-MM)
                     try:
-                        sub_col = doc.collection("items")
-                        sub_docs = list(sub_col.list_documents())
+                        sub_docs = list(doc.collection("items").list_documents())
                         for sd in sub_docs:
                             sd.delete()
                             count += 1
                     except Exception:
                         pass
+                    # Estructura mala 3 niveles: {col}/{year}/(col)month/items/{id}
+                    for m in range(1, 13):
+                        month_id = f"{m:02d}"
+                        try:
+                            # month_id es una coleccion, items son docs directos
+                            sub_docs = list(doc.collection(month_id).list_documents())
+                            for sd in sub_docs:
+                                sd.delete()
+                                count += 1
+                        except Exception:
+                            pass
+                        # Tambien probar como sub-documento
+                        try:
+                            month_ref = doc.document(month_id)
+                            month_doc = month_ref.get()
+                            if month_doc.exists:
+                                # Es un sub-documento
+                                items_refs = list(month_ref.collection("items").list_documents())
+                                for it in items_refs:
+                                    it.delete()
+                                    count += 1
+                                month_ref.delete()
+                                count += 1
+                        except Exception:
+                            pass
                     doc.delete()
                     count += 1
             except Exception as e:
