@@ -289,7 +289,7 @@ def _buscar_categoria_id(user_ref, nombre_buscado):
 
 def migrar_transacciones_legacy(db, usuario_id="default"):
     """Migra documentos de 'finanzas' a 'transactions/{year}/{month}/items/'."""
-    stats = {"leidas": 0, "migradas": 0, "saltadas_prestamo": 0, "errores": 0}
+    stats = {"leidas": 0, "migradas": 0, "saltadas_prestamo": 0, "saltadas_existente": 0, "errores": 0}
     categoria_prestamos = ["préstamo", "prestamo", "prestamos"]
 
     # Primero, asegurar que todas las categorías existan
@@ -349,11 +349,11 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
                 fecha = ahora.strftime("%Y-%m-%d")
 
         # Verificar si ya existe (idempotencia)
-        existing = list(
-            user_ref.collection("transactions").document(f"{year}-{month}").collection("items")
-            .where("legacy_id", "==", d.id).limit(1).stream()
-        )
+        periodo = f"{year}-{month}"
+        items_ref = user_ref.collection("transactions").document(periodo).collection("items")
+        existing = list(items_ref.where("legacy_id", "==", d.id).limit(1).stream())
         if existing:
+            stats["saltadas_existente"] = stats.get("saltadas_existente", 0) + 1
             continue
 
         # Mapear tipo
