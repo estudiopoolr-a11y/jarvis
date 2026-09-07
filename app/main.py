@@ -1697,9 +1697,9 @@ def api_admin_list_tx_paths(usuario_id: str = "iphone_user"):
         return {"error": str(e), "tb": traceback.format_exc()}
 
 
-@app.post("/api/admin/clean-bad-transactions")
-def api_admin_clean_bad_tx(usuario_id: str = Form("iphone_user")):
-    """Limpia transacciones y budgets que estén en estructura antigua (3 niveles)."""
+@app.post("/api/admin/clean-user-data")
+def api_admin_clean_user_data(usuario_id: str = Form("iphone_user")):
+    """Borra TODOS los datos del usuario para empezar desde cero con estructura limpia."""
     try:
         from modules.database import inicializar_firebase
         db = inicializar_firebase()
@@ -1707,62 +1707,21 @@ def api_admin_clean_bad_tx(usuario_id: str = Form("iphone_user")):
             return {"error": "Firebase no disponible"}
         user_ref = db.collection("users").document(usuario_id)
 
-        cleaned = {"transactions_items": 0, "transactions_periodos_removed": [], "budgets_items": 0, "budgets_periodos_removed": []}
+        cleaned = {}
+        collections_to_clean = ["transactions", "budgets", "categories", "accounts", "goals", "loans", "recurring", "reminders", "exchange_rates"]
 
-        # 1. Listar TODOS los periodos en transactions
-        # Estructura correcta: transactions/{YYYY-MM}/items/{id}
-        # Estructura mala: transactions/{year}/(collection/sub-doc)month/items/{id} o transactions/{year}/{month_doc}/items/{id}
-        tx_periodos = list(user_ref.collection("transactions").list_documents())
-        for periodo_ref in tx_periodos:
-            periodo_id = periodo_ref.id
-            # Si el periodo_id tiene formato "YYYY-MM" (4-2 digitos con guion), es correcto
-            parts = periodo_id.split("-") if "-" in periodo_id else []
-            if len(parts) == 2 and len(parts[0]) == 4 and parts[0].isdigit() and len(parts[1]) == 2 and parts[1].isdigit():
-                # Es un periodo valido, dejarlo
-                continue
-            # Si no, es una estructura mala. Eliminar todo lo de adentro
-            # El periodo_ref es un DocumentReference. Sus hijos pueden ser docs o collections
+        for col_name in collections_to_clean:
+            count = 0
             try:
-                sub_docs = list(periodo_ref.list_documents())
-                for sd in sub_docs:
-                    # Eliminar todos los items que tenga como sub-coleccion
-                    try:
-                        items_refs = list(sd.collection("items").list_documents())
-                        for it in items_refs:
-                            it.delete()
-                            cleaned["transactions_items"] += 1
-                    except Exception:
-                        pass
-                    sd.delete()
-                    cleaned["transactions_periodos_removed"].append(sd.id)
+                docs = list(user_ref.collection(col_name).list_documents())
+                for doc in docs:
+                    doc.delete()
+                    count += 1
             except Exception as e:
                 pass
-            periodo_ref.delete()
+            cleaned[col_name] = count
 
-        # 2. Limpiar budgets
-        bg_periodos = list(user_ref.collection("budgets").list_documents())
-        for periodo_ref in bg_periodos:
-            periodo_id = periodo_ref.id
-            parts = periodo_id.split("-") if "-" in periodo_id else []
-            if len(parts) == 2 and len(parts[0]) == 4 and parts[0].isdigit() and len(parts[1]) == 2 and parts[1].isdigit():
-                continue
-            try:
-                sub_docs = list(periodo_ref.list_documents())
-                for sd in sub_docs:
-                    try:
-                        items_refs = list(sd.collection("items").list_documents())
-                        for it in items_refs:
-                            it.delete()
-                            cleaned["budgets_items"] += 1
-                    except Exception:
-                        pass
-                    sd.delete()
-                    cleaned["budgets_periodos_removed"].append(sd.id)
-            except Exception as e:
-                pass
-            periodo_ref.delete()
-
-        return {"status": "ok", "cleaned": cleaned}
+        return {"status": "ok", "message": "Todos los datos borrados", "cleaned": cleaned}
     except Exception as e:
         import traceback
         return {"error": str(e), "tb": traceback.format_exc()}
