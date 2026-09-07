@@ -145,6 +145,13 @@ def auditar_firebase(db, usuario_id="default"):
     except:
         resultado["nuevo"]["categories"] = {"count": 0}
 
+    # DEBUG: verificar idempotencia en el periodo 2026-09
+    test_items_ref = user_ref.collection("transactions").document("2026-09").collection("items")
+    test_existing = list(test_items_ref.limit(5).stream())
+    print(f"[AUDIT] Test 2026-09 items: found {len(test_existing)}")
+    for te in test_existing:
+        print(f"[AUDIT] Item: {te.id}, legacy_id={te.to_dict().get('legacy_id', 'N/A')}")
+
     # Transactions (todos los meses)
     # Estructura nueva (correcta): transactions/{YYYY-MM}/items/{id}
     # Estructura antigua (mala): transactions/{year}/(col)month/items/{id}
