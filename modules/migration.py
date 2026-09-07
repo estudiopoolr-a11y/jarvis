@@ -146,25 +146,46 @@ def auditar_firebase(db, usuario_id="default"):
         resultado["nuevo"]["categories"] = {"count": 0}
 
     # Transactions (todos los meses)
-    # Estructura: transactions/{YYYY-MM}/{id} (periodo como doc, items como docs hijos)
+    # Estructura nueva (correcta): transactions/{YYYY-MM}/items/{id}
+    # Estructura antigua (mala): transactions/{year}/(col)month/items/{id}
     try:
         total_tx = 0
         months_per_year = {}
-        # Iterar periodos (formato "YYYY-MM")
-        all_periodo_docs = user_ref.collection("transactions").get()
-        for periodo_doc in all_periodo_docs:
-            periodo_id = periodo_doc.id
+        all_tx_docs = user_ref.collection("transactions").get()
+        for tx_doc in all_tx_docs:
+            periodo_id = tx_doc.id
             if periodo_id.startswith("_"):
                 continue
-            parts = periodo_id.split("-")
-            if len(parts) != 2:
-                continue
-            year_id, month_id = parts
-            if year_id not in months_per_year:
-                months_per_year[year_id] = []
-            if month_id not in months_per_year[year_id]:
-                months_per_year[year_id].append(month_id)
-            total_tx += sum(1 for _ in periodo_doc.reference.collection("items").stream())
+            # Determinar si es estructura nueva (YYYY-MM) o antigua (año solo)
+            parts = periodo_id.split("-") if "-" in periodo_id else []
+            if len(parts) == 2 and len(parts[0]) == 4 and parts[0].isdigit():
+                # Nueva estructura: transactions/YYYY-MM/items/{id}
+                year_id, month_id = parts[0], parts[1]
+                if year_id not in months_per_year:
+                    months_per_year[year_id] = []
+                if month_id not in months_per_year[year_id]:
+                    months_per_year[year_id].append(month_id)
+                total_tx += sum(1 for _ in tx_doc.reference.collection("items").stream())
+            else:
+                # Estructura antigua: transactions/year/(col)month/items/{id}
+                # "09" es una sub-coleccion de "2026", no un documento
+                # Para acceder a items: tx_doc.reference.collection("09").document(item_id)
+                year_id = periodo_id
+                if year_id not in months_per_year:
+                    months_per_year[year_id] = []
+                # Buscar sub-colecciones mes (01-12)
+                for m in range(1, 13):
+                    month_id = f"{m:02d}"
+                    try:
+                        month_col = tx_doc.reference.collection(month_id)
+                        # month_col es CollectionReference, items son docs directos
+                        items = list(month_col.stream())
+                        if items:
+                            if month_id not in months_per_year[year_id]:
+                                months_per_year[year_id].append(month_id)
+                            total_tx += len(items)
+                    except Exception:
+                        pass
         resultado["nuevo"]["transactions"] = {
             "count": total_tx,
             "years_months": months_per_year
