@@ -1666,8 +1666,8 @@ def api_admin_list_tx_paths(usuario_id: str = "iphone_user"):
 
         return {
             "db_type": type(db).__name__,
-            "user_ref_path": user_ref.path,
-            "items_ref_path": items_ref.path,
+            "user_ref_id": user_ref.id,
+            "items_ref_id": str(items_ref),
             "existing_count": len(existing),
             "existing_ids": [{"id": e.id, "legacy_id": e.to_dict().get("legacy_id")} for e in existing],
             "tx_collection_docs": [d.id for d in all_tx_docs],
