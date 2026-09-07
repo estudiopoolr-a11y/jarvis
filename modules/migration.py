@@ -116,7 +116,13 @@ def auditar_firebase(db, usuario_id="default"):
         resultado["legacy"]["pagos_fijos"] = {"error": str(e)}
 
     # ===== NUEVO: users/{userId} =====
-    user_ref = db.collection("users").document(usuario_id)
+    # Usar la función _get_user_ref de database.py para obtener db y user_ref correctamente
+    try:
+        from modules.database import _get_user_ref
+        db, user_ref = _get_user_ref(usuario_id)
+    except Exception:
+        # Fallback - original method if _get_user_ref fails
+        user_ref = db.collection("users").document(usuario_id)
     try:
         user_doc = user_ref.get()
         resultado["nuevo"]["user_exists"] = user_doc.exists
@@ -305,9 +311,11 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
 
     # Primero, asegurar que todas las categorías existan
     user_ref = db.collection("users").document(usuario_id)
+    print(f"[migrar_tx] user_ref type: {type(user_ref)}, id={user_ref.id}")
     # Sin filtro de usuario_id porque las finanzas legacy no tienen ese campo
     # (solo hay un usuario en la BD)
     docs = list(db.collection("finanzas").stream())
+    print(f"[migrar_tx] Leidas {len(docs)} finanzas")
 
     # Crear mapa de categorías con matching flexible
     cat_map = {}

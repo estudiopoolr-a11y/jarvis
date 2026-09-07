@@ -1504,6 +1504,89 @@ def api_admin_audit(usuario_id: str = "iphone_user"):
         }
 
 
+@app.get("/api/admin/debug-tx-migration")
+def api_admin_debug_tx(usuario_id: str = "iphone_user"):
+    """Debug paso a paso de migrar_transacciones_legacy."""
+    import traceback
+    resultados = {}
+    try:
+        from modules.database import inicializar_firebase, _get_user_ref
+        from modules.migration import _buscar_categoria_id
+        db = inicializar_firebase()
+        resultados["1_firebase"] = "ok" if db else "FAILED"
+        if not db:
+            return resultados
+
+        resultados["2_db_type"] = type(db).__name__
+        resultados["3_finanzas_count"] = len(list(db.collection("finanzas").stream()))
+
+        # Step: user_ref
+        try:
+            user_ref = db.collection("users").document(usuario_id)
+            resultados["4_user_ref_type"] = type(user_ref).__name__
+            resultados["5_user_ref_id"] = user_ref.id
+        except Exception as e:
+            resultados["4_user_ref"] = f"ERROR: {e}"
+            return resultados
+
+        # Step: transactions collection
+        try:
+            tx_col = user_ref.collection("transactions")
+            resultados["6_tx_col_type"] = type(tx_col).__name__
+        except Exception as e:
+            resultados["6_tx_col"] = f"ERROR: {e}"
+            return resultados
+
+        # Step: year document
+        try:
+            year_doc = tx_col.document("2026")
+            resultados["7_year_doc_type"] = type(year_doc).__name__
+        except Exception as e:
+            resultados["7_year_doc"] = f"ERROR: {e}"
+            return resultados
+
+        # Step: month collection
+        try:
+            month_col = year_doc.collection("09")
+            resultados["8_month_col_type"] = type(month_col).__name__
+        except Exception as e:
+            resultados["8_month_col"] = f"ERROR: {e}"
+            return resultados
+
+        # Step: items collection
+        try:
+            items_col = month_col.collection("items")
+            resultados["9_items_col_type"] = type(items_col).__name__
+        except Exception as e:
+            resultados["9_items_col"] = f"ERROR: {e}"
+            return resultados
+
+        # Step: create doc
+        try:
+            new_doc = items_col.document()
+            resultados["10_new_doc_type"] = type(new_doc).__name__
+            resultados["11_new_doc_id"] = new_doc.id
+        except Exception as e:
+            resultados["10_new_doc"] = f"ERROR: {e}"
+            return resultados
+
+        # Step: set data
+        try:
+            new_doc.set({
+                "type": "income",
+                "amount": 1000.0,
+                "description": "test debug",
+                "legacy_id": "debug_test",
+            })
+            resultados["12_set"] = "ok"
+        except Exception as e:
+            resultados["12_set"] = f"ERROR: {e}"
+
+        return resultados
+    except Exception as e:
+        return {"error_global": str(e), "tb": traceback.format_exc()}
+
+
 @app.get("/api/admin/debug-migration")
 def api_admin_debug_migration(usuario_id: str = "iphone_user"):
     """Debug: prueba cada llamada a Firestore individualmente."""
