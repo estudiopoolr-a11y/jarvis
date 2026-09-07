@@ -1545,22 +1545,19 @@ def api_admin_debug_tx(usuario_id: str = "iphone_user"):
             resultados["7_year_doc"] = f"ERROR: {e}"
             return resultados
 
-        # Step: month collection (CollectionReference)
+        # Step: periodo document (2026-09) - nueva estructura plana
         try:
-            month_col = year_doc.collection("09")
-            resultados["8_month_col_type"] = type(month_col).__name__
-            resultados["8_month_col_module"] = type(month_col).__module__
-            # Check if it has collection method
-            resultados["8_has_collection"] = hasattr(month_col, 'collection')
-            resultados["8_has_document"] = hasattr(month_col, 'document')
-            resultados["8_methods"] = [m for m in dir(month_col) if not m.startswith('_') and callable(getattr(type(month_col), m, None))]
+            periodo = "2026-09"
+            periodo_doc = tx_col.document(periodo)
+            resultados["8_periodo_doc_type"] = type(periodo_doc).__name__
+            resultados["8_periodo_id"] = periodo_doc.id
         except Exception as e:
-            resultados["8_month_col"] = f"ERROR: {e}"
+            resultados["8_periodo"] = f"ERROR: {e}"
             return resultados
 
-        # Step: items (month.collection('items') → CollectionReference)
+        # Step: items collection (periodo_doc.collection('items') → CollectionReference)
         try:
-            items_col = month_col.collection("items")
+            items_col = periodo_doc.collection("items")
             resultados["9_items_col_type"] = type(items_col).__name__
         except Exception as e:
             resultados["9_items_col"] = f"ERROR: {e}"
@@ -1649,6 +1646,61 @@ def api_admin_debug_migration(usuario_id: str = "iphone_user"):
         return resultados
     except Exception as e:
         return {"error_global": str(e), "tb": traceback.format_exc()}
+
+
+@app.post("/api/admin/clean-bad-transactions")
+def api_admin_clean_bad_tx(usuario_id: str = Form("iphone_user")):
+    """Limpia transacciones y budgets que estén en estructura antigua (3 niveles)."""
+    try:
+        from modules.database import inicializar_firebase
+        db = inicializar_firebase()
+        if not db:
+            return {"error": "Firebase no disponible"}
+        user_ref = db.collection("users").document(usuario_id)
+
+        cleaned = {"transactions_periodos": [], "transactions_items": 0, "budgets_periodos": [], "budgets_items": 0}
+
+        # 1. Limpiar transactions/{year}/{month}/items (estructura 3 niveles antigua)
+        tx_years = list(user_ref.collection("transactions").list_documents())
+        for year_ref in tx_years:
+            year_id = year_ref.id
+            # Verificar si tiene sub-documentos "01"-"12" (estructura 3 niveles)
+            for m in range(1, 13):
+                month_id = f"{m:02d}"
+                month_ref = year_ref.document(month_id)
+                month_doc = month_ref.get()
+                if month_doc.exists:
+                    # Este es un sub-documento de año - estructura antigua
+                    items_refs = list(month_ref.collection("items").list_documents())
+                    for it in items_refs:
+                        it.delete()
+                        cleaned["transactions_items"] += 1
+                    month_ref.delete()
+                    if month_id not in cleaned["transactions_periodos"]:
+                        cleaned["transactions_periodos"].append(month_id)
+            year_ref.delete()
+
+        # 2. Limpiar budgets/{year}/{month}/items (estructura 3 niveles antigua)
+        bg_years = list(user_ref.collection("budgets").list_documents())
+        for year_ref in bg_years:
+            for m in range(1, 13):
+                month_id = f"{m:02d}"
+                month_ref = year_ref.document(month_id)
+                month_doc = month_ref.get()
+                if month_doc.exists:
+                    items_refs = list(month_ref.collection("items").list_documents())
+                    for it in items_refs:
+                        it.delete()
+                        cleaned["budgets_items"] += 1
+                    month_ref.delete()
+                    if month_id not in cleaned["budgets_periodos"]:
+                        cleaned["budgets_periodos"].append(month_id)
+            year_ref.delete()
+
+        return {"status": "ok", "cleaned": cleaned}
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "tb": traceback.format_exc()}
 
 
 @app.post("/api/admin/migrate-all")

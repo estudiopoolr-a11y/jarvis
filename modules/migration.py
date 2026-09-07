@@ -6,8 +6,8 @@ Migre datos de estructura legacy (top-level) a la estructura Kebo
 (users/{userId}/...). Idempotente: seguro ejecutar varias veces.
 
 Estructura legacy:
-  - finanzas/        → transactions/{year}/{month}/items/
-  - presupuestos/    → budgets/{year}/{month}/items/
+  - finanzas/        → transactions/{YYYY-MM}/{id}  (periodo en ID del documento)
+  - presupuestos/    → budgets/{YYYY-MM}/{id}
   - metas/          → goals/
   - tareas/         → reminders/
   - pagos_fijos/    → recurring/
@@ -16,12 +16,16 @@ Estructura nueva:
   users/{userId}/
     ├── accounts/
     ├── categories/
-    ├── transactions/{year}/{month}/items/      (year/month son DOCUMENTOS, items es COLECCIÓN)
-    ├── budgets/{year}/{month}/items/
+    ├── transactions/{YYYY-MM}/{id}           (periodo como doc, id del item dentro)
+    ├── budgets/{YYYY-MM}/{id}
     ├── goals/
     ├── loans/
     ├── recurring/
     └── reminders/
+
+NOTA: La estructura {year}/{month}/items/{id} NO es posible con el SDK de Firestore Python
+debido a que CollectionReference no tiene metodo .collection(). Solo tiene .document().
+Por eso usamos periodo="YYYY-MM" como documento y guardamos items directamente en el.
 
 Autor: JARVIS AI Assistant
 """
@@ -142,30 +146,25 @@ def auditar_firebase(db, usuario_id="default"):
         resultado["nuevo"]["categories"] = {"count": 0}
 
     # Transactions (todos los meses)
-    # Estructura: transactions/{year}/{month}/items/{id} (3 niveles, year y month son documentos)
-    # Para leer: user_ref.collection("transactions").document(year).document(month).collection("items")
+    # Estructura: transactions/{YYYY-MM}/{id} (periodo como doc, items como docs hijos)
     try:
         total_tx = 0
         months_per_year = {}
-        # Iterar años
-        all_year_docs = user_ref.collection("transactions").get()
-        for year_doc in all_year_docs:
-            year_id = year_doc.id
-            if year_id.startswith("_"):
+        # Iterar periodos (formato "YYYY-MM")
+        all_periodo_docs = user_ref.collection("transactions").get()
+        for periodo_doc in all_periodo_docs:
+            periodo_id = periodo_doc.id
+            if periodo_id.startswith("_"):
                 continue
+            parts = periodo_id.split("-")
+            if len(parts) != 2:
+                continue
+            year_id, month_id = parts
             if year_id not in months_per_year:
                 months_per_year[year_id] = []
-            # Para cada año, intentar meses conocidos (01-12) para encontrar items
-            for m in range(1, 13):
-                month_id = f"{m:02d}"
-                try:
-                    items_col = year_doc.reference.document(month_id).collection("items")
-                    items = list(items_col.stream())
-                    if items:
-                        months_per_year[year_id].append(month_id)
-                        total_tx += len(items)
-                except Exception:
-                    pass
+            if month_id not in months_per_year[year_id]:
+                months_per_year[year_id].append(month_id)
+            total_tx += sum(1 for _ in periodo_doc.reference.collection("items").stream())
         resultado["nuevo"]["transactions"] = {
             "count": total_tx,
             "years_months": months_per_year
@@ -178,20 +177,11 @@ def auditar_firebase(db, usuario_id="default"):
     try:
         total_budgets = 0
         all_docs = user_ref.collection("budgets").get()
-        for year_doc in all_docs:
-            if year_doc.id.startswith("_"):
+        for periodo_doc in all_docs:
+            if periodo_doc.id.startswith("_"):
                 continue
-            year_id = year_doc.id
-            # Estructura correcta: year/(doc)/month/(doc)/items
-            for m in range(1, 13):
-                month_id = f"{m:02d}"
-                try:
-                    items_col = year_doc.reference.document(month_id).collection("items")
-                    items = list(items_col.stream())
-                    if items:
-                        total_budgets += len(items)
-                except Exception:
-                    pass
+            # Estructura: budgets/{YYYY-MM}/{id} (periodo como doc, items como docs hijos)
+            total_budgets += sum(1 for _ in periodo_doc.reference.collection("items").stream())
         resultado["nuevo"]["budgets"] = {"count": total_budgets}
     except Exception as e:
         resultado["nuevo"]["budgets"] = {"count": 0, "error": str(e)}
@@ -360,7 +350,7 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
 
         # Verificar si ya existe (idempotencia)
         existing = list(
-            user_ref.collection("transactions").document(year).document(month).collection("items")
+            user_ref.collection("transactions").document(f"{year}-{month}").collection("items")
             .where("legacy_id", "==", d.id).limit(1).stream()
         )
         if existing:
@@ -379,7 +369,7 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
 
         # Crear transacción
         try:
-            tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
+            tx_ref = user_ref.collection("transactions").document(f"{year}-{month}").collection("items").document()
             tx_ref.set({
                 "type": tipo_kebo,
                 "amount": float(data.get("monto", 0)),
@@ -440,7 +430,7 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
         existing_budget = None
         if cat_id:
             existing_budget = list(
-                user_ref.collection("budgets").document(year).document(month).collection("items")
+                user_ref.collection("budgets").document(f"{year}-{month}").collection("items")
                 .where("category_id", "==", cat_id).limit(1).stream()
             )
 
@@ -450,7 +440,7 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
             stats["migrados"] += 1
         else:
             try:
-                user_ref.collection("budgets").document(year).document(month).collection("items").document().set({
+                user_ref.collection("budgets").document(f"{year}-{month}").collection("items").document().set({
                     "category_id": cat_id,
                     "category_name": nombre_real,
                     "amount": limite,
