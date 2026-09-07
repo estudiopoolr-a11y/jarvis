@@ -148,7 +148,7 @@ function renderSmallWidget(w, data) {
 function renderMediumWidget(w, data) {
     // Header con fecha
     const headerRow = w.addStack()
-    headerRow.layoutHorizontal()
+    headerRow.layoutHorizontally()
 
     const title = headerRow.addText("🤖 JARVIS")
     title.font = Font.boldSystemFont(14)
@@ -173,7 +173,7 @@ function renderMediumWidget(w, data) {
         card.paddingAll = 6
 
         const content = card.addStack()
-        content.layoutVertical()
+        content.layoutVertically()
 
         const label = content.addText("💰 POR COBRAR")
         label.font = Font.boldSystemFont(9)
@@ -209,7 +209,7 @@ function renderMediumWidget(w, data) {
         for (let i = 0; i < top.length; i++) {
             const fila = top[i]
             const row = w.addStack()
-            row.layoutHorizontal()
+            row.layoutHorizontally()
 
             const catText = row.addText(fila.categoria)
             catText.font = Font.systemFont(10)
@@ -241,7 +241,7 @@ function renderMediumWidget(w, data) {
     w.addSpacer(2)
 
     const totalRow = w.addStack()
-    totalRow.layoutHorizontal()
+    totalRow.layoutHorizontally()
 
     const totalLabel = totalRow.addText("DISPONIBLE")
     totalLabel.font = Font.boldSystemFont(9)
@@ -267,7 +267,7 @@ function renderMediumWidget(w, data) {
 function renderLargeWidget(w, data) {
     // Header
     const header = w.addStack()
-    header.layoutHorizontal()
+    header.layoutHorizontally()
 
     const logo = header.addText("🤖 JARVIS")
     logo.font = Font.boldSystemFont(14)
@@ -292,10 +292,10 @@ function renderLargeWidget(w, data) {
         card.paddingAll = 6
 
         const content = card.addStack()
-        content.layoutVertical()
+        content.layoutVertically()
 
         const labelRow = content.addStack()
-        labelRow.layoutHorizontal()
+        labelRow.layoutHorizontally()
         const label = labelRow.addText("💰 POR COBRAR")
         label.font = Font.boldSystemFont(9)
         label.textColor = new Color(COLORS.loan)
@@ -314,7 +314,7 @@ function renderLargeWidget(w, data) {
             for (let i = 0; i < Math.min(2, prestamos.length); i++) {
                 const p = prestamos[i]
                 const pRow = content.addStack()
-                pRow.layoutHorizontal()
+                pRow.layoutHorizontally()
                 const left = pRow.addText("• " + (p.persona || '?'))
                 left.font = Font.systemFont(9)
                 left.textColor = new Color(COLORS.text_dim)
@@ -346,7 +346,7 @@ function renderLargeWidget(w, data) {
 
         // Header de la tabla
         const headerRow = w.addStack()
-        headerRow.layoutHorizontal()
+        headerRow.layoutHorizontally()
         const hCat = headerRow.addText("Categoría")
         hCat.font = Font.boldSystemFont(8)
         hCat.textColor = new Color(COLORS.text_dim)
@@ -367,7 +367,7 @@ function renderLargeWidget(w, data) {
         for (let i = 0; i < ordenados.length; i++) {
             const fila = ordenados[i]
             const row = w.addStack()
-            row.layoutHorizontal()
+            row.layoutHorizontally()
 
             const catText = row.addText(fila.categoria)
             catText.font = Font.systemFont(9)
@@ -377,7 +377,7 @@ function renderLargeWidget(w, data) {
             row.addSpacer()
 
             const vals = row.addStack()
-            vals.layoutHorizontal()
+            vals.layoutHorizontally()
 
             const presText = vals.addText(formatMoney(fila.limite))
             presText.font = Font.systemFont(9)
@@ -409,13 +409,13 @@ function renderLargeWidget(w, data) {
         w.addSpacer(2)
 
         const totRow = w.addStack()
-        totRow.layoutHorizontal()
+        totRow.layoutHorizontally()
         const totLabel = totRow.addText("TOTALES")
         totLabel.font = Font.boldSystemFont(9)
         totLabel.textColor = new Color(COLORS.subtitle)
         totRow.addSpacer()
         const totVals = totRow.addStack()
-        totVals.layoutHorizontal()
+        totVals.layoutHorizontally()
         const tPres = totVals.addText(formatMoney(data.total_presupuestado))
         tPres.font = Font.boldSystemFont(9)
         tPres.textColor = new Color(COLORS.text)
