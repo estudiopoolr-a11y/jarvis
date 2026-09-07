@@ -508,6 +508,7 @@ def migrar_prestamos_legacy(db, usuario_id="default"):
             loan_ref = user_ref.collection("loans").document()
             loan_ref.set({
                 "persona": data.get("descripcion", "Préstamo migrado"),
+                "monto": float(data.get("monto", 0)),     # Alias para compatibilidad
                 "monto_original": float(data.get("monto", 0)),
                 "monto_pagado": 0.0,
                 "monto_pendiente": float(data.get("monto", 0)),

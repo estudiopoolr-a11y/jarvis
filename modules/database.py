@@ -2153,6 +2153,7 @@ def registrar_prestamo(usuario_id, persona, monto, fecha=None, nota=""):
         doc_ref = user_ref.collection("loans").document()
         doc_ref.set({
             "persona": persona,
+            "monto": float(monto),              # Alias para compatibilidad
             "monto_original": float(monto),
             "monto_pagado": 0.0,
             "monto_pendiente": float(monto),
