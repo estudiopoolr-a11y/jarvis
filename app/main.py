@@ -1652,46 +1652,26 @@ def api_admin_debug_migration(usuario_id: str = "iphone_user"):
 def api_admin_list_tx_paths(usuario_id: str = "iphone_user"):
     """Lista todos los paths en transactions para debug."""
     try:
-        from modules.database import inicializar_firebase
+        from modules.database import inicializar_firebase, _get_user_ref
         db = inicializar_firebase()
         if not db:
             return {"error": "Firebase no disponible"}
-        user_ref = db.collection("users").document(usuario_id)
+        _, user_ref = _get_user_ref(usuario_id)
 
-        all_paths = []
+        # Test idempotency check path directly
+        items_ref = user_ref.collection("transactions").document("2026-09").collection("items")
+        existing = list(items_ref.limit(10).stream())
 
-        # Listar todos los periodos
-        tx_col = user_ref.collection("transactions")
-        for tx_doc in tx_col.get():
-            periodo_id = tx_doc.id
-            path = f"transactions/{periodo_id}"
-            all_paths.append({"id": periodo_id, "type": type(tx_doc.reference).__name__})
+        all_tx_docs = list(user_ref.collection("transactions").get())
 
-            # Sub-documentos
-            try:
-                for sub_doc in tx_doc.reference.list_documents():
-                    sub_path = f"{path}/{sub_doc.id}"
-                    all_paths.append({"id": sub_path, "type": type(sub_doc).__name__})
-                    # Sub-items
-                    try:
-                        for item in sub_doc.collection("items").list_documents():
-                            all_paths.append({"id": f"{sub_path}/items/{item.id}", "type": type(item).__name__})
-                    except Exception:
-                        pass
-            except Exception as e:
-                all_paths.append({"id": path, "error": str(e)})
-
-            # Sub-colecciones
-            for m in range(1, 13):
-                month_id = f"{m:02d}"
-                try:
-                    items = list(tx_doc.reference.collection(month_id).stream())
-                    for item in items:
-                        all_paths.append({"id": f"{path}/{month_id}/{item.id}", "type": "item_in_col"})
-                except Exception:
-                    pass
-
-        return {"paths": all_paths, "count": len(all_paths)}
+        return {
+            "db_type": type(db).__name__,
+            "user_ref_path": user_ref.path,
+            "items_ref_path": items_ref.path,
+            "existing_count": len(existing),
+            "existing_ids": [{"id": e.id, "legacy_id": e.to_dict().get("legacy_id")} for e in existing],
+            "tx_collection_docs": [d.id for d in all_tx_docs],
+        }
     except Exception as e:
         import traceback
         return {"error": str(e), "tb": traceback.format_exc()}
