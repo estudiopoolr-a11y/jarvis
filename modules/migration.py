@@ -136,7 +136,7 @@ def auditar_firebase(db, usuario_id="default"):
         resultado["nuevo"]["categories"] = {"count": 0}
 
     # Transactions (todos los meses)
-    # Estructura: transactions/{periodo}/items/{id} donde periodo = "YYYY-MM"
+    # Estructura: transactions/{year}/{month}/items/{id}
     try:
         total_tx = 0
         months_per_year = {}
@@ -145,15 +145,26 @@ def auditar_firebase(db, usuario_id="default"):
             doc_id = doc.id
             if doc_id.startswith("_"):
                 continue
-            if "-" in doc_id:
-                year, month = doc_id.split("-", 1)
-                key = year
-                if key not in months_per_year:
-                    months_per_year[key] = []
-                months_per_year[key].append(month)
-            else:
-                months_per_year[doc_id] = []
-            total_tx += sum(1 for _ in doc.reference.collection("items").stream())
+            # doc_id es el año, ej: "2026"
+            year = int(doc_id) if doc_id.isdigit() else str(doc_id)
+            key = year
+            if key not in months_per_year:
+                months_per_year[key] = []
+            # Cada documento 'year' tiene una sub-colección 'month'
+            try:
+                months_docs = list(doc.reference.collection("month").get())
+                for month_doc in months_docs:
+                    month = month_doc.id
+                    if month not in months_per_year[key]:
+                        months_per_year[key].append(month)
+                    total_tx += sum(1 for _ in month_doc.reference.collection("items").stream())
+            except Exception:
+                # Si no tiene sub-colección 'month', intentar lectura directa
+                try:
+                    items = list(doc.reference.collection("items").stream())
+                    total_tx += len(items)
+                except:
+                    pass
         resultado["nuevo"]["transactions"] = {
             "count": total_tx,
             "years_months": months_per_year
@@ -169,7 +180,19 @@ def auditar_firebase(db, usuario_id="default"):
         for doc in all_docs:
             if doc.id.startswith("_"):
                 continue
-            total_budgets += sum(1 for _ in doc.reference.collection("items").stream())
+            # doc_id es el año, ej: "2026"
+            year = doc.id
+            # Cada documento 'year' tiene una sub-colección 'month'
+            try:
+                months_docs = list(doc.reference.collection("month").get())
+                for month_doc in months_docs:
+                    total_budgets += sum(1 for _ in month_doc.reference.collection("items").stream())
+            except Exception:
+                # Si no tiene sub-colección 'month'
+                try:
+                    total_budgets += sum(1 for _ in doc.reference.collection("items").stream())
+                except:
+                    pass
         resultado["nuevo"]["budgets"] = {"count": total_budgets}
     except Exception as e:
         resultado["nuevo"]["budgets"] = {"count": 0, "error": str(e)}
@@ -337,9 +360,8 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
                 fecha = ahora.strftime("%Y-%m-%d")
 
         # Verificar si ya existe (idempotencia)
-        periodo = f"{year}-{month}"  # ej: "2026-09"
         existing = list(
-            user_ref.collection("transactions").document(periodo).collection("items")
+            user_ref.collection("transactions").document(year).document(month).collection("items")
             .where("legacy_id", "==", d.id).limit(1).stream()
         )
         if existing:
@@ -358,7 +380,7 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
 
         # Crear transacción
         try:
-            tx_ref = user_ref.collection("transactions").document(periodo).collection("items").document()
+            tx_ref = user_ref.collection("transactions").document(year).document(month).collection("items").document()
             tx_ref.set({
                 "type": tipo_kebo,
                 "amount": float(data.get("monto", 0)),
@@ -391,9 +413,9 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
     year = str(ahora.year)
     month = f"{ahora.month:02d}"
 
-    # Asegurar que existan los documentos padre
-    periodo = f"{year}-{month}"  # ej: "2026-09"
-    user_ref.collection("budgets").document(periodo).set({"_exists": True}, merge=True)
+    # Asegurar que existan los documentos padre (estructura anidada: budgets/{year}/{month}/items/)
+    user_ref.collection("budgets").document(year).set({"_exists": True}, merge=True)
+    user_ref.collection("budgets").document(year).collection(month).document("_meta").set({"_exists": True}, merge=True)
 
     for d in docs:
         data = d.to_dict()
@@ -420,7 +442,7 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
         existing_budget = None
         if cat_id:
             existing_budget = list(
-                user_ref.collection("budgets").document(periodo).collection("items")
+                user_ref.collection("budgets").document(year).collection(month).collection("items")
                 .where("category_id", "==", cat_id).limit(1).stream()
             )
 
@@ -430,7 +452,7 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
             stats["migrados"] += 1
         else:
             try:
-                user_ref.collection("budgets").document(periodo).collection("items").document().set({
+                user_ref.collection("budgets").document(year).collection(month).collection("items").document().set({
                     "category_id": cat_id,
                     "category_name": nombre_real,
                     "amount": limite,
