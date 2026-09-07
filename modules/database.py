@@ -14,15 +14,15 @@ users/{userId}/
   │   └── subcategories/{subId}: name, icon, color
   │       ⭐ Ejemplo: "Comida" → "Restaurantes", "Mercado", "Panadería"
   │
-  ├── transactions/{YYYY-MM}/{txId}    # Transacciones por mes
-  │   ├── Periodo "YYYY-MM" como documento, items como documentos hijos
+  ├── transactions/{YYYY-MM}/items/{txId}    # Transacciones por mes
+  │   ├── Periodo "YYYY-MM" como documento, items como sub-colección
   │   ├── type (income|expense|transfer)
   │   ├── amount, account_id, category_id
   │   ├── payee, description, fee, status (pending|cleared)
   │   ├── tags, date, created_at
   │
-  ├── budgets/{YYYY-MM}/{id}          # ⭐ Presupuestos por mes+año (Kebo style)
-  │   ├── Misma estructura: periodo "YYYY-MM" como doc, items como docs hijos
+  ├── budgets/{YYYY-MM}/items/{id}          # ⭐ Presupuestos por mes (Kebo style)
+  │   ├── Misma estructura: periodo "YYYY-MM" como doc, items como sub-colección
   │   ├── category_id, category_name, amount
   │
   ├── goals/{goalId}                       # Metas de ahorro
@@ -479,7 +479,7 @@ def crear_subcategorias_predefinidas(usuario_id):
 
 def actualizar_presupuesto_categoria(usuario_id, nombre, nuevo_budget):
     """Actualiza el presupuesto de una categoría por nombre (compatibilidad).
-    En la nueva estructura Kebo, el budget vive en budgets/{year}/{month}/items/.
+    En la nueva estructura Kebo, el budget vive en budgets/{YYYY-MM}/items/.
     Esta función actualiza ambos: el default en categories y el mes actual.
     """
     _, user_ref = _get_user_ref(usuario_id)

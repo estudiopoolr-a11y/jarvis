@@ -6,26 +6,26 @@ Migre datos de estructura legacy (top-level) a la estructura Kebo
 (users/{userId}/...). Idempotente: seguro ejecutar varias veces.
 
 Estructura legacy:
-  - finanzas/        → transactions/{YYYY-MM}/{id}  (periodo en ID del documento)
-  - presupuestos/    → budgets/{YYYY-MM}/{id}
+  - finanzas/        → transactions/{YYYY-MM}/items/{id}  (periodo como doc, items como sub-col)
+  - presupuestos/    → budgets/{YYYY-MM}/items/{id}
   - metas/          → goals/
   - tareas/         → reminders/
   - pagos_fijos/    → recurring/
 
-Estructura nueva:
+Estructura nueva (KEBO):
   users/{userId}/
     ├── accounts/
     ├── categories/
-    ├── transactions/{YYYY-MM}/{id}           (periodo como doc, id del item dentro)
-    ├── budgets/{YYYY-MM}/{id}
+    ├── transactions/{YYYY-MM}/items/{id}      (doc periodo + sub-col items)
+    ├── budgets/{YYYY-MM}/items/{id}           (doc periodo + sub-col items)
     ├── goals/
     ├── loans/
     ├── recurring/
     └── reminders/
 
-NOTA: La estructura {year}/{month}/items/{id} NO es posible con el SDK de Firestore Python
-debido a que CollectionReference no tiene metodo .collection(). Solo tiene .document().
-Por eso usamos periodo="YYYY-MM" como documento y guardamos items directamente en el.
+Patrón Firestore usado:
+  user_ref.collection("X").document("YYYY-MM").collection("items").document()
+  (CollectionReference → DocumentReference → CollectionReference → DocumentReference)
 
 Autor: JARVIS AI Assistant
 """
@@ -416,7 +416,7 @@ def migrar_transacciones_legacy(db, usuario_id="default"):
 
 
 def migrar_presupuestos_legacy(db, usuario_id="default"):
-    """Migra documentos de 'presupuestos' a 'budgets/{year}/{month}/items/'."""
+    """Migra documentos de 'presupuestos' a 'budgets/{YYYY-MM}/items/'."""
     stats = {"leidos": 0, "migrados": 0, "errores": 0}
 
     # Sin filtro: presupuestos legacy no tienen usuario_id
@@ -426,9 +426,6 @@ def migrar_presupuestos_legacy(db, usuario_id="default"):
     ahora = datetime.now()
     year = str(ahora.year)
     month = f"{ahora.month:02d}"
-
-    # Asegurar que existan los documentos padre (estructura anidada: budgets/{year}/month/{month}/items/)
-    user_ref.collection("budgets").document(year).set({"_exists": True}, merge=True)
 
     for d in docs:
         data = d.to_dict()
