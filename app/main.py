@@ -1699,7 +1699,8 @@ def api_admin_list_tx_paths(usuario_id: str = "iphone_user"):
 
 @app.post("/api/admin/clean-user-data")
 def api_admin_clean_user_data(usuario_id: str = Form("iphone_user")):
-    """Borra TODOS los datos del usuario para empezar desde cero con estructura limpia."""
+    """Borra TODOS los datos del usuario para empezar desde cero con estructura limpia.
+    IMPORTANTE: Borra tanto documentos como sub-colecciones."""
     try:
         from modules.database import inicializar_firebase
         db = inicializar_firebase()
@@ -1713,15 +1714,36 @@ def api_admin_clean_user_data(usuario_id: str = Form("iphone_user")):
         for col_name in collections_to_clean:
             count = 0
             try:
+                # Primero: listar y eliminar documentos
                 docs = list(user_ref.collection(col_name).list_documents())
                 for doc in docs:
+                    # Eliminar sub-colecciones (como "items")
+                    for m in range(1, 13):
+                        for sub_col_name in ["items"]:
+                            try:
+                                sub_col = doc.collection(f"{m:02d}").collection(sub_col_name)
+                                sub_docs = list(sub_col.list_documents())
+                                for sd in sub_docs:
+                                    sd.delete()
+                                    count += 1
+                            except Exception:
+                                pass
+                    # Eliminar sub-colecciones "items" directas (periodo como YYYY-MM)
+                    try:
+                        sub_col = doc.collection("items")
+                        sub_docs = list(sub_col.list_documents())
+                        for sd in sub_docs:
+                            sd.delete()
+                            count += 1
+                    except Exception:
+                        pass
                     doc.delete()
                     count += 1
             except Exception as e:
                 pass
             cleaned[col_name] = count
 
-        return {"status": "ok", "message": "Todos los datos borrados", "cleaned": cleaned}
+        return {"status": "ok", "message": "Todos los datos borrados (incluyendo sub-colecciones)", "cleaned": cleaned}
     except Exception as e:
         import traceback
         return {"error": str(e), "tb": traceback.format_exc()}
