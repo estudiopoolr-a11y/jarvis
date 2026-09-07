@@ -1694,46 +1694,46 @@ def api_admin_clean_user_data(usuario_id: str = Form("iphone_user")):
         for col_name in collections_to_clean:
             count = 0
             try:
-                # Primero: listar y eliminar documentos
-                docs = list(user_ref.collection(col_name).list_documents())
+                col = user_ref.collection(col_name)
+                # PASO 1: Iterar todos los documentos usando un stream normal
+                # Esto captura tanto los docs padre como sus sub-colecciones
+                # Estrategia: usar recursive_delete del admin SDK
+                from firebase_admin import firestore
+                docs = list(col.list_documents())
                 for doc in docs:
-                    # Estructura: {col}/{YYYY-MM}/items/{id} (periodo como doc, items como sub-col)
-                    # Tambien estructura mala: {col}/{year}/{month}/items/{id} (3 niveles)
-                    # Eliminar sub-coleccion "items" directa (patron YYYY-MM)
+                    # recursive_delete elimina el doc y todas sus sub-collections
                     try:
-                        sub_docs = list(doc.collection("items").list_documents())
-                        for sd in sub_docs:
-                            sd.delete()
+                        firestore.client().recursive_delete(doc)
+                        count += 1
+                    except Exception as e:
+                        # Fallback: delete manual
+                        try:
+                            # Intentar listar sub-docs y eliminarlos
+                            for sub_doc in doc.list_documents():
+                                try:
+                                    for sub_sub in sub_doc.list_documents():
+                                        sub_sub.delete()
+                                        count += 1
+                                except Exception:
+                                    pass
+                                sub_doc.delete()
+                                count += 1
+                        except Exception:
+                            pass
+                        doc.delete()
+                        count += 1
+
+                # PASO 2: Buscar sub-colecciones huerfanas (sin doc padre)
+                # Esto es cuando un doc padre fue borrado pero su sub-col quedo
+                # Como list_documents() no las ve, las buscamos via items directos
+                for periodo in ["2026-09", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-10", "2026-11", "2026-12"]:
+                    try:
+                        items_in_orphaned = list(col.document(periodo).collection("items").list_documents())
+                        for it in items_in_orphaned:
+                            it.delete()
                             count += 1
                     except Exception:
                         pass
-                    # Estructura mala 3 niveles: {col}/{year}/(col)month/items/{id}
-                    for m in range(1, 13):
-                        month_id = f"{m:02d}"
-                        try:
-                            # month_id es una coleccion, items son docs directos
-                            sub_docs = list(doc.collection(month_id).list_documents())
-                            for sd in sub_docs:
-                                sd.delete()
-                                count += 1
-                        except Exception:
-                            pass
-                        # Tambien probar como sub-documento
-                        try:
-                            month_ref = doc.document(month_id)
-                            month_doc = month_ref.get()
-                            if month_doc.exists:
-                                # Es un sub-documento
-                                items_refs = list(month_ref.collection("items").list_documents())
-                                for it in items_refs:
-                                    it.delete()
-                                    count += 1
-                                month_ref.delete()
-                                count += 1
-                        except Exception:
-                            pass
-                    doc.delete()
-                    count += 1
             except Exception as e:
                 pass
             cleaned[col_name] = count
