@@ -1648,6 +1648,55 @@ def api_admin_debug_migration(usuario_id: str = "iphone_user"):
         return {"error_global": str(e), "tb": traceback.format_exc()}
 
 
+@app.get("/api/admin/list-tx-paths")
+def api_admin_list_tx_paths(usuario_id: str = "iphone_user"):
+    """Lista todos los paths en transactions para debug."""
+    try:
+        from modules.database import inicializar_firebase
+        db = inicializar_firebase()
+        if not db:
+            return {"error": "Firebase no disponible"}
+        user_ref = db.collection("users").document(usuario_id)
+
+        all_paths = []
+
+        # Listar todos los periodos
+        tx_col = user_ref.collection("transactions")
+        for tx_doc in tx_col.get():
+            periodo_id = tx_doc.id
+            path = f"transactions/{periodo_id}"
+            all_paths.append({"id": periodo_id, "type": type(tx_doc.reference).__name__})
+
+            # Sub-documentos
+            try:
+                for sub_doc in tx_doc.reference.list_documents():
+                    sub_path = f"{path}/{sub_doc.id}"
+                    all_paths.append({"id": sub_path, "type": type(sub_doc).__name__})
+                    # Sub-items
+                    try:
+                        for item in sub_doc.collection("items").list_documents():
+                            all_paths.append({"id": f"{sub_path}/items/{item.id}", "type": type(item).__name__})
+                    except Exception:
+                        pass
+            except Exception as e:
+                all_paths.append({"id": path, "error": str(e)})
+
+            # Sub-colecciones
+            for m in range(1, 13):
+                month_id = f"{m:02d}"
+                try:
+                    items = list(tx_doc.reference.collection(month_id).stream())
+                    for item in items:
+                        all_paths.append({"id": f"{path}/{month_id}/{item.id}", "type": "item_in_col"})
+                except Exception:
+                    pass
+
+        return {"paths": all_paths, "count": len(all_paths)}
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "tb": traceback.format_exc()}
+
+
 @app.post("/api/admin/clean-bad-transactions")
 def api_admin_clean_bad_tx(usuario_id: str = Form("iphone_user")):
     """Limpia transacciones y budgets que estén en estructura antigua (3 niveles)."""
