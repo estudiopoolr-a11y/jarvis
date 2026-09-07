@@ -1658,44 +1658,60 @@ def api_admin_clean_bad_tx(usuario_id: str = Form("iphone_user")):
             return {"error": "Firebase no disponible"}
         user_ref = db.collection("users").document(usuario_id)
 
-        cleaned = {"transactions_periodos": [], "transactions_items": 0, "budgets_periodos": [], "budgets_items": 0}
+        cleaned = {"transactions_items": 0, "transactions_periodos_removed": [], "budgets_items": 0, "budgets_periodos_removed": []}
 
-        # 1. Limpiar transactions/{year}/{month}/items (estructura 3 niveles antigua)
-        tx_years = list(user_ref.collection("transactions").list_documents())
-        for year_ref in tx_years:
-            year_id = year_ref.id
-            # Verificar si tiene sub-documentos "01"-"12" (estructura 3 niveles)
-            for m in range(1, 13):
-                month_id = f"{m:02d}"
-                month_ref = year_ref.document(month_id)
-                month_doc = month_ref.get()
-                if month_doc.exists:
-                    # Este es un sub-documento de año - estructura antigua
-                    items_refs = list(month_ref.collection("items").list_documents())
-                    for it in items_refs:
-                        it.delete()
-                        cleaned["transactions_items"] += 1
-                    month_ref.delete()
-                    if month_id not in cleaned["transactions_periodos"]:
-                        cleaned["transactions_periodos"].append(month_id)
-            year_ref.delete()
+        # 1. Listar TODOS los periodos en transactions
+        # Estructura correcta: transactions/{YYYY-MM}/items/{id}
+        # Estructura mala: transactions/{year}/(collection/sub-doc)month/items/{id} o transactions/{year}/{month_doc}/items/{id}
+        tx_periodos = list(user_ref.collection("transactions").list_documents())
+        for periodo_ref in tx_periodos:
+            periodo_id = periodo_ref.id
+            # Si el periodo_id tiene formato "YYYY-MM" (4-2 digitos con guion), es correcto
+            parts = periodo_id.split("-") if "-" in periodo_id else []
+            if len(parts) == 2 and len(parts[0]) == 4 and parts[0].isdigit() and len(parts[1]) == 2 and parts[1].isdigit():
+                # Es un periodo valido, dejarlo
+                continue
+            # Si no, es una estructura mala. Eliminar todo lo de adentro
+            # El periodo_ref es un DocumentReference. Sus hijos pueden ser docs o collections
+            try:
+                sub_docs = list(periodo_ref.list_documents())
+                for sd in sub_docs:
+                    # Eliminar todos los items que tenga como sub-coleccion
+                    try:
+                        items_refs = list(sd.collection("items").list_documents())
+                        for it in items_refs:
+                            it.delete()
+                            cleaned["transactions_items"] += 1
+                    except Exception:
+                        pass
+                    sd.delete()
+                    cleaned["transactions_periodos_removed"].append(sd.id)
+            except Exception as e:
+                pass
+            periodo_ref.delete()
 
-        # 2. Limpiar budgets/{year}/{month}/items (estructura 3 niveles antigua)
-        bg_years = list(user_ref.collection("budgets").list_documents())
-        for year_ref in bg_years:
-            for m in range(1, 13):
-                month_id = f"{m:02d}"
-                month_ref = year_ref.document(month_id)
-                month_doc = month_ref.get()
-                if month_doc.exists:
-                    items_refs = list(month_ref.collection("items").list_documents())
-                    for it in items_refs:
-                        it.delete()
-                        cleaned["budgets_items"] += 1
-                    month_ref.delete()
-                    if month_id not in cleaned["budgets_periodos"]:
-                        cleaned["budgets_periodos"].append(month_id)
-            year_ref.delete()
+        # 2. Limpiar budgets
+        bg_periodos = list(user_ref.collection("budgets").list_documents())
+        for periodo_ref in bg_periodos:
+            periodo_id = periodo_ref.id
+            parts = periodo_id.split("-") if "-" in periodo_id else []
+            if len(parts) == 2 and len(parts[0]) == 4 and parts[0].isdigit() and len(parts[1]) == 2 and parts[1].isdigit():
+                continue
+            try:
+                sub_docs = list(periodo_ref.list_documents())
+                for sd in sub_docs:
+                    try:
+                        items_refs = list(sd.collection("items").list_documents())
+                        for it in items_refs:
+                            it.delete()
+                            cleaned["budgets_items"] += 1
+                    except Exception:
+                        pass
+                    sd.delete()
+                    cleaned["budgets_periodos_removed"].append(sd.id)
+            except Exception as e:
+                pass
+            periodo_ref.delete()
 
         return {"status": "ok", "cleaned": cleaned}
     except Exception as e:
