@@ -1545,15 +1545,20 @@ def api_admin_debug_tx(usuario_id: str = "iphone_user"):
             resultados["7_year_doc"] = f"ERROR: {e}"
             return resultados
 
-        # Step: month collection
+        # Step: month collection (CollectionReference)
         try:
             month_col = year_doc.collection("09")
             resultados["8_month_col_type"] = type(month_col).__name__
+            resultados["8_month_col_module"] = type(month_col).__module__
+            # Check if it has collection method
+            resultados["8_has_collection"] = hasattr(month_col, 'collection')
+            resultados["8_has_document"] = hasattr(month_col, 'document')
+            resultados["8_methods"] = [m for m in dir(month_col) if not m.startswith('_') and callable(getattr(type(month_col), m, None))]
         except Exception as e:
             resultados["8_month_col"] = f"ERROR: {e}"
             return resultados
 
-        # Step: items collection
+        # Step: items (month.collection('items') → CollectionReference)
         try:
             items_col = month_col.collection("items")
             resultados["9_items_col_type"] = type(items_col).__name__
