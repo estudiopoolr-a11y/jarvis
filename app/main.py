@@ -32,7 +32,7 @@ class ComandoPayload(BaseModel):
 def render_dashboard(usuario_id: str = "default"):
     """Sirve el dashboard web estático con datos en tiempo real."""
     import os
-    template_path = os.path.join(os.path.dirname(__file__), "app", "templates", "dashboard.html")
+    template_path = os.path.join(os.path.dirname(__file__), "templates", "dashboard.html")
     try:
         with open(template_path, "r", encoding="utf-8") as f:
             return f.read()
