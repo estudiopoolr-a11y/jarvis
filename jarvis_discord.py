@@ -496,44 +496,72 @@ async def buscar_historial(ctx):
         usuarios = list(db.collection("users").stream())
         lineas.append(f"🔎 **{len(usuarios)} usuarios encontrados**")
 
+        # Meses de interés (mayo-agosto 2026) probados de forma directa,
+        # porque listar la subcolección transactions NO devuelve docs implícitos.
+        fechas_probar = ["2026-08", "2026-07", "2026-06", "2026-05", "2026-04"]
+
         for udoc in usuarios:
             uid = udoc.id
             ref = db.collection("users").document(uid)
             meses_tx = []
             suma_tx = 0
-            try:
-                for mdoc in ref.collection("transactions").stream():
-                    try:
-                        items = list(mdoc.reference.collection("items").stream())
-                    except Exception:
-                        items = []
+            for mi in fechas_probar:
+                try:
+                    items = list(ref.collection("transactions").document(mi).collection("items").stream())
                     if items:
-                        meses_tx.append(f"{mdoc.id}({len(items)})")
+                        meses_tx.append(f"{mi}({len(items)})")
                         suma_tx += len(items)
-            except Exception as e:
-                meses_tx.append(f"ERROR:{e}")
-            # budgets por mes
+                except Exception:
+                    pass
             meses_bud = []
-            try:
-                for bdoc in ref.collection("budgets").stream():
-                    try:
-                        boutems = list(bdoc.reference.collection("items").stream())
-                    except Exception:
-                        boutems = []
+            for mi in fechas_probar:
+                try:
+                    boutems = list(ref.collection("budgets").document(mi).collection("items").stream())
                     if boutems:
-                        meses_bud.append(f"{bdoc.id}({len(boutems)})")
-            except Exception as e:
-                meses_bud.append(f"ERROR:{e}")
+                        meses_bud.append(f"{mi}({len(boutems)})")
+                except Exception:
+                    pass
 
             etiqueta = "**← TU CUENTA**" if uid == str(ctx.author.id) else ""
             lineas.append(
                 f"\n📁 **{uid}** {etiqueta}\n"
-                f"   • transactions: {meses_tx or 'ninguno'}  (total {suma_tx})\n"
-                f"   • budgets: {meses_bud or 'ninguno'}"
+                f"   • transactions KEBO: {meses_tx or 'ninguno'}  (total {suma_tx})\n"
+                f"   • budgets KEBO: {meses_bud or 'ninguno'}"
             )
 
-        if not usuarios:
-            lineas.append("No hay usuarios en la colección `users`.")
+        # ---- LEGACY: finanzas/ y presupuestos/ ----
+        try:
+            leg_fin = {}
+            for d in db.collection("finanzas").stream():
+                t = d.to_dict() or {}
+                k = str(t.get("usuario_id", "?"))
+                mes = t.get("mes", "?")
+                leg_fin.setdefault(k, {}).setdefault(mes, 0)
+                leg_fin[k][mes] += 1
+            lineas.append("\n🗄️ **Legacy `finanzas/`** (movimientos por usuario y mes):")
+            if not leg_fin:
+                lineas.append("   vacío")
+            for k, meses in leg_fin.items():
+                desglose = ", ".join(f"{m}: {n}" for m, n in meses.items())
+                mk = "**← TU CUENTA**" if k == str(ctx.author.id) else ""
+                lineas.append(f"   • `{k}` {mk} → {desglose}")
+        except Exception as e:
+            lineas.append(f"   ⚠️ Error finanzas legacy: {e}")
+
+        try:
+            leg_pres = {}
+            for d in db.collection("presupuestos").stream():
+                p = d.to_dict() or {}
+                k = str(p.get("usuario_id", "?"))
+                leg_pres[k] = leg_pres.get(k, 0) + 1
+            lineas.append("\n🗄️ **Legacy `presupuestos/`** (por usuario):")
+            if not leg_pres:
+                lineas.append("   vacío")
+            for k, n in leg_pres.items():
+                mk = "**← TU CUENTA**" if k == str(ctx.author.id) else ""
+                lineas.append(f"   • `{k}` {mk} → {n} presupuestos")
+        except Exception as e:
+            lineas.append(f"   ⚠️ Error presupuestos legacy: {e}")
 
         await ctx.send("\n".join(lineas))
     except Exception as e:
