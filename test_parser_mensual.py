@@ -79,5 +79,31 @@ else:
     print("❌ Falló")
 
 print("\n" + "=" * 60)
+print("TEST 4: Mensaje real de Discord (7 categorías con total)")
+print("=" * 60)
+texto_real = """ingresa estos presupuesto y gastos por categoria en el mes de julio
+--- JULIO 2026 ---
+Presupuesto Total: $770.000,00 | Gastado: $1.094.775,69
+Alimentación: Presupuestado $120.000,00 | Gastado $120.000,00
+Moto: Presupuestado $100.000,00 | Gastado $222.427,00
+Futbol: Presupuestado $50.000,00 | Gastado $47.500,00
+Use personal: Presupuestado $100.000,00 | Gastado $136.729,00
+Women: Presupuestado $200.000,00 | Gastado $265.100,00
+Gastos tontos: Presupuestado $100.000,00 | Gastado $130.519,69
+Préstamos: Presupuestado $100.000,00 | Gastado $172.500,00
+"""
+resultado_real = _parse_bloque_presupuesto_mensual(texto_real)
+if resultado_real:
+    acciones_r, mes_r, año_r = resultado_real
+    assert mes_r == 7 and año_r == 2026, f"Mes/Año incorrecto: {mes_r}/{año_r}"
+    assert len(acciones_r) == 14, f"Esperaba 14 acciones, tengo {len(acciones_r)}"
+    print(f"✅ Mes: {mes_r}, Año: {año_r}, Acciones: {len(acciones_r)} (7 presupuestos + 7 gastos)")
+    for a in acciones_r:
+        print(f"  {a}")
+else:
+    print("❌ Falló con el mensaje real")
+    sys.exit(1)
+
+print("\n" + "=" * 60)
 print("TODOS LOS TESTS COMPLETADOS")
 print("=" * 60)

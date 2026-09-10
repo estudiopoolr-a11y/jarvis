@@ -953,34 +953,44 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     # 2. PRESUPUESTOS Y GASTOS POR MES (formato bloque)
     # =========================================
     # Detectar si el usuario está dando un bloque de presupuesto y gastos por mes
+    # Detecta el bloque y lo procesa, aislándolo del fallo de Gemini
     if "---" in texto_lc and any(m in texto_lc.upper() for m in ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"]):
-        parsed = _parse_bloque_presupuesto_mensual(prompt_usuario)
-        if parsed:
-            acciones, mes_num, año = parsed
-            from modules.database import establecer_presupuesto_mes, registrar_transaccion_v2
+        try:
+            parsed = _parse_bloque_presupuesto_mensual(prompt_usuario)
+            if parsed:
+                acciones, mes_num, año = parsed
+                from modules.database import establecer_presupuesto_mes, registrar_transaccion_v2
 
-            result = []
-            for accion in acciones:
-                if accion[0] == 'presupuesto':
-                    _, categoria, monto, mes, año_mes = accion
-                    if establecer_presupuesto_mes(usuario_id, categoria, monto, año_mes, mes):
-                        result.append(f"✅ Presupuesto para *{categoria}* = **${monto:,.0f}** ({_NOMBRES_MESES[mes]} {año_mes})")
-                    else:
-                        result.append(f"⚠️ Error estableciendo presupuesto para *{categoria}*")
-                elif accion[0] == 'gasto':
-                    _, categoria, monto, fecha = accion
-                    # Registrar gasto en la fecha especificada
-                    tx_id = registrar_transaccion_v2(
-                        usuario_id, "expense", monto, categoria,
-                        descripcion=f"Gasto {categoria} ({datetime.now().strftime('%Y-%m')})",
-                        cuenta_nombre="Efectivo", fecha=fecha
-                    )
-                    if tx_id:
-                        result.append(f"💸 Gasto registrado: **-${monto:,.0f}** en *{categoria}* ({fecha})")
-                    else:
-                        result.append(f"⚠️ Error registrando gasto de *{categoria}*")
+                result = []
+                for accion in acciones:
+                    try:
+                        if accion[0] == 'presupuesto':
+                            _, categoria, monto, mes, año_mes = accion
+                            if establecer_presupuesto_mes(usuario_id, categoria, monto, año_mes, mes):
+                                result.append(f"✅ Presupuesto para *{categoria}* = **${monto:,.0f}** ({_NOMBRES_MESES[mes]} {año_mes})")
+                            else:
+                                result.append(f"⚠️ Error estableciendo presupuesto para *{categoria}*")
+                        elif accion[0] == 'gasto':
+                            _, categoria, monto, fecha = accion
+                            # Registrar gasto en la fecha especificada
+                            tx_id = registrar_transaccion_v2(
+                                usuario_id, "expense", monto, categoria,
+                                descripcion=f"Gasto {categoria} ({datetime.now().strftime('%Y-%m')})",
+                                cuenta_nombre="Efectivo", fecha=fecha
+                            )
+                            if tx_id:
+                                result.append(f"💸 Gasto registrado: **-${monto:,.0f}** en *{categoria}* ({fecha})")
+                            else:
+                                result.append(f"⚠️ Error registrando gasto de *{categoria}*")
+                    except Exception as e:
+                        print(f"Error en accion {accion}: {e}")
+                        result.append(f"⚠️ Error procesando *{accion[1]}*: {e}")
 
-            return f"🤖 **[BLOQUE DE PRESUPUESTO Y GASTOS CARGADO]**\n\n" + "\n".join(result)
+                return f"🤖 **[BLOQUE DE PRESUPUESTO Y GASTOS CARGADO]**\n\n" + "\n".join(result)
+        except Exception as e:
+            print(f"Error parseando bloque presupuesto/gastos: {e}")
+            # No caer a Gemini silenciosamente; informar el bloque se detectó pero falló
+            return f"⚠️ Detecté tu bloque de presupuestos pero falló al procesarlo: `{e}`\n*Intenta separar categorías una por una si persiste.*"
 
     # =========================================
     # 2b. CONFIGURACIÓN MASIVA (formato estructurado)
