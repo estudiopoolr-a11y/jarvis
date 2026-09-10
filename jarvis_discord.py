@@ -484,6 +484,61 @@ async def diagnostico(ctx):
     except Exception as e:
         await ctx.send(f"⚠️ Error en diagnostico: {e}")
 
+@bot.command(name="buscar_historial")
+async def buscar_historial(ctx):
+    """Recorre todos los usuarios y reporta dónde hay transacciones/budgets por mes."""
+    try:
+        from modules.database import inicializar_firebase, db
+        if not firebase_admin._apps:
+            inicializar_firebase()
+
+        lineas = []
+        usuarios = list(db.collection("users").stream())
+        lineas.append(f"🔎 **{len(usuarios)} usuarios encontrados**")
+
+        for udoc in usuarios:
+            uid = udoc.id
+            ref = db.collection("users").document(uid)
+            meses_tx = []
+            suma_tx = 0
+            try:
+                for mdoc in ref.collection("transactions").stream():
+                    try:
+                        items = list(mdoc.reference.collection("items").stream())
+                    except Exception:
+                        items = []
+                    if items:
+                        meses_tx.append(f"{mdoc.id}({len(items)})")
+                        suma_tx += len(items)
+            except Exception as e:
+                meses_tx.append(f"ERROR:{e}")
+            # budgets por mes
+            meses_bud = []
+            try:
+                for bdoc in ref.collection("budgets").stream():
+                    try:
+                        boutems = list(bdoc.reference.collection("items").stream())
+                    except Exception:
+                        boutems = []
+                    if boutems:
+                        meses_bud.append(f"{bdoc.id}({len(boutems)})")
+            except Exception as e:
+                meses_bud.append(f"ERROR:{e}")
+
+            etiqueta = "**← TU CUENTA**" if uid == str(ctx.author.id) else ""
+            lineas.append(
+                f"\n📁 **{uid}** {etiqueta}\n"
+                f"   • transactions: {meses_tx or 'ninguno'}  (total {suma_tx})\n"
+                f"   • budgets: {meses_bud or 'ninguno'}"
+            )
+
+        if not usuarios:
+            lineas.append("No hay usuarios en la colección `users`.")
+
+        await ctx.send("\n".join(lineas))
+    except Exception as e:
+        await ctx.send(f"⚠️ Error en buscar_historial: {e}")
+
 @bot.command(name="corregir_gastos")
 async def corregir_gastos(ctx, arg: str = ""):
     """Muestra/elimina gastos duplicados de julio 2026.
