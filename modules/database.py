@@ -598,7 +598,7 @@ def obtener_presupuestos_mes(usuario_id, year=None, month=None):
 # ==================== TRANSACCIONES (KEBO) ====================
 
 def registrar_transaccion_v2(usuario_id, tipo, monto, categoria_nombre, descripcion="", cuenta_nombre="Efectivo",
-                             payee="", fee=0.0, status="cleared", tags=None):
+                             payee="", fee=0.0, status="cleared", tags=None, fecha=None):
     """Registra transacción en nueva estructura Kebo.
 
     Campos estilo Kebo:
@@ -606,6 +606,8 @@ def registrar_transaccion_v2(usuario_id, tipo, monto, categoria_nombre, descripc
     - fee: Comisión adicional (transferencias internacionales, etc.)
     - status: "pending" | "cleared" (si ya se procesó en el banco)
     - tags: lista de hashtags transversales (ej. ["#vacaciones", "#proyecto"])
+    - fecha: opcional "YYYY-MM-DD". Si no se provee, se usa la fecha actual.
+              Permite registrar transacciones de meses anteriores en su periodo correcto.
     """
     if tags is None:
         tags = []
@@ -626,11 +628,15 @@ def registrar_transaccion_v2(usuario_id, tipo, monto, categoria_nombre, descripc
         else:
             cuenta_id = crear_cuenta(usuario_id, cuenta_nombre, "cash")
 
-        # Crear transacción
-        ahora = datetime.now()
+        # Fecha de la transacción (por defecto: ahora)
+        if not fecha:
+            ahora = datetime.now()
+            fecha = ahora.strftime("%Y-%m-%d")
+        else:
+            ahora = datetime.strptime(fecha, "%Y-%m-%d")
+
         year = str(ahora.year)
         month = f"{ahora.month:02d}"
-        fecha = ahora.strftime("%Y-%m-%d")
 
         tx_ref = user_ref.collection("transactions").document(f"{year}-{month}").collection("items").document()
         tx_ref.set({

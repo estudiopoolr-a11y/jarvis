@@ -377,6 +377,85 @@ def _parse_configuracion_masiva(texto: str) -> tuple[dict, list] | None:
 import re
 
 
+def _parse_bloque_presupuesto_mensual(texto: str) -> tuple[list, str] | None:
+    """
+    Parser de bloques de presupuesto y gastos mensuales.
+
+    Formato:
+    --- MES YYYY ---
+    Presupuesto Total: $770.000,00 | Gastado: $1.094.775,69
+    Alimentación: Presupuestado $120.000,00 | Gastado $120.000,00
+    Moto: Presupuestado $100.000,00 | Gastado $222.427,00
+
+    Devuelve (acciones, mes, año) donde:
+    - acciones = lista de tuplas ('presupuesto', categoria, monto) o ('gasto', categoria, monto, fecha)
+    - mes = número del mes
+    - año = número del año
+    """
+    acciones = []
+    mes_encontrado = None
+    año_encontrado = None
+
+    # Patrón para el encabezado del mes
+    MES_PATTERN = re.compile(
+        r'---\s*([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s+(\d{4})\s*---?',
+        re.IGNORECASE
+    )
+
+    # Patrón para cada línea de categoría
+    LINEA_PATTERN = re.compile(
+        r'^\s*([^:]+?)\s*:\s*Presupuestado\s*\$?\s*([\d.,]+)\s*\|\s*Gastado\s*\$?\s*([\d.,]+)\s*$',
+        re.IGNORECASE
+    )
+
+    lineas = texto.splitlines()
+
+    for i, linea in enumerate(lineas):
+        # Buscar el encabezado del mes
+        m = MES_PATTERN.search(linea)
+        if m:
+            mes_str, año_str = m.group(1), m.group(2)
+            # Convertimos nombre de mes a número
+            meses = {
+                "enero":1,"febrero":2,"marzo":3,"abril":4,"mayo":5,"junio":6,
+                "julio":7,"agosto":8,"septiembre":9,"octubre":10,"noviembre":11,"diciembre":12,
+                "january":1,"february":2,"march":3,"april":4,"may":5,"june":6,
+                "july":7,"august":8,"september":9,"october":10,"november":11,"december":12
+            }
+            mes_encontrado = meses.get(mes_str.lower())
+            año_encontrado = int(año_str)
+            continue  # seguimos procesando líneas posteriores
+
+        # Si ya tenemos mes/año, intentamos coincidir con la línea de categoría
+        if mes_encontrado and año_encontrado:
+            # Saltar línea de total si existe en la primera iteración
+            if i == 0 and "Presupuesto Total:" in linea:
+                continue
+
+            l = LINEA_PATTERN.match(linea.strip())
+            if l:
+                categoria_raw, presup_str, gasto_str = l.groups()
+                categoria = categoria_raw.strip().title()
+
+                # Convertimos montos (quitamos puntos de miles y cambiamos coma por punto)
+                def to_float(s): return float(s.replace('.', '').replace(',', '.'))
+
+                presupuesto = to_float(presup_str)
+                gasto = to_float(gasto_str)
+
+                # 1️⃣ Establecer presupuesto del mes
+                acciones.append(('presupuesto', categoria, presupuesto, mes_encontrado, año_encontrado))
+
+                # 2️⃣ Registrar el gasto como transacción del mes (solo si > 0)
+                if gasto > 0:
+                    fecha = f"{año_encontrado:04d}-{mes_encontrado:02d}-15"  # día medio del mes
+                    acciones.append(('gasto', categoria, gasto, fecha))
+
+    if acciones:
+        return acciones, mes_encontrado, año_encontrado
+    return None
+
+
 def _parse_tarea(texto: str) -> dict | None:
     """Extrae tarea, prioridad y fecha de un mensaje de tarea."""
     texto_lower = texto.lower()
@@ -871,7 +950,40 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         return f"🤖 **[SISTEMA REINICIADO POR JARVIS]**\n{result}\n\n*He limpiado la basura anterior.*"
 
     # =========================================
-    # 2. CONFIGURACIÓN MASIVA
+    # 2. PRESUPUESTOS Y GASTOS POR MES (formato bloque)
+    # =========================================
+    # Detectar si el usuario está dando un bloque de presupuesto y gastos por mes
+    if "---" in texto_lc and any(m in texto_lc.upper() for m in ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"]):
+        parsed = _parse_bloque_presupuesto_mensual(prompt_usuario)
+        if parsed:
+            acciones, mes_num, año = parsed
+            from modules.database import establecer_presupuesto_mes, registrar_transaccion_v2
+
+            result = []
+            for accion in acciones:
+                if accion[0] == 'presupuesto':
+                    _, categoria, monto, mes, año_mes = accion
+                    if establecer_presupuesto_mes(usuario_id, categoria, monto, año_mes, mes):
+                        result.append(f"✅ Presupuesto para *{categoria}* = **${monto:,.0f}** ({_NOMBRES_MESES[mes]} {año_mes})")
+                    else:
+                        result.append(f"⚠️ Error estableciendo presupuesto para *{categoria}*")
+                elif accion[0] == 'gasto':
+                    _, categoria, monto, fecha = accion
+                    # Registrar gasto en la fecha especificada
+                    tx_id = registrar_transaccion_v2(
+                        usuario_id, "expense", monto, categoria,
+                        descripcion=f"Gasto {categoria} ({datetime.now().strftime('%Y-%m')})",
+                        cuenta_nombre="Efectivo", fecha=fecha
+                    )
+                    if tx_id:
+                        result.append(f"💸 Gasto registrado: **-${monto:,.0f}** en *{categoria}* ({fecha})")
+                    else:
+                        result.append(f"⚠️ Error registrando gasto de *{categoria}*")
+
+            return f"🤖 **[BLOQUE DE PRESUPUESTO Y GASTOS CARGADO]**\n\n" + "\n".join(result)
+
+    # =========================================
+    # 2b. CONFIGURACIÓN MASIVA (formato estructurado)
     # =========================================
     if "configura" in texto_lc or ("presupuestos" in texto_lc and "transacciones" in texto_lc):
         parsed = _parse_configuracion_masiva(prompt_usuario)
