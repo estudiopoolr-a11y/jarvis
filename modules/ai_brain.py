@@ -975,7 +975,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
                             # Registrar gasto en la fecha especificada
                             tx_id = registrar_transaccion_v2(
                                 usuario_id, "expense", monto, categoria,
-                                descripcion=f"Gasto {categoria} ({datetime.now().strftime('%Y-%m')})",
+                                descripcion=f"Gasto {categoria} ({fecha[:7]})",
                                 cuenta_nombre="Efectivo", fecha=fecha
                             )
                             if tx_id:
