@@ -584,6 +584,127 @@ async def corregir_gastos(ctx, arg: str = ""):
     except Exception as e:
         await ctx.send(f"⚠️ Error en corregir_gastos: {e}")
 
+@bot.command(name="migrar_finanzas")
+async def migrar_finanzas(ctx, arg: str = ""):
+    """Migra finanzas/presupuestos legacy → Kebo (tu cuenta) y borra legacy.
+    Uso: !migrar_finanzas            → vista previa (no migra ni borra)
+         !migrar_finanzas confirmar  → migra y deja solo Kebo
+    """
+    try:
+        from modules import database as dbmod
+        if not firebase_admin._apps:
+            dbmod.inicializar_firebase()
+        db = dbmod.db if dbmod.db else dbmod.inicializar_firebase()
+        uid = str(ctx.author.id)
+        confirmar = arg.strip().lower() == "confirmar"
+
+        # ---------- Leer legacy ----------
+        finanzas = {}
+        for d in db.collection("finanzas").stream():
+            t = d.to_dict() or {}
+            # solo movimientos del usuario (o los que no tienen usuario = suyos)
+            t_uid = str(t.get("usuario_id", ""))
+            if t_uid and t_uid not in (uid, "default"):
+                continue
+            mes = t.get("mes") or ""
+            finanzas.setdefault(mes, []).append(t)
+
+        presupuestos = {p.get("categoria", "?").capitalize(): float(p.get("limite", 0))
+                        for p in db.collection("presupuestos").stream()
+                        if not p.to_dict().get("usuario_id") or str(p.to_dict().get("usuario_id")) in (uid, "default")}
+
+        # ---------- Resumen ----------
+        total_ing = sum(t.get("monto", 0) for ms in finanzas.values() for t in ms
+                        if str(t.get("tipo")).lower().startswith("ing"))
+        total_gas = sum(t.get("monto", 0) for ms in finanzas.values() for t in ms
+                        if str(t.get("tipo")).lower().startswith("gas"))
+
+        lineas = [f"🗄️ **LEGACY — finanzas/ y presupuestos/**"]
+        if not finanzas and not presupuestos:
+            lineas.append("\n✅ No hay data legacy de finanzas que migrar.")
+        else:
+            lineas.append(f"\n📈 **finanzas/** por mes:")
+            for mes in sorted(finanzas):
+                movs = finanzas[mes]
+                lineas.append(f"   `{mes or 'sin-mes'}` → {len(movs)} movs")
+            lineas.append(f"\n   • Ingresos legacy: +${total_ing:,.2f}")
+            lineas.append(f"   • Gastos legacy:   -${total_gas:,.2f}")
+            if presupuestos:
+                lineas.append(f"\n📑 **presupuestos/** legacy ({len(presupuestos)}):")
+                for cat, m in presupuestos.items():
+                    lineas.append(f"   • {cat}: ${m:,.0f}")
+
+            # Detección de julio duplicado: cuánto hay en legacy de 2026-07
+            jul_legacy = finanzas.get("2026-07") or []
+            lineas.append(f"\n⚠️ **Julio en legacy**: {len(jul_legacy)} movs "
+                          f"(vs {len(list(db.collection('users').document(uid).collection('transactions').document('2026-07').collection('items').stream()))} en Kebo)")
+
+        if confirmar:
+            if not finanzas and not presupuestos:
+                await ctx.send("\n".join(lineas) + "\n\nNada que migrar.")
+                return
+            # ---------- Migrar finanzas legacy → Kebo ----------
+            mig_s = mig_g = 0
+            for mes, movs in finanzas.items():
+                if not mes:
+                    continue
+                year, month = mes.split("-")
+                for t in movs:
+                    tipo = str(t.get("tipo")).lower()
+                    tipo_k = "income" if tipo.startswith("ing") else "expense"
+                    cat = str(t.get("categoria")).capitalize()
+                    monto = float(t.get("monto", 0))
+                    fecha = f"{int(year):04d}-{int(month):02d}-15"
+                    try:
+                        dbmod.registrar_transaccion_v2(
+                            uid, tipo_k, monto, cat,
+                            descripcion=str(t.get("descripcion", "")),
+                            cuenta_nombre="Efectivo",
+                            fecha=fecha,
+                        )
+                        if tipo_k == "income":
+                            mig_s += 1
+                        else:
+                            mig_g += 1
+                    except Exception as e:
+                        await ctx.send(f"⚠️ No migré {cat} ${monto}: {e}")
+            # ---------- Migrar presupuestos legacy → Kebo ----------
+            # sin mes conocido: al mes más reciente con actividad
+            meses_orden = sorted([m for m in finanzas if m], reverse=True)
+            for cat, monto in presupuestos.items():
+                y_m = None
+                # si ya hay un presupuesto de esa cat en julio, no lo piso
+                if y_m is None and meses_orden:
+                    y_m = meses_orden[0]
+                if not y_m:
+                    continue
+                year, month = y_m.split("-")
+                try:
+                    dbmod.establecer_presupuesto_mes(uid, cat, monto,
+                                                     year=int(year), month=int(month))
+                except Exception as e:
+                    await ctx.send(f"⚠️ No migré presupuesto {cat}: {e}")
+            lineas.append(f"\n🚀 **Migrado a Kebo**: {mig_s} ingresos + {mig_g} gastos + "
+                          f"{len(presupuestos)} presupuestos")
+            # ---------- Borrar legacy ----------
+            n_fin = sum(len(v) for v in finanzas.values())
+            try:
+                for d in db.collection("finanzas").stream():
+                    d.reference.delete()
+                for d in db.collection("presupuestos").stream():
+                    d.reference.delete()
+                lineas.append(f"\n🗑️ **Legacy borrado**: {n_fin} finanzas + {len(presupuestos)} presupuestos. "
+                              f"Solo queda KEBO.")
+            except Exception as e:
+                lineas.append(f"\n⚠️ Migrado pero no pude borrar legacy: {e}")
+        else:
+            lineas.append("\n\nℹ️ Vista previa — nada migrado ni borrado.")
+            lineas.append("Para migrar y dejar solo Kebo: `!migrar_finanzas confirmar`")
+
+        await ctx.send("\n".join(lineas))
+    except Exception as e:
+        await ctx.send(f"⚠️ Error en migrar_finanzas: {e}")
+
 @bot.command(name="historial")
 async def ver_historial(ctx, cantidad: int = 20):
     """Muestra las últimas N transacciones (por defecto 20)."""
