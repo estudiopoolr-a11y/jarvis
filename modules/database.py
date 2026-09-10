@@ -1769,11 +1769,25 @@ def obtener_balance_financiero(usuario_id: str = "default", mes: str = None):
             except Exception:
                 pass
 
+            # Listar IDs de mes. Si falla o queda vacío, probar fechas recientes directas.
             if mes:
                 y, m = str(mes).split("-")
                 meses_docs = [f"{y}-{f'{int(m):02d}'}"]
             else:
-                meses_docs = [d.id for d in user_ref.collection("transactions").stream()]
+                try:
+                    meses_docs = [d.id for d in user_ref.collection("transactions").stream()]
+                except Exception as e:
+                    print(f"Balance kebo: no pude listar transactions: {e}")
+                    meses_docs = []
+                # Fallback: siempre probar el mes actual y los 5 anteriores
+                ahora_m = datetime.now()
+                fallback = [f"{ahora_m.year}-{ahora_m.month:02d}"]
+                for i in range(1, 6):
+                    f = datetime(ahora_m.year, ahora_m.month, 1) - timedelta(days=30 * i)
+                    fallback.append(f"{f.year}-{f.month:02d}")
+                for f in fallback:
+                    if f not in meses_docs:
+                        meses_docs.append(f)
 
             kebo = []
             for month_id in meses_docs:

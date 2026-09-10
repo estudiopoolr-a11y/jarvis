@@ -433,6 +433,57 @@ async def ver_presupuestos(ctx):
     except Exception as e:
         await ctx.send(f"⚠️ Error al obtener presupuestos: {e}")
 
+@bot.command(name="diagnostico")
+async def diagnostico(ctx):
+    """Diagnóstico de lectura Kebo del usuario (para depurar ¿por qué $0?)."""
+    try:
+        from modules.database import _get_user_ref, inicializar_firebase, obtener_balance_financiero
+        if not firebase_admin._apps:
+            inicializar_firebase()
+        uid = str(ctx.author.id)
+        _, user_ref = _get_user_ref(uid)
+        partes = [f"🔎 **Diagnóstico para `{uid}`**"]
+        if not user_ref:
+            partes.append("⚠️ user_ref vacío")
+            await ctx.send("\n".join(partes))
+            return
+
+        # 1) ¿Existe el doc de usuario?
+        try:
+            udoc = user_ref.get()
+            partes.append(f"• Doc usuario existe: {udoc.exists}")
+        except Exception as e:
+            partes.append(f"• Error get usuario: {e}")
+
+        # 2) Listar meses de transactions
+        try:
+            meses = [d.id for d in user_ref.collection("transactions").stream()]
+            partes.append(f"• Meses en transactions: {meses}")
+        except Exception as e:
+            partes.append(f"• Error listando transactions: {e}")
+
+        # 3) Contar items en julio
+        try:
+            items = list(user_ref.collection("transactions").document("2026-07").collection("items").stream())
+            partes.append(f"• Items en 2026-07: {len(items)}")
+            if items:
+                t0 = items[0].to_dict() or {}
+                partes.append(f"• Primer item keys: {list(t0.keys())}")
+                partes.append(f"• type={t0.get('type')} amount={t0.get('amount')} date={t0.get('date')}")
+        except Exception as e:
+            partes.append(f"• Error items 2026-07: {e}")
+
+        # 4) Qué retorna obtener_balance_financiero
+        try:
+            balance = obtener_balance_financiero(uid)
+            partes.append(f"• obtener_balance_financiero → {balance[:3]}, #{len(balance[3])} mov")
+        except Exception as e:
+            partes.append(f"• Error obtener_balance_financiero: {e}")
+
+        await ctx.send("\n".join(partes))
+    except Exception as e:
+        await ctx.send(f"⚠️ Error en diagnostico: {e}")
+
 @bot.command(name="corregir_gastos")
 async def corregir_gastos(ctx, arg: str = ""):
     """Muestra/elimina gastos duplicados de julio 2026.
