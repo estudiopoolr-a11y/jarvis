@@ -521,10 +521,9 @@ def establecer_presupuesto_mes(usuario_id, categoria_nombre, monto, year=None, m
     """Establece un presupuesto para una categoría en un mes específico (Kebo style).
     Estructura: users/{userId}/budgets/{year}/{month}/items/{id}
     """
-    if not year:
-        year = str(datetime.now().year)
-    if not month:
-        month = f"{datetime.now().month:02d}"
+    # Normalizar año y mes SIEMPRE (evita docs "2026-7" vs "2026-07")
+    year = str(year) if year else str(datetime.now().year)
+    month = f"{int(month):02d}" if month else f"{datetime.now().month:02d}"
 
     _, user_ref = _get_user_ref(usuario_id)
     if not user_ref:
@@ -1752,11 +1751,55 @@ def exportar_csv(usuario_id="default", mes=None):
 # Estas funciones usan la estructura ANTIGUA de Firestore (colecciones planas)
 
 def obtener_balance_financiero(usuario_id: str = "default", mes: str = None):
-    """Obtener balance financiero de estructura legacy."""
+    """Obtener balance financiero. Lee KEBO (users/{id}/transactions/) con fallback legacy."""
     global db
     if not db: db = inicializar_firebase()
     if not db: return 0.0, 0.0, 0.0, []
 
+    # ---- 1) Estructura KEBO ----
+    try:
+        _, user_ref = _get_user_ref(usuario_id)
+        if user_ref:
+            # Mapa de categoría (id -> nombre) para traducir category_id a legible
+            cat_map = {}
+            try:
+                for c in user_ref.collection("categories").stream():
+                    cd = c.to_dict() or {}
+                    cat_map[c.id] = cd.get("nombre") or cd.get("name", "General")
+            except Exception:
+                pass
+
+            if mes:
+                y, m = str(mes).split("-")
+                meses_docs = [f"{y}-{f'{int(m):02d}'}"]
+            else:
+                meses_docs = [d.id for d in user_ref.collection("transactions").stream()]
+
+            kebo = []
+            for month_id in meses_docs:
+                try:
+                    docs = user_ref.collection("transactions").document(month_id).collection("items").stream()
+                except Exception:
+                    continue
+                for d in docs:
+                    t = d.to_dict() or {}
+                    t["_id"] = d.id
+                    monto = float(t.get("amount")) if t.get("amount") is not None else float(t.get("monto", 0))
+                    tipo_kebo = (t.get("type") or t.get("tipo") or "expense")
+                    # Traducir a claves legacy esperadas por la app (tipo/monto/categoria)
+                    t["tipo"] = "ingreso" if tipo_kebo == "income" else "gasto"
+                    t["monto"] = monto
+                    t["categoria"] = cat_map.get(t.get("category_id")) or t.get("category_name") or "General"
+                    kebo.append(t)
+
+            if kebo:
+                ingresos = sum(float(x["monto"]) for x in kebo if x["tipo"] == "ingreso")
+                gastos = sum(float(x["monto"]) for x in kebo if x["tipo"] == "gasto")
+                return ingresos - gastos, ingresos, gastos, kebo
+    except Exception as e:
+        print(f"Error balance kebo: {e}")
+
+    # ---- 2) Fallback LEGACY ----
     try:
         filter_criteria = FieldFilter("usuario_id", "==", str(usuario_id))
         if mes:
@@ -1781,11 +1824,38 @@ def obtener_balance_financiero(usuario_id: str = "default", mes: str = None):
         return 0.0, 0.0, 0.0, []
 
 def obtener_resumen_presupuestos(usuario_id: str = "default", mes: str = None):
-    """Obtener presupuestos de estructura legacy."""
+    """Obtener presupuestos. Lee KEBO budgets/{YYYY-MM}/items con fallback legacy."""
     global db
     if not db: db = inicializar_firebase()
     if not db: return {}
 
+    # ---- 1) Estructura KEBO ----
+    try:
+        _, user_ref = _get_user_ref(usuario_id)
+        if user_ref:
+            # Calcular los IDs de mes candidatos (con y sin cero para tolerar datos viejos)
+            if mes:
+                y, m = str(mes).split("-")
+                candidatos = [f"{y}-{f'{int(m):02d}'}", f"{y}-{int(m)}"]
+            else:
+                ahora = datetime.now()
+                candidatos = [f"{ahora.year}-{ahora.month:02d}", f"{ahora.year}-{ahora.month}"]
+
+            for month_id in candidatos:
+                try:
+                    items = user_ref.collection("budgets").document(month_id).collection("items").stream()
+                except Exception:
+                    continue
+                presupuestos = {}
+                for d in items:
+                    data = d.to_dict() or {}
+                    presupuestos[data.get("category_name")] = float(data.get("amount", 0))
+                if presupuestos:
+                    return presupuestos
+    except Exception as e:
+        print(f"Error presupuestos kebo: {e}")
+
+    # ---- 2) Fallback LEGACY ----
     try:
         filter_criteria = FieldFilter("usuario_id", "==", str(usuario_id))
         p_docs = db.collection("presupuestos").where(filter=filter_criteria).stream()
