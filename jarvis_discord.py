@@ -705,6 +705,136 @@ async def migrar_finanzas(ctx, arg: str = ""):
     except Exception as e:
         await ctx.send(f"⚠️ Error en migrar_finanzas: {e}")
 
+@bot.command(name="consolidar")
+async def consolidar(ctx, *, arg: str = ""):
+    """Consolida finanzas KEBO de 'default' → tu cuenta.
+    Uso:
+      !consolidar                      → muestra julio (default vs tuyo) lado a lado
+      !consolidar mostrar              → re-muestra julio comparado
+      !consolidar copiar may,jun,ago   → copia esos meses de default a tu cuenta
+      !consolidar copiar todo          → copia todos los meses EXCEPTO julio
+      !consolidar copiar julio         → copia también julio (tras revisar)
+    """
+    try:
+        from modules import database as dbmod
+        if not firebase_admin._apps:
+            dbmod.inicializar_firebase()
+        db = dbmod.db if dbmod.db else dbmod.inicializar_firebase()
+        uid = str(ctx.author.id)
+        ORIGEN = "default"
+        MESES = ["2026-05", "2026-06", "2026-07", "2026-08"]
+
+        def leer_items(user_id, mes):
+            out = []
+            base = db.collection("users").document(user_id).collection("transactions").document(mes).collection("items")
+            try:
+                for d in base.stream():
+                    it = d.to_dict() or {}
+                    it["_id"] = d.id
+                    it["_mes"] = mes
+                    out.append(it)
+            except Exception:
+                pass
+            return out
+
+        def desc(item):
+            tipo = item.get("type", "expense")
+            m = float(item.get("amount", item.get("monto", 0)))
+            signo = "+" if tipo == "income" else "-"
+            emoji = "🟢" if tipo == "income" else "🔴"
+            cat = str(item.get("category_name") or item.get("categoria") or item.get("category_id") or "?")
+            d = item.get("date", "") or item.get("_mes")
+            return f"{emoji} {signo}${m:,.0f} · {cat} · {d[:10]}"
+
+        accion = arg.strip().lower()
+
+        # ---------- Ver julio comparado ----------
+        if not accion or accion == "mostrar":
+            jul_def = leer_items(ORIGEN, "2026-07")
+            jul_uid = leer_items(uid, "2026-07")
+            lineas = [f"🔁 **JULIO comparado** — `default` ({len(jul_def)}) vs TU cuenta ({len(jul_uid)})\n"]
+            lineas.append(f"**En `default` (importado):**")
+            lineas += [f"   {desc(x)}" for x in jul_def] or ["   (nada)"]
+            lineas.append(f"\n**En TU cuenta (del bloque):**")
+            lineas += [f"   {desc(x)}" for x in jul_uid] or ["   (nada)"]
+            total_def = sum(float(x.get("amount", x.get("monto", 0))) for x in jul_def if x.get("type") != "income")
+            lineas.append(f"\nℹ️ Subtotal gasto julio `default`: -${total_def:,.0f}. "
+                          f"Cuando lo revises: `!consolidar copiar todo` (excluye julio) o `!consolidar copiar julio`.")
+            await ctx.send("\n".join(lineas))
+            return
+
+        # ---------- Copiar meses ----------
+        if accion.startswith("copiar"):
+            resto = accion.replace("copiar", "").strip().lower()
+            if resto in ("todo", "all", ""):
+                meses = [m for m in MESES if m != "2026-07"]
+            else:
+                pedido = [p.strip() for p in resto.replace(" ", "").split(",") if p.strip()]
+                meses = []
+                for m in MESES:
+                    partes = m.split("-")
+                    y = partes[0]
+                    num = str(int(partes[1]))
+                    if num in pedido or y in pedido or m in pedido or m.replace("-", "") in pedido:
+                        meses.append(m)
+                if "julio" in resto or "jul" in resto or "7" in pedido:
+                    meses.append("2026-07")
+
+            if not meses:
+                await ctx.send("ℹ️ No se copió nada. Meses válidos: may, jun, jul, ago.")
+                return
+
+            # Resolver categoría: default items guardan category_name? si no, por category_id
+            # -> usar registrar_transaccion_v2 (resuelve/crea categoría y cuenta bajo el uid)
+            copiadas = migradas_ing = migradas_gas = 0
+            duplicadas = []
+            for mes in meses:
+                items = leer_items(ORIGEN, mes)
+                for it in items:
+                    tipo = it.get("type", "expense")
+                    monto = abs(float(it.get("amount", it.get("monto", 0))))
+                    fecha = it.get("date", "")
+                    descripcion = it.get("description", "")
+                    # nombre de categoría: si hay category_name usar; si no, intentar por category_id
+                    cat = it.get("category_name") or None
+                    if not cat and it.get("category_id"):
+                        try:
+                            cid = db.collection("users").document(ORIGEN).collection("categories").document(str(it["category_id"])).get()
+                            if cid.exists:
+                                cat = cid.to_dict().get("nombre", it["category_id"])
+                        except Exception:
+                            cat = None
+                    if not cat:
+                        cat = it.get("category_id") or "General"
+
+                    try:
+                        dbmod.registrar_transaccion_v2(
+                            uid, tipo, monto, str(cat).capitalize(),
+                            descripcion=descripcion or f"Importado {mes}",
+                            cuenta_nombre="Efectivo",
+                            fecha=fecha if fecha else f"{mes}-15",
+                        )
+                        copiadas += 1
+                        if tipo == "income":
+                            migradas_ing += 1
+                        else:
+                            migradas_gas += 1
+                    except Exception as e:
+                        duplicadas.append(f"{mes}: {desc(it)} → {e}")
+
+            res = [f"✅ Consolidado `default` → TU cuenta: **{copiadas}** transacciones "
+                   f"({migradas_ing} ing, {migradas_gas} gas) en {', '.join(meses)}"]
+            if duplicadas:
+                res.append(f"\n⚠️ No se copiaron {len(duplicadas)}:")
+                res += [f"   • {x}" for x in duplicadas[:10]]
+            res.append("\nRevisa con `!finanzas` o `!buscar_historial`.")
+            await ctx.send("\n".join(res))
+            return
+
+        await ctx.send("ℹ️ Uso: `!consolidar` | `!consolidar mostrar` | `!consolidar copiar may,jun,ago|todo|julio`")
+    except Exception as e:
+        await ctx.send(f"⚠️ Error en consolidar: {e}")
+
 @bot.command(name="historial")
 async def ver_historial(ctx, cantidad: int = 20):
     """Muestra las últimas N transacciones (por defecto 20)."""
