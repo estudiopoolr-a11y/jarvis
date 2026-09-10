@@ -433,6 +433,23 @@ async def ver_presupuestos(ctx):
     except Exception as e:
         await ctx.send(f"⚠️ Error al obtener presupuestos: {e}")
 
+@bot.command(name="corregir_gastos")
+async def corregir_gastos(ctx, arg: str = ""):
+    """Muestra/elimina gastos duplicados de julio 2026.
+    Uso: !corregir_gastos          → vista previa (no borra)
+         !corregir_gastos confirmar → borra los duplicados
+    """
+    try:
+        from modules.database import deduplicar_gastos, inicializar_firebase
+        if not firebase_admin._apps:
+            inicializar_firebase()
+        uid = str(ctx.author.id)
+        dry_run = arg.strip().lower() != "confirmar"
+        reporte = deduplicar_gastos(uid, 2026, 7, dry_run=dry_run)
+        await ctx.send(reporte)
+    except Exception as e:
+        await ctx.send(f"⚠️ Error en corregir_gastos: {e}")
+
 @bot.command(name="historial")
 async def ver_historial(ctx, cantidad: int = 20):
     """Muestra las últimas N transacciones (por defecto 20)."""

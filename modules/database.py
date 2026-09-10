@@ -1868,6 +1868,61 @@ def obtener_resumen_presupuestos(usuario_id: str = "default", mes: str = None):
         print(f"Error obteniendo presupuestos legacy: {e}")
         return {}
 
+
+def deduplicar_gastos(usuario_id, year, month, dry_run=True):
+    """Detecta y (si dry_run=False) elimina gastos duplicados del mes.
+
+    Agrupa los gastos (type=expense) de users/{id}/transactions/{YYYY-MM}/items/
+    por (category_id, date, amount). Si un grupo tiene más de uno con el mismo
+    category_id+monto+date, son duplicados: en modo delete se conserva el primero
+    y se borran los demás.
+
+    Devuelve un reporte legible.
+    """
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return "⚠️ No se encontró el usuario en la base de datos."
+
+    year = str(year); month = f"{int(month):02d}"
+    month_id = f"{year}-{month}"
+
+    try:
+        docs = list(user_ref.collection("transactions").document(month_id).collection("items").stream())
+    except Exception as e:
+        return f"⚠️ Error leyendo transacciones de {month_id}: {e}"
+
+    # Agrupar gastos por clave (category_id, date, amount)
+    grupos = {}
+    for d in docs:
+        t = d.to_dict() or {}
+        if (t.get("type") or t.get("tipo")) != "expense":
+            continue
+        cat = t.get("category_id") or t.get("categoria") or "?"
+        fecha = (t.get("date") or "").split("T")[0][:10]
+        monto = round(float(t.get("amount") if t.get("amount") is not None else t.get("monto", 0)), 2)
+        clave = (cat, fecha, monto)
+        grupos.setdefault(clave, []).append((d.id, t))
+
+    duplicados = {k: v for k, v in grupos.items() if len(v) > 1}
+
+    if not duplicados:
+        return f"✅ **Sin gastos duplicados en {month_id}.**\n\nTotal gastos: **{sum(1 for d in docs if (d.to_dict() or {}).get('type','expense')=='expense' or (d.to_dict() or {}).get('tipo')=='gasto')}** (vs {len(docs)} transacciones totales)."
+
+    lineas = []
+    a_borrar = 0
+    for clave, items in duplicados.items():
+        cat_id, fecha, monto = clave
+        lineas.append(f"**{cat_id}** — {fecha} — ${monto:,.0f}: **{len(items)} copias**")
+        if not dry_run:
+            # Conservar la primera, borrar el resto
+            for extra_id, _ in items[1:]:
+                user_ref.collection("transactions").document(month_id).collection("items").document(extra_id).delete()
+            a_borrar += len(items) - 1
+
+    modo = "PREVIEW (no borró nada)" if dry_run else f"ELIMINADOS {a_borrar} duplicados"
+    cabecera = f"🔍 **DUPLICADOS en {month_id}** — {modo}\n\n"
+    return cabecera + "\n".join(lineas) + "\n\n_Usa `!corregir_gastos confirmar` para borrar los duplicados._"
+
 def obtener_tareas_pendientes(usuario_id: str = "default"):
     """Obtener tareas pendientes (legacy)."""
     global db
