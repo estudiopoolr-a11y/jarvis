@@ -213,14 +213,64 @@ def importar_texto(usuario_id, texto, db, anio_default=None):
     if not meses:
         return "⚠️ No pude reconocer ningún mes/categoría en el archivo. Revisa el formato."
 
-    resumen = cargar_en_kebo(usuario_id, meses, db)
+    # Carga a KEBO
+    cargar_en_kebo(usuario_id, meses, db)
 
-    lineas = ["✅ **Importación completada** (desde .txt):"]
-    for r in resumen:
-        lineas.append(
-            f"• **{r['mes']}** → Ingreso ${r['ingreso']:,.0f} | "
-            f"{r['presupuestos']} presupuestos | {r['gastos']} gastos "
-            f"(gastado ${r['total_gastado']:,.0f})"
-        )
-    lineas.append("\nRevisa tu dashboard o widget para ver los cambios.")
+    meses_orden = sorted(meses.keys())  # YYYY-MM
+
+    # Totales globales
+    total_ing = sum(float(meses[m].get("income", 0) or 0) for m in meses_orden)
+    total_gas = 0.0
+    for m in meses_orden:
+        for _, (pres, gast) in (meses[m].get("budgets", {}) or {}).items():
+            total_gas += float(gast or 0)
+    neto = total_ing - total_gas
+
+    # Último mes importado que tenga presupuestos (para recomendaciones)
+    last_month = None
+    for m in reversed(meses_orden):
+        if (meses[m].get("budgets", {}) or {}):
+            last_month = m
+            break
+
+    excedidos_top = []
+    if last_month:
+        presup = meses[last_month].get("budgets", {}) or {}
+        for cat, (pres, gast) in presup.items():
+            pres_f = float(pres or 0)
+            gast_f = float(gast or 0)
+            exceso = gast_f - pres_f
+            if exceso > 0:
+                excedidos_top.append((exceso, cat, gast_f, pres_f))
+        excedidos_top.sort(reverse=True, key=lambda x: x[0])
+
+    lineas = ["✅ **Importación completada** (desde .txt)."]
+    lineas.append(
+        f"💰 Total ingresos: ${total_ing:,.0f} | 🔻 Total gastos: ${total_gas:,.0f} | 📌 Neto: ${neto:,.0f}"
+    )
+
+    # Resumen mes a mes (una sola línea por mes)
+    for m in meses_orden:
+        income = float(meses[m].get("income", 0) or 0)
+        gastado = 0.0
+        for _, (pres, gast) in (meses[m].get("budgets", {}) or {}).items():
+            gastado += float(gast or 0)
+        net_mes = income - gastado
+        lineas.append(f"• {m}: Ingreso ${income:,.0f} | Gastado ${gastado:,.0f} | Neto ${net_mes:,.0f}")
+
+    # Recomendación compacta
+    if last_month:
+        if excedidos_top:
+            top = excedidos_top[:2]
+            parts = []
+            for exceso, cat, gast_f, pres_f in top:
+                parts.append(f"{cat} (+${exceso:,.0f})")
+            lineas.append("")
+            lineas.append(f"🧠 Recomendación: En {last_month} excediste: {', '.join(parts)}. Prioriza ajustar esos gastos.")
+        else:
+            lineas.append("")
+            lineas.append(f"🧠 Recomendación: En {last_month} todo está dentro del presupuesto.")
+
+    lineas.append("")
+    lineas.append("📊 Listo. Actualiza tu dashboard o el widget para ver el cambio.")
     return "\n".join(lineas)
