@@ -21,9 +21,11 @@ from modules.ai_brain import procesar_intencion_natural, pensar_respuesta, pensa
 
 app = FastAPI(title="JARVIS Control Center")
 
+USUARIO_PRINCIPAL = "1536228767180136498"
+
 class ComandoPayload(BaseModel):
     texto: str
-    usuario_id: str = "iphone_user"
+    usuario_id: str = USUARIO_PRINCIPAL
 
 @app.get("/", response_class=HTMLResponse)
 @app.head("/", response_class=HTMLResponse)
@@ -468,7 +470,7 @@ def api_backup_migrate(usuario_id: str = "default"):
         # Crear cuentas si no existen
         cuentas_default = [
             {"nombre": "Efectivo", "tipo": "cash", "balance": 0},
-            {"nombre": "Nequi", "tipo": "debit", "balance": 0},
+            {"nombre": "Tarjeta", "tipo": "debit", "balance": 0},
             {"nombre": "Crédito", "tipo": "credit", "balance": 0},
         ]
         for c in cuentas_default:
@@ -539,7 +541,7 @@ def cron_ejecutar_recurrentes():
     """Cron diario: ejecuta recurrentes que tocan hoy."""
     try:
         from modules.database import ejecutar_recurrentes
-        ejecutados = ejecutar_recurrentes("iphone_user")
+        ejecutados = ejecutar_recurrentes(USUARIO_PRINCIPAL)
         return {"status": "ok", "ejecutados": ejecutados}
     except Exception as e:
         return {"error": True, "message": str(e)}
@@ -550,7 +552,7 @@ def cron_monthly_report():
     """Cron mensual: envía reporte del mes anterior a Discord."""
     try:
         from app.services.monthly_report import generar_reporte_mes_anterior, enviar_a_discord
-        datos = generar_reporte_mes_anterior("iphone_user")
+        datos = generar_reporte_mes_anterior(USUARIO_PRINCIPAL)
         if datos:
             ok = enviar_a_discord(datos)
             return {"status": "ok" if ok else "error", "mes": datos.get("mes_nombre")}
@@ -564,8 +566,8 @@ def cron_reminders():
     """Cron diario: envía recordatorios de pagos recurrentes a Discord."""
     try:
         from app.services.reminders import obtener_pagos_hoy, obtener_recordatorios_personalizados, enviar_recordatorio_discord
-        pagos = obtener_pagos_hoy("iphone_user")
-        recordatorios = obtener_recordatorios_personalizados("iphone_user")
+        pagos = obtener_pagos_hoy(USUARIO_PRINCIPAL)
+        recordatorios = obtener_recordatorios_personalizados(USUARIO_PRINCIPAL)
         ok = enviar_recordatorio_discord(pagos, recordatorios)
         return {"status": "ok" if ok else "no_data", "pagos": len(pagos), "recordatorios": len(recordatorios)}
     except Exception as e:
@@ -583,7 +585,7 @@ def api_kebo_seed(usuario_id: str = "default"):
         # Crear cuentas solo si no existen
         cuentas_default = [
             {"nombre": "Efectivo", "tipo": "cash"},
-            {"nombre": "Nequi", "tipo": "debit"},
+            {"nombre": "Tarjeta", "tipo": "debit"},
             {"nombre": "Crédito", "tipo": "credit"},
         ]
         from modules.database import listar_cuentas
@@ -649,7 +651,7 @@ def api_kebo_load_agosto(usuario_id: str = "default"):
         existing_cuentas = [c.get("nombre") for c in listar_cuentas(usuario_id)]
         cuentas_default = [
             ("Efectivo", "cash", 200000),
-            ("Nequi", "debit", 150000),
+            ("Tarjeta", "debit", 150000),
             ("Crédito", "credit", 0),
         ]
         for nombre, tipo, balance in cuentas_default:
@@ -2280,7 +2282,7 @@ def api_admin_reset_and_init(usuario_id: str = Form("iphone_user")):
         # Step 3: Crear cuentas default
         cuentas_default = [
             {"nombre": "Efectivo", "tipo": "cash", "balance": 200000},
-            {"nombre": "Nequi", "tipo": "debit", "balance": 150000},
+            {"nombre": "Tarjeta", "tipo": "debit", "balance": 150000},
             {"nombre": "Crédito", "tipo": "credit", "balance": 0},
         ]
         cuentas_creadas = 0

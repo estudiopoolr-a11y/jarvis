@@ -101,12 +101,16 @@ def inicializar_firebase():
 
 # ==================== HELPERS ====================
 
+USUARIO_PRINCIPAL = "1536228767180136498"
+
 def _get_user_ref(usuario_id="default"):
     """Obtiene referencia al documento del usuario (estructura Kebo)."""
     if not db: inicializar_firebase()
     if not db:
         return None, None
-    return db, db.collection("users").document(usuario_id)
+    if not usuario_id or str(usuario_id) in ("default", "iphone_user", "None", ""):
+        usuario_id = USUARIO_PRINCIPAL
+    return db, db.collection("users").document(str(usuario_id))
 
 
 # ==================== MONEDAS Y CONVERSIONES (KEBO) ====================
@@ -191,7 +195,7 @@ def obtener_tasas_cambio(usuario_id):
         return {}
 
 
-def obtener_balance_total_multimoneda(usuario_id, moneda_base="COP"):
+def obtener_balance_total_multimoneda(usuario_id="default", moneda_base="COP"):
     """Obtiene el balance total convertido a una moneda base.
     Suma balances de todas las cuentas, convirtiendo cada una a la moneda base.
     """

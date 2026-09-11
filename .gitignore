@@ -4,6 +4,7 @@ __pycache__/
 
 # Variables de entorno y credenciales
 .env
+serviceAccountKey.json
 serviceAccountKey.json.json
 
 # Sesiones
@@ -13,6 +14,7 @@ whatsapp_session/
 audio_cache/
 temp_audios/
 PyWhatKit_DB.txt
+*.png
 
 # Bases de datos locales (si la carpeta 'database' tiene archivos .sqlite o similares)
 database/*.sqlite3
