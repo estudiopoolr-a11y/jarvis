@@ -163,7 +163,12 @@ async def on_message(message):
 
     # 5. Mención o adjunto requerido
     formatos_audio = ('.ogg', '.mp3', '.wav', '.m4a', '.aac', '.flac')
-    adjunto = next((a for a in message.attachments if a.filename.lower().endswith(formatos_audio) or 'audio' in (a.content_type or '')), None)
+    formatos_txt = ('.txt', '.csv')
+    adjunto = next((a for a in message.attachments if (
+        a.filename.lower().endswith(formatos_audio + formatos_txt)
+        or 'audio' in (a.content_type or '')
+        or (a.content_type or '').startswith('text/')
+    )), None)
 
     # Detectar menciones de usuario o de roles permitidos
     es_mencion_usuario = bot.user.mentioned_in(message)
@@ -232,27 +237,44 @@ async def on_message(message):
                 ruta = os.path.join(TEMP_DIR, adjunto.filename)
                 await adjunto.save(ruta)
 
-                # ESTRATEGIA: Transcribir primero, luego parsers determinísticos
-                # 1) Transcribir audio (1 llamada API)
-                texto_transcrito = transcribir_audio(ruta)
+                es_txt = adjunto.filename.lower().endswith((".txt", ".csv")) or (adjunto.content_type or "").startswith("text/")
 
-                # 2) Si hay texto transcrito, intentar parsers determinísticos (0 API calls)
-                if texto_transcrito:
-                    print(f"[AUDIO] Transcripción: {texto_transcrito[:100]}")
-                    respuesta_ia = procesar_intencion_natural(texto_transcrito, usuario_id)
-                    if respuesta_ia:
-                        print(f"[AUDIO] ✅ Parser determinístico matcheó")
-                    else:
-                        # 3) Si no hay match, ir a Gemini con el texto (1 llamada API)
-                        print(f"[AUDIO] Sin parser match → Gemini con texto")
-                        respuesta_ia = pensar_respuesta(texto_transcrito)
+                if es_txt:
+                    # TXT/CSV: parsear e importar directamente (sin Gemini)
+                    try:
+                        with open(ruta, "r", encoding="utf-8-sig", errors="replace") as f:
+                            texto_archivo = f.read()
+
+                        from modules.importador_txt import importar_texto
+                        dbmod = __import__("modules.database", fromlist=["inicializar_firebase"])
+                        db = dbmod.inicializar_firebase()
+                        if not db:
+                            respuesta_ia = "⚠️ No pude conectar con Firebase para importar el TXT."
+                        else:
+                            respuesta_ia = importar_texto(usuario_id, texto_archivo, db, anio_default=2026)
+                    except Exception as txt_error:
+                        print(f"[TXT] Error importando archivo: {txt_error}")
+                        respuesta_ia = f"⚠️ No pude importar el TXT: `{txt_error}`"
                 else:
-                    # Si falló la transcripción, usar modo audio directo (1 llamada API)
-                    print(f"[AUDIO] Transcripción falló → modo audio directo")
-                    prompt_audio = prompt_con_contexto if texto_limpio else ""
-                    respuesta_ia = pensar_respuesta_audio(ruta, prompt_audio, usuario_id)
+                    # AUDIO: transcribir primero, luego parsers determinísticos.
+                    texto_transcrito = transcribir_audio(ruta)
 
-                if os.path.exists(ruta): os.remove(ruta)
+                    if texto_transcrito:
+                        print(f"[AUDIO] Transcripción: {texto_transcrito[:100]}")
+                        respuesta_ia = procesar_intencion_natural(texto_transcrito, usuario_id)
+                        if respuesta_ia:
+                            print(f"[AUDIO] ✅ Parser determinístico matcheó")
+                        else:
+                            # Si no matchea, ir a Gemini con el texto.
+                            print(f"[AUDIO] Sin parser match → Gemini con texto")
+                            respuesta_ia = pensar_respuesta(texto_transcrito)
+                    else:
+                        print(f"[AUDIO] Transcripción falló → modo audio directo")
+                        prompt_audio = prompt_con_contexto if texto_limpio else ""
+                        respuesta_ia = pensar_respuesta_audio(ruta, prompt_audio, usuario_id)
+
+                if os.path.exists(ruta):
+                    os.remove(ruta)
             else:
                 respuesta_ia = pensar_respuesta(prompt_con_contexto)
 
