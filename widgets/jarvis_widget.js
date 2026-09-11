@@ -7,7 +7,7 @@
 // TAMAÑO GRANDE: Tabla completa de presupuestos + préstamos
 
 const BASE_URL = "https://jarvis-h20g.onrender.com"
-const USUARIO = "iphone_user"
+const USUARIO = "1536228767180136498"
 
 // Colores tema oscuro
 const COLORS = {
