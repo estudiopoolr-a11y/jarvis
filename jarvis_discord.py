@@ -24,6 +24,10 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 usuarios_silenciados = {}
 usuarios_modo_voz = set()
 canales_activos = set()
+# Conversaciones activas (usuario_id → {timestamp, canal_id, contador_mensajes})
+conversaciones_activas = {}
+_CONVERSACION_TTL = 180  # 3 minutos de seguimiento sin mencionar (ajustable aquí)
+_CONVERSACION_MAX_MENSAJES = 10  # Máximo de mensajes sin @Jarvis antes de cerrar
 # Cache para contexto financiero
 _finanzas_cache = {}
 _CACHE_TTL = 30  # segundos
@@ -161,7 +165,7 @@ async def on_message(message):
         return
     _last_msg_time[usuario_id] = ahora
 
-    # 5. Mención o adjunto requerido
+    # 5. Mención, adjunto o conversación activa requerido
     formatos_audio = ('.ogg', '.mp3', '.wav', '.m4a', '.aac', '.flac')
     formatos_txt = ('.txt', '.csv')
     adjunto = next((a for a in message.attachments if (
@@ -174,9 +178,39 @@ async def on_message(message):
     es_mencion_usuario = bot.user.mentioned_in(message)
     es_mencion_rol = any(role.id in ALLOWED_ROLE_IDS for role in message.role_mentions)
 
-    print(f"[DEBUG] Mencion usuario: {es_mencion_usuario}, Mencion rol: {es_mencion_rol}, Contenido: {message.content[:50]}")
+    # Detectar conversación activa (usuario respondió dentro del TTL tras la última interacción)
+    ahora_conv = time.time()
 
-    if not es_mencion_usuario and not es_mencion_rol and not adjunto:
+    # Limpiar conversaciones expiradas (mantenimiento)
+    conversaciones_activas_copia = conversaciones_activas.copy()
+    for uid, data in conversaciones_activas_copia.items():
+        if isinstance(data, dict):
+            timestamp = data.get('timestamp', 0)
+        else:
+            timestamp = data  # Compatibilidad con formato antiguo
+
+        if ahora_conv - timestamp >= _CONVERSACION_TTL:
+            del conversaciones_activas[uid]
+
+    # Verificar si hay conversación activa
+    en_conversacion = False
+    if usuario_id in conversaciones_activas:
+        data = conversaciones_activas[usuario_id]
+        if isinstance(data, dict):
+            timestamp = data.get('timestamp', 0)
+            canal_activo = data.get('canal_id') == message.channel.id
+            contador = data.get('contador', 0)
+            # Conversación activa si: está en el mismo canal, TTL no expiró y no superó límite de mensajes
+            en_conversacion = (canal_activo and
+                             ahora_conv - timestamp < _CONVERSACION_TTL and
+                             contador < _CONVERSACION_MAX_MENSAJES)
+        else:
+            # Compatibilidad con formato antiguo (solo timestamp)
+            en_conversacion = ahora_conv - data < _CONVERSACION_TTL
+
+    print(f"[DEBUG] Mencion: {es_mencion_usuario}, Rol: {es_mencion_rol}, ConvActiva: {en_conversacion}, Contenido: {message.content[:50]}")
+
+    if not es_mencion_usuario and not es_mencion_rol and not adjunto and not en_conversacion:
         return
 
     # 6. Limpiar menciones de usuarios y roles (<@ID>, <@!ID>, <@&ID>)
@@ -284,6 +318,20 @@ async def on_message(message):
 
     # Enviar respuesta
     await message.channel.send(respuesta_ia)
+
+    # Marcar conversación activa con nuevo formato mejorado
+    # Guarda: timestamp, canal_id y contador de mensajes
+    if usuario_id in conversaciones_activas and isinstance(conversaciones_activas[usuario_id], dict):
+        # Si ya existe, incrementar contador
+        conversaciones_activas[usuario_id]['timestamp'] = time.time()
+        conversaciones_activas[usuario_id]['contador'] += 1
+    else:
+        # Primera respuesta o migrar del formato antiguo
+        conversaciones_activas[usuario_id] = {
+            'timestamp': time.time(),
+            'canal_id': message.channel.id,
+            'contador': 1
+        }
 
     # Solo TTS si el usuario activó modo voz específicamente, no si solo envió audio
     if usuario_id in usuarios_modo_voz:
