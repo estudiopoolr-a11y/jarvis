@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+
+# Agregar raíz del proyecto al path para imports
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from modules.importador_txt import parsear_reporte
 
 texto = """1. INGRESOS POR MES (Año 2026):

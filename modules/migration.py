@@ -122,7 +122,7 @@ def auditar_firebase(db, usuario_id="default"):
     # ===== NUEVO: users/{userId} =====
     # Usar la función _get_user_ref de database.py para obtener db y user_ref correctamente
     try:
-        from modules.database import _get_user_ref
+        from modules.db import _get_user_ref
         db, user_ref = _get_user_ref(usuario_id)
     except Exception:
         # Fallback - original method if _get_user_ref fails
@@ -646,7 +646,7 @@ def migrar_tareas_legacy(db, usuario_id="default"):
 
 def migrar_todo(usuario_id="default"):
     """Ejecuta toda la migración en orden. Retorna stats consolidado."""
-    from modules.database import inicializar_firebase, ensure_user, crear_categoria
+    from modules.db import inicializar_firebase, ensure_user, crear_categoria
 
     db = inicializar_firebase()
     if not db:

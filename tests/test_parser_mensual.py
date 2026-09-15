@@ -6,7 +6,7 @@ import sys
 sys.stdout.reconfigure(encoding='utf-8')
 sys.path.insert(0, r"c:\Users\DEEL\OneDrive\Desktop\Projects\jarvis")
 
-from modules.ai_brain import _parse_bloque_presupuesto_mensual
+from modules.ai import _parse_bloque_presupuesto_mensual
 
 # Texto de prueba como el que enviaría el usuario
 texto_test = """@Jarvis ingresa estos presupuesto y gastos por categoria en el mes de julio

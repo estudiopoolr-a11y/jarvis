@@ -11,7 +11,7 @@ from typing import Literal, Optional
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import firestore
-from modules.database import (
+from modules.db import (
     guardar_tarea, registrar_transaccion, establecer_presupuesto,
     marcar_tarea_completada, inicializar_firebase, limpiar_y_cargar_datos_dinamicos,
     obtener_contexto_financiero,
@@ -959,7 +959,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             parsed = _parse_bloque_presupuesto_mensual(prompt_usuario)
             if parsed:
                 acciones, mes_num, año = parsed
-                from modules.database import establecer_presupuesto_mes, registrar_transaccion_v2
+                from modules.db import establecer_presupuesto_mes, registrar_transaccion_v2
 
                 result = []
                 for accion in acciones:
@@ -1292,7 +1292,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         tag_match = re.search(r'ver\s+#(\w+)', texto_lc)
     if tag_match:
         tag = f"#{tag_match.group(1)}"
-        from modules.database import listar_transacciones_recientes
+        from modules.db import listar_transacciones_recientes
         todas = listar_transacciones_recientes(usuario_id, limite=50)
         filtradas = [t for t in todas if tag in (t.get("tags", []) or [])]
         if not filtradas:
@@ -1315,7 +1315,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         payee_match = re.search(r'cuánto\s+gast[oé]\s+en\s+(.+?)(?:\s+de|\s*$|$)', texto_lc)
     if payee_match:
         payee_buscar = payee_match.group(1).strip()
-        from modules.database import listar_transacciones_recientes
+        from modules.db import listar_transacciones_recientes
         todas = listar_transacciones_recientes(usuario_id, limite=50)
         filtradas = [t for t in todas
                      if payee_buscar in (t.get("payee") or "").lower()
@@ -1419,7 +1419,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
 
     # 5b-13. TASAS: "ver tasas" o "mostrar tasas"
     if "ver tasas" in texto_lc or "mostrar tasas" in texto_lc:
-        from modules.database import TASAS_DEFAULT
+        from modules.db import TASAS_DEFAULT
         tasas = obtener_tasas_cambio(usuario_id)
         msg = "💱 **Tasas de cambio:**\n"
         for m, rate in TASAS_DEFAULT.items():
@@ -1429,7 +1429,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
 
     # 5b-14. PRONÓSTICO: "pronóstico", "cuánto voy a gastar este mes"
     if any(k in texto_lc for k in ["pronóstico", "pronostico", "pronosticar", "cuánto voy a gastar", "cuanto voy a gastar"]):
-        from modules.database import obtener_estadisticas
+        from modules.db import obtener_estadisticas
         stats = obtener_estadisticas(usuario_id, meses=6)
         tendencia = stats.get("tendencia", [])
         if len(tendencia) < 2:
@@ -1496,7 +1496,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
         year_match = re.search(r'\b(20\d{2})\b', texto_lc)
 
         if mes_match:
-            from modules.database import establecer_presupuesto_mes
+            from modules.db import establecer_presupuesto_mes
             meses = {"enero":1,"febrero":2,"marzo":3,"abril":4,"mayo":5,"junio":6,
                      "julio":7,"agosto":8,"septiembre":9,"setiembre":9,"octubre":10,"noviembre":11,"diciembre":12}
             mes_num = meses[mes_match.group(1)]
@@ -1754,7 +1754,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             capacidad_mensual = max(0, ingresos - gastos) / 1  # Aproximado
 
             # Proyectar
-            from modules.database import proyectar_meta
+            from modules.db import proyectar_meta
             proy = proyectar_meta({"monto_objetivo": meta_data["monto"], "monto_actual": 0, "fecha_limite": meta_data["fecha"]}, capacidad_mensual)
 
             msg = f"🎯 **META CREADA**\n\n"
@@ -1781,7 +1781,7 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
 
             msg = "🎯 **TUS METAS**\n\n"
             for m in metas:
-                from modules.database import proyectar_meta
+                from modules.db import proyectar_meta
                 p = proyectar_meta(m, capacidad)
                 barra_llena = int(p["porcentaje"] / 10)
                 barra = "█" * barra_llena + "░" * (10 - barra_llena)
