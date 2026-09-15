@@ -223,25 +223,56 @@ jarvis/
 │
 ├── .env                      # 🔒 Variables de entorno y credenciales (NO subir a git)
 ├── .gitignore
-├── iniciar_claude.bat        # 🤖 Script para Claude Code integration
-├── jarvis_discord.py         # 💬 Bot de Discord principal (corre en Render Background Worker)
-├── server.py                 # 🌐 Servidor web FastAPI con dashboard y endpoints
-├── daily_summary.py          # 📅 Genera resumen diario a Discord (vía webhook)
-├── readme.md                 # 📖 Este archivo
+├── start_claude.bat          # 🤖 Script para Claude Code integration
+├── jarvis_discord.py         # 💬 Bot de Discord principal (entrypoint delgado → bot/)
+├── server.py                 # 🌐 Servidor web FastAPI (entrypoint → app/main.py)
 ├── requirements.txt          # 📦 Dependencias de Python
 ├── serviceAccountKey.json    # 🔐 Credenciales de Firebase (NO subir a git)
 │
-├── audio_cache/              # 🎵 Carpeta temporal para procesamiento de notas de voz
+├── app/                      # 🌐 API REST + Dashboard Web
+│   ├── main.py               # FastAPI entrypoint (uvicorn app.main:app)
+│   ├── routes.py             # TODOS los endpoints (dashboard, kebo, préstamos, cron, admin, widget, query, backup)
+│   ├── services/             # Servicios cron (daily_summary, monthly_report, reminders)
+│   └── templates/
+│       └── dashboard.html    # Dashboard web con Chart.js
 │
-├── modules/                  # 🧩 Módulos de lógica separada
-│   ├── database.py           # 🗃️ Integración con Firebase Firestore
-│   ├── ai_brain.py           # 🧠 Lógica de IA con parsers determinísticos + rotación de API Keys
-│   └── alertas.py            # 🚨 Alertas proactivas (presupuestos, tareas, gastos anormales)
+├── bot/                      # 🤖 Bot Discord
+│   ├── __init__.py           # Crea bot, TOKEN, ALLOWED_ROLE_IDS
+│   ├── events.py             # on_ready, on_message (procesa menciones, audio, TXT)
+│   ├── state.py              # Caches, cooldown, conversaciones activas
+│   ├── handlers/             # Comandos por dominio
+│   │   ├── finanzas.py       # !finanzas, !presupuestos, !historial, !buscar, !mes, !stats, !top
+│   │   ├── tareas.py         # !tareas, !hecho
+│   │   ├── metas.py          # !metas, !meta, !pagos, !pago, !presupuesto
+│   │   ├── sistema.py        # !inversion, !dormir, !pausar, !voz, !estado, !ayuda, !perfil
+│   │   └── mantenimiento.py  # !diagnostico, !buscar_historial, !corregir_gastos, !migrar_finanzas, !consolidar
+│   └── services/             # Lógica compartida del bot
+│       ├── db.py             # Wrappers a modules.db
+│       ├── ai.py             # Wrappers a modules.ai
+│       └── tts.py            # Generación de audio edge-tts
+│
+├── modules/                  # 🧩 Capa de datos e IA (shared)
+│   ├── db.py                 # Firebase Firestore (Kebo + legacy)
+│   ├── ai.py                 # Gemini client, parsers, intents, responses
+│   ├── alertas.py            # Alertas proactivas (presupuestos, tareas, gastos anormales)
+│   ├── importador_txt.py     # Importador de reportes financieros .txt
+│   └── migration.py          # Migración legacy → Kebo
+│
+├── scripts/                  # 📜 Scripts de carga/migración puntuales
+│   ├── cargar_finanzas_consolidadas.py
+│   └── migrar_sep_a_ago.py
+│
+├── tests/                    # 🧪 Tests unitarios
+│   ├── test_importador_txt.py
+│   └── test_parser_mensual.py
+│
+├── widgets/                  # 📱 Widget iPhone (Scriptable)
+│   └── jarvis_widget.js
 │
 └── .github/
     └── workflows/            # ⚙️ GitHub Actions (cron jobs)
-        ├── daily-summary.yml # 📅 Ejecuta resumen diario cada 30 min (7am-12pm, 7pm-12am COL)
-        └── weekly-summary.yml # 📊 Ejecuta resumen semanal cada domingo 8am COL
+        ├── daily-summary.yml # 📅 Resumen diario cada 30 min (7am-12pm, 7pm-12am COL)
+        └── weekly-summary.yml # 📊 Resumen semanal domingo 8am COL
 ```
 
 ---
@@ -265,33 +296,57 @@ jarvis/
 git clone https://github.com/tu-usuario/jarvis.git
 cd jarvis
 
-# 2. Instalar dependencias
+# 2. Crear entorno virtual (recomendado)
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# Linux/macOS:
+source .venv/bin/activate
+
+# 3. Instalar dependencias
 pip install -r requirements.txt
 
-# 3. Configurar variables de entorno
-cp .env.example .env
-# Editar .env con tus credenciales
+# 4. Configurar variables de entorno
+# Crear .env manualmente (no subirlo a GitHub)
+# Ver la sección "Variables de Entorno" más abajo.
 
-# 4. Colocar credenciales de Firebase
-# Descargar JSON desde Firebase Console > Cuentas de servicio
-# Renombrar a serviceAccountKey.json
+# 5. Configurar Firebase
+# Descargar la cuenta de servicio desde Firebase Console
+# Guardarla como serviceAccountKey.json o configurar FIREBASE_CREDENTIALS_PATH
 
-# 5. Iniciar JARVIS (2 procesos separados)
+# 6. Iniciar en dos terminales
 python jarvis_discord.py  # Terminal 1: Bot Discord
 python server.py          # Terminal 2: Dashboard + API
 ```
 
+### Cómo funciona
+
+JARVIS tiene dos procesos independientes que comparten Firebase:
+
+1. **Bot Discord** (`jarvis_discord.py`): recibe menciones, comandos `!`, audio y reportes TXT. Los eventos están en `bot/events.py`; los comandos se encuentran en `bot/handlers/`; y la lógica compartida en `bot/services/`.
+2. **API Web** (`server.py`): importa `app.main:app`, que carga los endpoints definidos en `app/routes.py`. Sirve el dashboard, el widget del iPhone, consultas financieras y endpoints de cron.
+3. **Datos** (`modules/db.py`): centraliza Firestore y conserva compatibilidad con las colecciones legacy.
+4. **IA** (`modules/ai.py`): primero intenta parsers determinísticos y solo usa Gemini para intenciones complejas, audio, imágenes o análisis.
+5. **Automatización**: GitHub Actions llama los endpoints `/api/cron/*` según el horario configurado.
+
 ### Verificar Instalación
 
 ```bash
+# Comprobar imports principales
+python -c "from app.main import app; print(len(app.routes), 'rutas API')"
+python -c "import jarvis_discord; print(len(jarvis_discord.bot.commands), 'comandos Discord')"
+
 # El dashboard debería responder en:
 curl http://localhost:10000/
 
-# El bot debería estar en línea en Discord
-# El endpoint de comando debería funcionar:
+# Probar un comando de texto:
 curl -X POST http://localhost:10000/api/comando \
   -H "Content-Type: application/json" \
   -d '{"texto": "hola", "usuario_id": "test"}'
+
+# Ejecutar tests
+python tests/test_importador_txt.py
+python tests/test_parser_mensual.py
 ```
 
 ---
