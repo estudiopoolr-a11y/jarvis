@@ -592,6 +592,93 @@ def _parse_presupuesto(texto: str) -> dict | None:
     return None
 
 
+def _parse_presupuesto_multiple(texto: str) -> list[dict] | None:
+    """Extrae múltiples presupuestos de un mensaje natural.
+
+    Ejemplos que debe capturar:
+    - "pon presupuesto para mi mama 150.000 y deudas 205.000"
+    - "para septiembre presupuesto comida 100k y transporte 50k"
+    - "establece presupuesto categoria mama 150.000, deudas 205.000"
+    - "configura presupuestos: mama 150.000, deudas 205.000 para septiembre"
+    """
+    resultados = []
+    texto_lower = texto.lower()
+
+    # Diccionario extendido de meses (incluye typos comunes)
+    _MESES_ALIASES = {
+        "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+        "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+        "septiembre": 9, "septimebre": 9, "setiembre": 9, "sep": 9,
+        "octubre": 10, "noviembre": 11, "diciembre": 12,
+        "ago": 8, "dic": 12, "ene": 1, "feb": 2,
+        "mar": 3, "abr": 4, "jun": 6, "jul": 7, "oct": 10, "nov": 11,
+        "sept": 9, "sep": 9, "set": 9
+    }
+
+    # Detectar mes objetivo
+    mes_target = None
+    for nombre, num in _MESES_ALIASES.items():
+        if nombre in texto_lower:
+            mes_target = num
+            break
+
+    # Detectar año
+    year_match = re.search(r'\b(20\d{2})\b', texto_lower)
+    year = int(year_match.group(1)) if year_match else None
+
+    # Separar por "y" para manejar múltiples categorías
+    partes = re.split(r'\s+y\s+', texto_lower)
+
+    # Patrón principal: capturar "categoria [de] NOMBRE MONTO" o "NOMBRE MONTO"
+    patron = r'(?:categor[ií]a\s+(?:de\s+)?)?([a-záéíóúñ][a-záéíóúñ\s]*?)\s+([\d.,]+)\s*(?:k|m)?(?=\s+y\s|$|,|\s+para\s+|\s+en\s+)'
+
+    for parte in partes:
+        # Limpiar conectores comunes al inicio
+        parte_limpia = re.sub(r'^(?:y\s+)?', '', parte).strip()
+        if not parte_limpia:
+            continue
+
+        match = re.search(patron, parte_limpia)
+        if match:
+            cat_raw = match.group(1).strip()
+            monto_raw = match.group(2)
+
+            # Filtrar palabras conectoras y verbos
+            stop_words = {
+                'el', 'la', 'los', 'las', 'de', 'del', 'para', 'en', 'un', 'una',
+                'mis', 'tu', 'presupuesto', 'presupuestos', 'pon', 'crea', 'establece',
+                'configura', 'ponme', 'ponte', 'ponga', 'ponga', 'categoria', 'categorias',
+                'y', 'con', 'para', 'del', 'las', 'los', 'de'
+            }
+            cat_words = cat_raw.split()
+            cat_filtrada = [w for w in cat_words if w.lower() not in stop_words]
+            cat = ' '.join(cat_filtrada).strip()
+
+            if not cat or len(cat) < 2:
+                continue
+
+            # Normalizar monto: quitar puntos de miles, aceptar 'k' como 000
+            monto_str = monto_raw.replace('.', '').replace(',', '')
+            try:
+                monto = float(monto_str)
+                # Si el monto original terminaba en 'k', multiplicar por 1000
+                if re.search(r'\d+k$', parte_limpia):
+                    monto *= 1000
+                elif re.search(r'\d+m$', parte_limpia):
+                    monto *= 1000000
+            except ValueError:
+                continue
+
+            resultados.append({
+                "categoria": cat.title(),
+                "limite": monto,
+                "mes": mes_target,
+                "year": year
+            })
+
+    return resultados if resultados else None
+
+
 def _parse_completar_tarea(texto: str) -> str | None:
     """Extrae el nombre de la tarea a completar."""
     texto_lower = texto.lower()
@@ -925,12 +1012,14 @@ Si balance > $1.000.000, recomienda diversificar CDT + app."""
 def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     texto_lc = prompt_usuario.lower().strip()
 
-    # Mapeo de meses (compartido entre varios parsers)
+    # Mapeo de meses (compartido entre varios parsers - incluye typos comunes)
     _MESES = {
         "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
         "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
-        "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
-        "sep": 9, "ago": 8, "dic": 12, "ene": 1, "feb": 2,
+        "septiembre": 9, "septimebre": 9, "setiembre": 9,
+        "octubre": 10, "noviembre": 11, "diciembre": 12,
+        "sep": 9, "sept": 9, "set": 9,
+        "ago": 8, "dic": 12, "ene": 1, "feb": 2,
         "mar": 3, "abr": 4, "jun": 6, "jul": 7, "oct": 10, "nov": 11
     }
     _NOMBRES_MESES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -1120,6 +1209,31 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
                     signo = "+" if balance >= 0 else ""
                     return f"{icono} **{c.get('nombre')}**: {signo}${balance:,.0f}"
             return f"⚠️ No encontré la cuenta '{nombre_buscar}'."
+
+    # =========================================
+    # 4b-nuevo. CREAR PRESUPUESTOS (múltiples, lenguaje natural)
+    # =========================================
+    if any(k in texto_lc for k in ["pon", "crea", "establece", "configura", "ponme", "ponte"]):
+        presupuestos_data = _parse_presupuesto_multiple(texto_lc)
+        if presupuestos_data:
+            from modules.db import establecer_presupuesto_mes
+            from datetime import datetime
+            year_match = re.search(r'\b(20\d{2})\b', texto_lc)
+            year = year_match.group(1) if year_match else str(datetime.now().year)
+
+            resultados = []
+            for p in presupuestos_data:
+                mes_num = p.get("mes") or datetime.now().month
+                cat = p["categoria"]
+                monto = p["limite"]
+
+                exito = establecer_presupuesto_mes(usuario_id, cat, monto, year, f"{mes_num:02d}")
+                if exito:
+                    resultados.append(f"✅ {cat}: ${monto:,.0f} ({_NOMBRES_MESES[mes_num]} {year})")
+                else:
+                    resultados.append(f"⚠️ Error guardando presupuesto de {cat}")
+
+            return "🎯 **Presupuestos configurados:**\n" + "\n".join(resultados)
 
     # =========================================
     # 4b. VER PRESUPUESTOS DE UN MES ESPECÍFICO
