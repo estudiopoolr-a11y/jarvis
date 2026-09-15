@@ -120,7 +120,7 @@ async def on_message(message):
         "buenas noches",
     ]:
         try:
-            balance, _, _, _, _ = obtener_contexto_cacheado(usuario_id)
+            balance, *_ = obtener_contexto_cacheado(usuario_id, lambda: _cargar_contexto_financiero(usuario_id))
             saludo_extra = f" Balance actual: ${balance:,.0f}."
             await message.channel.send(f"Sistemas activos.{saludo_extra} Sin tareas críticas pendientes.")
         except Exception as e:
@@ -162,7 +162,9 @@ async def on_message(message):
                 "recordatorio",
             ]
 
-            balance, ingresos, gastos, movimientos, presupuestos = obtener_contexto_cacheado(usuario_id)
+            balance, ingresos, gastos, movimientos, presupuestos = obtener_contexto_cacheado(
+    usuario_id, lambda: _cargar_contexto_financiero(usuario_id)
+)
 
             if any(k in texto_lower for k in palabras_finanzas) or bool(adjunto):
                 movs = [
