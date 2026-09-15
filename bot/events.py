@@ -40,6 +40,13 @@ from bot.services.db import (
 from bot.services.tts import generar_audio_respuesta
 
 
+def _cargar_contexto_financiero(usuario_id: str):
+    """Ensambla (balance, ingresos, gastos, movimientos, presupuestos) para el cache."""
+    balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
+    presupuestos = obtener_resumen_presupuestos(usuario_id)
+    return balance, ingresos, gastos, movimientos, presupuestos
+
+
 @bot.event
 async def on_ready():
     print("==================================================")
@@ -163,8 +170,8 @@ async def on_message(message):
             ]
 
             balance, ingresos, gastos, movimientos, presupuestos = obtener_contexto_cacheado(
-    usuario_id, lambda: _cargar_contexto_financiero(usuario_id)
-)
+                usuario_id, lambda: _cargar_contexto_financiero(usuario_id)
+            )
 
             if any(k in texto_lower for k in palabras_finanzas) or bool(adjunto):
                 movs = [
