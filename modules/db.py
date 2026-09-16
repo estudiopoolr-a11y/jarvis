@@ -560,6 +560,61 @@ def establecer_presupuesto_mes(usuario_id, categoria_nombre, monto, year=None, m
         return False
 
 
+def modificar_presupuesto_mes(usuario_id, categoria_nombre, nuevo_limite, year=None, month=None):
+    """Modifica el monto de un presupuesto mensual en la estructura KEBO."""
+    year = str(year) if year else str(datetime.now().year)
+    month = f"{int(month):02d}" if month else f"{datetime.now().month:02d}"
+
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return False
+
+    try:
+        items_ref = user_ref.collection("budgets").document(f"{year}-{month}").collection("items")
+        docs = list(items_ref.stream())
+        categoria_norm = str(categoria_nombre).strip().casefold()
+
+        for doc in docs:
+            data = doc.to_dict() or {}
+            nombre = str(data.get("category_name", "")).strip()
+            if nombre.casefold() == categoria_norm:
+                doc.reference.update({"amount": float(nuevo_limite)})
+                return True
+
+        return False
+    except Exception as e:
+        print(f"Error modificando presupuesto mes: {e}")
+        return False
+
+
+def eliminar_presupuesto_mes(usuario_id, categoria_nombre, year=None, month=None):
+    """Elimina un presupuesto mensual de la estructura KEBO."""
+    year = str(year) if year else str(datetime.now().year)
+    month = f"{int(month):02d}" if month else f"{datetime.now().month:02d}"
+
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return False
+
+    try:
+        items_ref = user_ref.collection("budgets").document(f"{year}-{month}").collection("items")
+        docs = list(items_ref.stream())
+        categoria_norm = str(categoria_nombre).strip().casefold()
+        eliminado = False
+
+        for doc in docs:
+            data = doc.to_dict() or {}
+            nombre = str(data.get("category_name", "")).strip()
+            if nombre.casefold() == categoria_norm:
+                doc.reference.delete()
+                eliminado = True
+
+        return eliminado
+    except Exception as e:
+        print(f"Error eliminando presupuesto mes: {e}")
+        return False
+
+
 def obtener_presupuestos_mes(usuario_id, year=None, month=None):
     """Obtiene los presupuestos de un mes específico (Kebo style).
     Si no hay presupuestos para ese mes, usa los default de categories.

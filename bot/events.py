@@ -212,7 +212,7 @@ async def on_message(message):
                     texto_transcrito = transcribir_audio(ruta)
 
                     if texto_transcrito:
-                        respuesta_ia = procesar_intencion_natural(texto_transcrito, usuario_id)
+                        respuesta_ia = procesar_intencion_natural(texto_transcrito, usuario_id, es_audio=True)
                         if not respuesta_ia:
                             respuesta_ia = pensar_respuesta(texto_transcrito)
                     else:

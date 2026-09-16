@@ -14,7 +14,7 @@ from firebase_admin import firestore
 from modules.db import (
     guardar_tarea, registrar_transaccion, establecer_presupuesto,
     marcar_tarea_completada, inicializar_firebase, limpiar_y_cargar_datos_dinamicos,
-    obtener_contexto_financiero,
+    obtener_contexto_financiero, modificar_presupuesto_mes, eliminar_presupuesto_mes,
     obtener_tareas_pendientes, obtener_balance_financiero, obtener_resumen_presupuestos,
     guardar_meta, obtener_metas, eliminar_meta, actualizar_progreso_meta, proyectar_meta,
     modificar_presupuesto, guardar_pago_fijo, obtener_pagos_fijos, eliminar_pago_fijo,
@@ -638,11 +638,14 @@ def _normalizar_monto(monto_str: str) -> float | None:
 def _parse_presupuesto_multiple(texto: str) -> list[dict] | None:
     """Extrae múltiples presupuestos de un mensaje natural.
 
-    Ejemplos que debe capturar:
+    Enfoque: separar por 'y'/coma, encontrar ÚLTIMO número en cada parte,
+    todo lo anterior es la categoría (limpiada).
+
+    Ejemplos:
     - "pon presupuesto para mi mama 150.000 y deudas 205.000"
-    - "para septiembre pon de presupuestos para la categoria de mi mama 150.000 y en la categoria de deudas un presupesto de 205.0000"
     - "para septiembre presupuesto comida 100k y transporte 50k"
-    - "establece presupuesto categoria mama 150.000, deudas 205.000"
+    - "un presupuesto de 150 para mi mamá y en la categoría de deudas pon un presupuesto de 205"
+    - "establece presupuesto mama 150.000, deudas 205.000"
     """
     resultados = []
     texto_lower = texto.lower()
@@ -669,68 +672,164 @@ def _parse_presupuesto_multiple(texto: str) -> list[dict] | None:
     year_match = re.search(r'\b(20\d{2})\b', texto_lower)
     year = int(year_match.group(1)) if year_match else None
 
-    # PASO 1: Encontrar TODOS los montos en el texto
-    patron_monto = re.finditer(r'([\d]+[.,]?[\d]*(?:k|m)?)\s*(?:y|,|\s+para\s+|\s+en\s+|$)', texto_lower + ' y')
+    # PASO 1: Separar por "y" y comas para obtener segmentos individuales
+    # Reemplazar "y en la categoria de" / "y la categoria de" por solo "y"
+    texto_separado = re.sub(r'\s+y\s+(?:en\s+)?(?:la\s+)?categor[ií]a\s+de\s+', ' y ', texto_lower)
+    texto_separado = re.sub(r'\s+y\s+(?:un\s+)?(?:presupue?sto?|presupe?sto?)\s+de\s+', ' y ', texto_separado)
+    # Separar por "y" o coma
+    partes = re.split(r'\s+y\s+|\s*,\s*', texto_separado)
 
-    montos_encontrados = []
-    for m in patron_monto:
-        monto_str = m.group(1)
-        pos_fin = m.end()
-        montos_encontrados.append((monto_str, pos_fin))
+    # Palabras que NUNCA deben aparecer en una categoría
+    _STOP_CATEGORIA = {
+        'el', 'la', 'los', 'las', 'de', 'del', 'para', 'en', 'un', 'una',
+        'mi', 'mis', 'tu', 'y', 'con', 'a', 'o', 'mes',
+        'presupuesto', 'presupuestos', 'presupesto',
+        'categoria', 'categoría', 'categorias', 'categorías',
+        'pon', 'pone', 'ponga', 'ponme', 'ponte', 'poner',
+        'crea', 'crear', 'establece', 'establecer',
+        'configura', 'configurar', 'agrega', 'agregar',
+        'sube', 'baja', 'cambia', 'modifica', 'actualiza',
+        'hola', 'necesito', 'quiero', 'puedes', 'puede',
+        'jarvis', 'bot', 'please', 'por',
+        # Nombres de meses (no deben ser categorías)
+        'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+        'julio', 'agosto', 'septiembre', 'setiembre', 'septimebre',
+        'octubre', 'noviembre', 'diciembre',
+        'sep', 'sept', 'set', 'ene', 'feb', 'mar', 'abr', 'jun', 'jul', 'ago', 'oct', 'nov', 'dic',
+    }
 
-    # PASO 2: Para cada monto, buscar la categoria hacia atras
-    for i, (monto_str, pos_fin) in enumerate(montos_encontrados):
-        # Determinar el rango de texto donde buscar la categoria
-        if i == 0:
-            pos_inicio = 0
-        else:
-            # Empezar despues del monto anterior
-            pos_inicio = montos_encontrados[i-1][1]
-
-        texto_segmento = texto_lower[pos_inicio:pos_fin].strip()
-
-        # Limpiar el segmento: quitar todo despues del numero para quedarnos con la categoria
-        num_match = re.search(r'[\d]+[.,]?[\d]*(?:k|m)?', texto_segmento)
-        if num_match:
-            cat_segmento = texto_segmento[:num_match.start()].strip()
-        else:
+    for parte in partes:
+        parte = parte.strip()
+        if not parte:
             continue
 
-        # Limpiar conectores, verbos, articulos de forma agresiva.
-        # 1) Quitar prefijo largo "para [mes] pon de presupuestos para la categoria de"
-        cat_segmento = re.sub(r'^(?:para\s+)?(?:\w+\s+){0,6}(?:de\s+)?presupuestos?\s+(?:para\s+la\s+categor[ií]a\s+de\s+)?', '', cat_segmento).strip()
-        # 2) Quitar "la categoría de" / "en la categoria de" donde aparezca
-        cat_segmento = re.sub(r'(?:en\s+)?la\s+categor[ií]a\s+de\s+', '', cat_segmento).strip()
-        # 3) Quitar fragmentos "un presupuesto de" / "presupesto de" (incluye typos) en cualquier posición
-        cat_segmento = re.sub(r'(?:un\s+)?(?:presupue?sto?t?s?|presupe?sto?t?s?)\s+de\s+', ' ', cat_segmento).strip()
-        cat_segmento = re.sub(r'\s+(?:presupue?sto?t?s?|presupe?sto?t?s?)\b', '', cat_segmento).strip()
-        # 4) Quitar articulos y conectores al inicio (incluye posesivo mi/mis)
-        cat_segmento = re.sub(r'^(?:la|los|las|el|de|del|un|una|mi|mis|tu|para|y|en)\s+', '', cat_segmento).strip()
-        # 5) Quitar conectores al final
-        cat_segmento = re.sub(r'\s+(?:de|del|un|una|mi|mis|y)$', '', cat_segmento).strip()
-
-        # Quitar palabras conectoras/verbos sobrantes por palabra
-        stop_words = {'el','la','los','las','de','del','para','en','un','una','mi','mis','tu','y','con','a','presupuesto','presupuestos','presupesto','categoria','categorias','pon','crea','establece','configura','ponme','ponte'}
-        cat_words = cat_segmento.split()
-        cat_filtrada = [w for w in cat_words if w.lower() not in stop_words]
-        cat = ' '.join(cat_filtrada).strip()
-
-        if not cat or len(cat) < 2:
+        # PASO 2: Encontrar EL ÚLTIMO número en esta parte (es el monto)
+        # Patrón: dígitos opcionales con punto/coma/k/m
+        patron_num = list(re.finditer(r'([\d]+[.,]?[\d]*(?:k|m)?)\b', parte))
+        if not patron_num:
             continue
 
-        # Normalizar monto
+        ultimo_num = patron_num[-1]
+        monto_str = ultimo_num.group(1)
+        # 1) categoría DESPUÉS del número: "150 para mamá" → "mamá"
+        despues_raw = parte[ultimo_num.end():].strip()
+        despues_raw = re.sub(r'^(?:para|en|de|del|la|el|los|las|un|una|y|el)\s+', '', despues_raw).strip()
+        despues_raw = re.sub(r'\s+(?:para|en|de|del|y)$', '', despues_raw).strip()
+        cat_despues = ''
+        if despues_raw:
+            cat_despues_words = [w for w in despues_raw.split() if w.lower() not in _STOP_CATEGORIA]
+            cat_despues = ' '.join(cat_despues_words).strip()
+        # 2) categoría ANTES del número (modo clásico)
+        cat_antes = parte[:ultimo_num.start()].strip()
+        # Elegir la mejor opción
+        cat_texto = ''
+        if cat_despues and len(cat_despues) >= 2 and len(cat_despues.split()) <= 4:
+            cat_texto = cat_despues  # audio: "150 para mamá"
+        elif cat_antes:
+            cat_texto = cat_antes   # texto: "mamá 150.000"
+
+        if not cat_texto:
+            continue
+
+        # PASO 3: Limpiar la categoría agresivamente
+        # Quitar "para [mes]" al inicio
+        cat_texto = re.sub(r'^para\s+\w+\s+', '', cat_texto)
+        cat_texto = re.sub(r'^para\s+', '', cat_texto)
+        # Quitar "un/una/el/la/los/las/mi/mis/tu" al inicio
+        cat_texto = re.sub(r'^(?:un|una|el|la|los|las|mi|mis|tu|de|del)\s+', '', cat_texto)
+        # Quitar "presupuesto [de]"/"presupesto [de]" en cualquier posición
+        cat_texto = re.sub(r'(?:un\s+)?(?:presupue?sto?t?s?|presupe?sto?t?s?)\s*(?:de\s+)?', ' ', cat_texto)
+        # Quitar "la categoría de"/"categoría de"/"categoria de" en cualquier posición
+        cat_texto = re.sub(r'(?:la\s+)?categor[ií]a\s+de\s+', ' ', cat_texto)
+        # Quitar verbos comandos al inicio: "pon", "ponme", "crea", etc.
+        cat_texto = re.sub(r'^(?:pon|pone|ponga|ponme|ponte|crea|crear|establece|establecer|configura|configurar|agrega|agregar|sube|baja|cambia|modifica|actualiza)\s+', '', cat_texto)
+        # Quitar "para" / "y" sueltos al inicio
+        cat_texto = re.sub(r'^(?:para|y)\s+', '', cat_texto)
+        # Limpiar espacios múltiples
+        cat_texto = re.sub(r'\s+', ' ', cat_texto).strip()
+        # Quitar artículos/conectores residuales al inicio y final
+        cat_texto = re.sub(r'^(?:de|del|el|la|los|las|un|una|y|en|para)\s+', '', cat_texto)
+        cat_texto = re.sub(r'\s+(?:de|del|el|la|los|las|un|una|y)$', '', cat_texto)
+        cat_texto = cat_texto.strip()
+
+        # Filtrar palabras stop por palabra
+        if cat_texto:
+            words = cat_texto.split()
+            words_filtradas = [w for w in words if w.lower() not in _STOP_CATEGORIA]
+            cat_texto = ' '.join(words_filtradas).strip()
+
+        # Validación: categoría debe ser razonable (1-4 palabras, >=2 chars)
+        if not cat_texto or len(cat_texto) < 2:
+            continue
+        num_words = len(cat_texto.split())
+        if num_words > 4:
+            continue  # Probablemente basura conversacional
+
+        # PASO 4: Normalizar monto
         monto = _normalizar_monto(monto_str)
         if monto is None:
             continue
 
         resultados.append({
-            "categoria": cat.title(),
+            "categoria": cat_texto.title(),
             "limite": monto,
             "mes": mes_target,
             "year": year
         })
 
     return resultados if resultados else None
+
+
+def _parse_editar_presupuesto(texto: str) -> dict | None:
+    """Detecta intención de editar un presupuesto existente.
+    Ejemplos: 'edita mamá a 200k', 'cambia deudas a 300000', 'actualiza X a Y'
+    """
+    texto_lower = texto.lower()
+
+    patrones = [
+        r'(?:edita|editar|cambia|cambiar|actualiza|actualizar|modifica|modificar)\s+(?:el\s+)?(?:presupuesto\s+(?:de\s+|del\s+)?)?(\w+(?:\s+\w+)?)\s+(?:a|hasta)\s+([\d,.]+)\s*(k|m)?',
+        r'(?:sube|baja)\s+(?:el\s+)?(?:presupuesto\s+(?:de\s+)?)?(\w+)\s+(?:a|hasta)\s+([\d,.]+)\s*(k|m)?',
+    ]
+
+    for patron in patrones:
+        match = re.search(patron, texto_lower)
+        if match:
+            cat = match.group(1).strip()
+            monto_str = match.group(2)
+            sufijo = match.group(3) or ''
+
+            # Filtrar stop words
+            if cat in ['el', 'la', 'los', 'las', 'de', 'del', 'un', 'una', 'y', 'el', 'presupuesto']:
+                continue
+
+            monto = _normalizar_monto(monto_str + sufijo)
+            if monto and monto > 0:
+                return {"categoria": cat.title(), "nuevo_limite": monto}
+
+    return None
+
+
+def _parse_borrar_presupuesto(texto: str) -> dict | None:
+    """Detecta intención de borrar un presupuesto.
+    Ejemplos: 'borra mamá de presupuestos', 'elimina deudas', 'quitar transporte'
+    """
+    texto_lower = texto.lower()
+
+    patrones = [
+        r'(?:borra|borrar|elimina|eliminar|quita|quitar|remover|remueve)\s+(?:el\s+)?(?:presupuesto\s+(?:de\s+|del\s+)?)?(\w+(?:\s+\w+)?)',
+        r'(?:borra|borrar|elimina|eliminar)\s+(?:todos?\s+)?(?:los\s+)?presupuestos?\s+(?:de\s+|del\s+)?(\w+)',
+    ]
+
+    for patron in patrones:
+        match = re.search(patron, texto_lower)
+        if match:
+            cat = match.group(1).strip()
+            # Limpiar prefijos residuales
+            cat = re.sub(r'^(?:de\s+|del\s+|la\s+|el\s+)', '', cat).strip()
+            if cat and len(cat) >= 2 and cat not in ['el', 'la', 'los', 'las', 'de', 'del', 'un', 'una', 'y', 'presupuesto', 'presupuestos']:
+                return {"categoria": cat.title()}
+
+    return None
 
 
 def _parse_completar_tarea(texto: str) -> str | None:
@@ -1063,8 +1162,9 @@ Si balance > $1.000.000, recomienda diversificar CDT + app."""
 # PROCESAMIENTO PRINCIPAL
 # ============================================================
 
-def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
+def procesar_intencion_natural(prompt_usuario: str, usuario_id: str, es_audio: bool = False):
     texto_lc = prompt_usuario.lower().strip()
+    print(f"[PARSER] input: {prompt_usuario[:200]} | es_audio={es_audio}")
 
     # Mapeo de meses (compartido entre varios parsers - incluye typos comunes)
     _MESES = {
@@ -1265,11 +1365,58 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             return f"⚠️ No encontré la cuenta '{nombre_buscar}'."
 
     # =========================================
+    # 4b-edit. EDITAR PRESUPUESTO EXISTENTE
+    # =========================================
+    editar_data = _parse_editar_presupuesto(texto_lc)
+    if editar_data:
+        from datetime import datetime
+        year_match = re.search(r'\b(20\d{2})\b', texto_lc)
+        year = year_match.group(1) if year_match else str(datetime.now().year)
+        mes_num = None
+        for nombre, num in _MESES.items():
+            if nombre in texto_lc:
+                mes_num = num
+                break
+        if not mes_num:
+            mes_num = datetime.now().month
+
+        cat = editar_data["categoria"]
+        nuevo_limite = editar_data["nuevo_limite"]
+        exito = modificar_presupuesto_mes(usuario_id, cat, nuevo_limite, year, f"{mes_num:02d}")
+        if exito:
+            print(f"[PARSER] editado: {cat} -> {nuevo_limite}")
+            return f"✅ Presupuesto de *{cat}* actualizado a **${nuevo_limite:,.0f}** ({_NOMBRES_MESES[mes_num]} {year})"
+        else:
+            print(f"[PARSER] edit fallido: {cat} no encontrado en {year}-{mes_num:02d}")
+            return f"⚠️ No encontré presupuesto de *{cat}* en {_NOMBRES_MESES[mes_num]} {year}. ¿Quieres crearlo?"
+
+    # =========================================
+    # 4b-del. BORRAR PRESUPUESTO
+    # =========================================
+    borrar_data = _parse_borrar_presupuesto(texto_lc)
+    if borrar_data:
+        from datetime import datetime
+        year_match = re.search(r'\b(20\d{2})\b', texto_lc)
+        year = year_match.group(1) if year_match else str(datetime.now().year)
+        mes_num = None
+        for nombre, num in _MESES.items():
+            if nombre in texto_lc:
+                mes_num = num
+                break
+        if not mes_num:
+            mes_num = datetime.now().month
+
+        cat = borrar_data["categoria"]
+        exito = eliminar_presupuesto_mes(usuario_id, cat, year, f"{mes_num:02d}")
+        if exito:
+            print(f"[PARSER] eliminado: {cat}")
+            return f"🗑️ Presupuesto de *{cat}* eliminado ({_NOMBRES_MESES[mes_num]} {year})"
+        else:
+            return f"⚠️ No encontré presupuesto de *{cat}* en {_NOMBRES_MESES[mes_num]} {year}."
+
+    # =========================================
     # 4b-nuevo. CREAR PRESUPUESTOS (múltiples, lenguaje natural)
     # =========================================
-    # Crear presupuestos: aceptar lenguaje natural aunque no incluya un verbo explícito
-    # ("para septiembre presupuesto comida 100k y transporte 50k").
-    # Las consultas sin montos siguen pasando al bloque de lectura de abajo.
     tiene_verbo_creacion = any(k in texto_lc for k in ["pon", "crea", "establece", "configura", "ponme", "ponte"])
     tiene_presupuesto_con_monto = "presupuesto" in texto_lc and bool(re.search(r"\d[\d.,]*(?:k|m)?\b", texto_lc))
     if tiene_verbo_creacion or tiene_presupuesto_con_monto:
@@ -1280,11 +1427,20 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
             year_match = re.search(r'\b(20\d{2})\b', texto_lc)
             year = year_match.group(1) if year_match else str(datetime.now().year)
 
+            # Si viene de audio y el monto es < 1000, inferir miles
+            # (en Colombia, "150" en contexto de presupuesto = $150,000)
+            if es_audio:
+                for p in presupuestos_data:
+                    if p["limite"] < 1000:
+                        p["limite"] *= 1000
+
             resultados = []
             for p in presupuestos_data:
                 mes_num = p.get("mes") or datetime.now().month
                 cat = p["categoria"]
                 monto = p["limite"]
+
+                print(f"[PARSER] creando: {cat}={monto} mes={mes_num} year={year}")
 
                 exito = establecer_presupuesto_mes(usuario_id, cat, monto, year, f"{mes_num:02d}")
                 if exito:
