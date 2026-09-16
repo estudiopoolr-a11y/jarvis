@@ -1307,7 +1307,6 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
 
         if mes_mencionado:
             from datetime import datetime
-            import re
             anio_actual = datetime.now().year
             anio_match = re.search(r'20(?:24|25|26)', texto_lc)
             anio = int(anio_match.group()) if anio_match else anio_actual
@@ -1368,7 +1367,6 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
 
         if len(meses_encontrados) >= 1:
             from datetime import datetime
-            import re
             anio_actual = datetime.now().year
             anio_match = re.search(r'20(?:24|25|26)', texto_lc)
             anio = int(anio_match.group()) if anio_match else anio_actual
@@ -1829,7 +1827,6 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
 
         if len(meses_en_texto) >= 2:
             from datetime import datetime
-            import re
             anio_match = re.search(r'20(?:24|25|26)', texto_lc)
             anio = int(anio_match.group()) if anio_match else datetime.now().year
 
