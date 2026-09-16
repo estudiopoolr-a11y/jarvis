@@ -592,14 +592,57 @@ def _parse_presupuesto(texto: str) -> dict | None:
     return None
 
 
+def _normalizar_monto(monto_str: str) -> float | None:
+    """Normaliza un monto: quita separadores de miles, maneja k/m, corrige typos."""
+    tiene_k = monto_str.endswith('k')
+    tiene_m = monto_str.endswith('m')
+    monto_str = monto_str.rstrip('km')
+
+    # Quitar comas (separador de miles en ingles)
+    monto_str = monto_str.replace(',', '')
+
+    # Manejar punto
+    if '.' in monto_str:
+        partes = monto_str.split('.')
+        if len(partes) == 2:
+            decimales = partes[1]
+            if len(decimales) == 3:
+                # Separador de miles: '205.000' -> '205000'
+                monto_str = monto_str.replace('.', '')
+            elif len(decimales) <= 2:
+                # Decimal: '150.50' -> '150.50' (no cambiar)
+                pass
+            elif len(decimales) == 4:
+                # 4 digitos: tipico error de tipeo '205.0000' -> '205.000' -> 205000
+                monto_str = monto_str.replace('.', '')[:-1]
+            else:
+                # 5+ digitos: probablemente separador de miles
+                monto_str = monto_str.replace('.', '')
+        else:
+            # Multiples puntos: '1.500.000' -> separadores de miles
+            monto_str = monto_str.replace('.', '')
+
+    try:
+        monto = float(monto_str)
+    except ValueError:
+        return None
+
+    if tiene_k:
+        monto *= 1000
+    elif tiene_m:
+        monto *= 1000000
+
+    return monto
+
+
 def _parse_presupuesto_multiple(texto: str) -> list[dict] | None:
     """Extrae múltiples presupuestos de un mensaje natural.
 
     Ejemplos que debe capturar:
     - "pon presupuesto para mi mama 150.000 y deudas 205.000"
+    - "para septiembre pon de presupuestos para la categoria de mi mama 150.000 y en la categoria de deudas un presupesto de 205.0000"
     - "para septiembre presupuesto comida 100k y transporte 50k"
     - "establece presupuesto categoria mama 150.000, deudas 205.000"
-    - "configura presupuestos: mama 150.000, deudas 205.000 para septiembre"
     """
     resultados = []
     texto_lower = texto.lower()
@@ -612,7 +655,7 @@ def _parse_presupuesto_multiple(texto: str) -> list[dict] | None:
         "octubre": 10, "noviembre": 11, "diciembre": 12,
         "ago": 8, "dic": 12, "ene": 1, "feb": 2,
         "mar": 3, "abr": 4, "jun": 6, "jul": 7, "oct": 10, "nov": 11,
-        "sept": 9, "sep": 9, "set": 9
+        "sept": 9, "set": 9
     }
 
     # Detectar mes objetivo
@@ -626,55 +669,66 @@ def _parse_presupuesto_multiple(texto: str) -> list[dict] | None:
     year_match = re.search(r'\b(20\d{2})\b', texto_lower)
     year = int(year_match.group(1)) if year_match else None
 
-    # Separar por "y" para manejar múltiples categorías
-    partes = re.split(r'\s+y\s+', texto_lower)
+    # PASO 1: Encontrar TODOS los montos en el texto
+    patron_monto = re.finditer(r'([\d]+[.,]?[\d]*(?:k|m)?)\s*(?:y|,|\s+para\s+|\s+en\s+|$)', texto_lower + ' y')
 
-    # Patrón principal: capturar "categoria [de] NOMBRE MONTO" o "NOMBRE MONTO"
-    patron = r'(?:categor[ií]a\s+(?:de\s+)?)?([a-záéíóúñ][a-záéíóúñ\s]*?)\s+([\d.,]+)\s*(?:k|m)?(?=\s+y\s|$|,|\s+para\s+|\s+en\s+)'
+    montos_encontrados = []
+    for m in patron_monto:
+        monto_str = m.group(1)
+        pos_fin = m.end()
+        montos_encontrados.append((monto_str, pos_fin))
 
-    for parte in partes:
-        # Limpiar conectores comunes al inicio
-        parte_limpia = re.sub(r'^(?:y\s+)?', '', parte).strip()
-        if not parte_limpia:
+    # PASO 2: Para cada monto, buscar la categoria hacia atras
+    for i, (monto_str, pos_fin) in enumerate(montos_encontrados):
+        # Determinar el rango de texto donde buscar la categoria
+        if i == 0:
+            pos_inicio = 0
+        else:
+            # Empezar despues del monto anterior
+            pos_inicio = montos_encontrados[i-1][1]
+
+        texto_segmento = texto_lower[pos_inicio:pos_fin].strip()
+
+        # Limpiar el segmento: quitar todo despues del numero para quedarnos con la categoria
+        num_match = re.search(r'[\d]+[.,]?[\d]*(?:k|m)?', texto_segmento)
+        if num_match:
+            cat_segmento = texto_segmento[:num_match.start()].strip()
+        else:
             continue
 
-        match = re.search(patron, parte_limpia)
-        if match:
-            cat_raw = match.group(1).strip()
-            monto_raw = match.group(2)
+        # Limpiar conectores, verbos, articulos de forma agresiva.
+        # 1) Quitar prefijo largo "para [mes] pon de presupuestos para la categoria de"
+        cat_segmento = re.sub(r'^(?:para\s+)?(?:\w+\s+){0,6}(?:de\s+)?presupuestos?\s+(?:para\s+la\s+categor[ií]a\s+de\s+)?', '', cat_segmento).strip()
+        # 2) Quitar "la categoría de" / "en la categoria de" donde aparezca
+        cat_segmento = re.sub(r'(?:en\s+)?la\s+categor[ií]a\s+de\s+', '', cat_segmento).strip()
+        # 3) Quitar fragmentos "un presupuesto de" / "presupesto de" (incluye typos) en cualquier posición
+        cat_segmento = re.sub(r'(?:un\s+)?(?:presupue?sto?t?s?|presupe?sto?t?s?)\s+de\s+', ' ', cat_segmento).strip()
+        cat_segmento = re.sub(r'\s+(?:presupue?sto?t?s?|presupe?sto?t?s?)\b', '', cat_segmento).strip()
+        # 4) Quitar articulos y conectores al inicio (incluye posesivo mi/mis)
+        cat_segmento = re.sub(r'^(?:la|los|las|el|de|del|un|una|mi|mis|tu|para|y|en)\s+', '', cat_segmento).strip()
+        # 5) Quitar conectores al final
+        cat_segmento = re.sub(r'\s+(?:de|del|un|una|mi|mis|y)$', '', cat_segmento).strip()
 
-            # Filtrar palabras conectoras y verbos
-            stop_words = {
-                'el', 'la', 'los', 'las', 'de', 'del', 'para', 'en', 'un', 'una',
-                'mis', 'tu', 'presupuesto', 'presupuestos', 'pon', 'crea', 'establece',
-                'configura', 'ponme', 'ponte', 'ponga', 'ponga', 'categoria', 'categorias',
-                'y', 'con', 'para', 'del', 'las', 'los', 'de'
-            }
-            cat_words = cat_raw.split()
-            cat_filtrada = [w for w in cat_words if w.lower() not in stop_words]
-            cat = ' '.join(cat_filtrada).strip()
+        # Quitar palabras conectoras/verbos sobrantes por palabra
+        stop_words = {'el','la','los','las','de','del','para','en','un','una','mi','mis','tu','y','con','a','presupuesto','presupuestos','presupesto','categoria','categorias','pon','crea','establece','configura','ponme','ponte'}
+        cat_words = cat_segmento.split()
+        cat_filtrada = [w for w in cat_words if w.lower() not in stop_words]
+        cat = ' '.join(cat_filtrada).strip()
 
-            if not cat or len(cat) < 2:
-                continue
+        if not cat or len(cat) < 2:
+            continue
 
-            # Normalizar monto: quitar puntos de miles, aceptar 'k' como 000
-            monto_str = monto_raw.replace('.', '').replace(',', '')
-            try:
-                monto = float(monto_str)
-                # Si el monto original terminaba en 'k', multiplicar por 1000
-                if re.search(r'\d+k$', parte_limpia):
-                    monto *= 1000
-                elif re.search(r'\d+m$', parte_limpia):
-                    monto *= 1000000
-            except ValueError:
-                continue
+        # Normalizar monto
+        monto = _normalizar_monto(monto_str)
+        if monto is None:
+            continue
 
-            resultados.append({
-                "categoria": cat.title(),
-                "limite": monto,
-                "mes": mes_target,
-                "year": year
-            })
+        resultados.append({
+            "categoria": cat.title(),
+            "limite": monto,
+            "mes": mes_target,
+            "year": year
+        })
 
     return resultados if resultados else None
 
@@ -1213,7 +1267,12 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str):
     # =========================================
     # 4b-nuevo. CREAR PRESUPUESTOS (múltiples, lenguaje natural)
     # =========================================
-    if any(k in texto_lc for k in ["pon", "crea", "establece", "configura", "ponme", "ponte"]):
+    # Crear presupuestos: aceptar lenguaje natural aunque no incluya un verbo explícito
+    # ("para septiembre presupuesto comida 100k y transporte 50k").
+    # Las consultas sin montos siguen pasando al bloque de lectura de abajo.
+    tiene_verbo_creacion = any(k in texto_lc for k in ["pon", "crea", "establece", "configura", "ponme", "ponte"])
+    tiene_presupuesto_con_monto = "presupuesto" in texto_lc and bool(re.search(r"\d[\d.,]*(?:k|m)?\b", texto_lc))
+    if tiene_verbo_creacion or tiene_presupuesto_con_monto:
         presupuestos_data = _parse_presupuesto_multiple(texto_lc)
         if presupuestos_data:
             from modules.db import establecer_presupuesto_mes
