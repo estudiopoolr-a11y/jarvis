@@ -560,6 +560,24 @@ def establecer_presupuesto_mes(usuario_id, categoria_nombre, monto, year=None, m
         return False
 
 
+def _coincidir_categoria(nombre_doc, busqueda):
+    """Compara nombres de categoría normalizando acentos, puntuación y mayúsculas."""
+    import unicodedata
+    import re
+    def _limpiar(s):
+        s_norm = ''.join(c for c in unicodedata.normalize('NFD', str(s)) if unicodedata.category(c) != 'Mn')
+        return re.sub(r'[^\w\s]', '', s_norm).strip().casefold()
+    d = _limpiar(nombre_doc)
+    b = _limpiar(busqueda)
+    if not d or not b:
+        return False
+    if d == b:
+        return True
+    if len(b) >= 3 and (b in d or d in b):
+        return True
+    return False
+
+
 def modificar_presupuesto_mes(usuario_id, categoria_nombre, nuevo_limite, year=None, month=None):
     """Modifica el monto de un presupuesto mensual en la estructura KEBO."""
     year = str(year) if year else str(datetime.now().year)
@@ -572,12 +590,11 @@ def modificar_presupuesto_mes(usuario_id, categoria_nombre, nuevo_limite, year=N
     try:
         items_ref = user_ref.collection("budgets").document(f"{year}-{month}").collection("items")
         docs = list(items_ref.stream())
-        categoria_norm = str(categoria_nombre).strip().casefold()
 
         for doc in docs:
             data = doc.to_dict() or {}
             nombre = str(data.get("category_name", "")).strip()
-            if nombre.casefold() == categoria_norm:
+            if _coincidir_categoria(nombre, categoria_nombre):
                 doc.reference.update({"amount": float(nuevo_limite)})
                 return True
 
@@ -599,19 +616,70 @@ def eliminar_presupuesto_mes(usuario_id, categoria_nombre, year=None, month=None
     try:
         items_ref = user_ref.collection("budgets").document(f"{year}-{month}").collection("items")
         docs = list(items_ref.stream())
-        categoria_norm = str(categoria_nombre).strip().casefold()
         eliminado = False
 
         for doc in docs:
             data = doc.to_dict() or {}
             nombre = str(data.get("category_name", "")).strip()
-            if nombre.casefold() == categoria_norm:
+            if _coincidir_categoria(nombre, categoria_nombre):
                 doc.reference.delete()
                 eliminado = True
 
         return eliminado
     except Exception as e:
         print(f"Error eliminando presupuesto mes: {e}")
+        return False
+
+
+def eliminar_todos_presupuestos_mes(usuario_id, year=None, month=None):
+    """Elimina todos los presupuestos de un mes específico en la estructura KEBO."""
+    year = str(year) if year else str(datetime.now().year)
+    month = f"{int(month):02d}" if month else f"{datetime.now().month:02d}"
+
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return 0
+
+    try:
+        items_ref = user_ref.collection("budgets").document(f"{year}-{month}").collection("items")
+        docs = list(items_ref.stream())
+        count = 0
+        for doc in docs:
+            doc.reference.delete()
+            count += 1
+        return count
+    except Exception as e:
+        print(f"Error eliminando todos los presupuestos del mes: {e}")
+        return 0
+
+
+def renombrar_presupuesto_mes(usuario_id, categoria_antigua, categoria_nueva, year=None, month=None):
+    """Renombra un presupuesto existente a una nueva categoría en la estructura KEBO."""
+    year = str(year) if year else str(datetime.now().year)
+    month = f"{int(month):02d}" if month else f"{datetime.now().month:02d}"
+
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return False
+
+    try:
+        ensure_user(usuario_id)
+        cat_id = crear_categoria(usuario_id, categoria_nueva)
+        items_ref = user_ref.collection("budgets").document(f"{year}-{month}").collection("items")
+        docs = list(items_ref.stream())
+
+        for doc in docs:
+            data = doc.to_dict() or {}
+            nombre = str(data.get("category_name", "")).strip()
+            if _coincidir_categoria(nombre, categoria_antigua):
+                doc.reference.update({
+                    "category_name": categoria_nueva,
+                    "category_id": cat_id
+                })
+                return True
+        return False
+    except Exception as e:
+        print(f"Error renombrando presupuesto mes: {e}")
         return False
 
 

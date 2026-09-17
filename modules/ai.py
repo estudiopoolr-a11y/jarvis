@@ -15,6 +15,7 @@ from modules.db import (
     guardar_tarea, registrar_transaccion, establecer_presupuesto,
     marcar_tarea_completada, inicializar_firebase, limpiar_y_cargar_datos_dinamicos,
     obtener_contexto_financiero, modificar_presupuesto_mes, eliminar_presupuesto_mes,
+    eliminar_todos_presupuestos_mes, renombrar_presupuesto_mes,
     obtener_tareas_pendientes, obtener_balance_financiero, obtener_resumen_presupuestos,
     guardar_meta, obtener_metas, eliminar_meta, actualizar_progreso_meta, proyectar_meta,
     modificar_presupuesto, guardar_pago_fijo, obtener_pagos_fijos, eliminar_pago_fijo,
@@ -810,25 +811,65 @@ def _parse_editar_presupuesto(texto: str) -> dict | None:
 
 
 def _parse_borrar_presupuesto(texto: str) -> dict | None:
-    """Detecta intención de borrar un presupuesto.
-    Ejemplos: 'borra mamá de presupuestos', 'elimina deudas', 'quitar transporte'
+    """Detecta intención de borrar un presupuesto o todos los presupuestos de un mes.
+    Ejemplos:
+    - 'borra todos los presupuestos de septiembre' -> {'todos': True}
+    - 'borra los presupuestos de septiembre' -> {'todos': True}
+    - 'limpia los presupuestos' -> {'todos': True}
+    - 'borra mamá de presupuestos' -> {'categoria': 'Mamá'}
+    - 'elimina el presupuesto de mamá de septiembre' -> {'categoria': 'Mamá'}
+    - 'borra hola yerbis' -> {'categoria': 'Hola Yerbis'}
     """
-    texto_lower = texto.lower()
+    texto_lower = texto.lower().strip()
 
-    patrones = [
-        r'(?:borra|borrar|elimina|eliminar|quita|quitar|remover|remueve)\s+(?:el\s+)?(?:presupuesto\s+(?:de\s+|del\s+)?)?(\w+(?:\s+\w+)?)',
-        r'(?:borra|borrar|elimina|eliminar)\s+(?:todos?\s+)?(?:los\s+)?presupuestos?\s+(?:de\s+|del\s+)?(\w+)',
-    ]
+    _MESES_SET = {
+        'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+        'agosto', 'septiembre', 'septimebre', 'setiembre', 'octubre',
+        'noviembre', 'diciembre', 'sep', 'oct', 'nov', 'dic', 'ene', 'feb', 'mar', 'abr', 'jun', 'jul', 'ago'
+    }
 
-    for patron in patrones:
-        match = re.search(patron, texto_lower)
-        if match:
-            cat = match.group(1).strip()
-            # Limpiar prefijos residuales
-            cat = re.sub(r'^(?:de\s+|del\s+|la\s+|el\s+)', '', cat).strip()
-            if cat and len(cat) >= 2 and cat not in ['el', 'la', 'los', 'las', 'de', 'del', 'un', 'una', 'y', 'presupuesto', 'presupuestos']:
-                return {"categoria": cat.title()}
+    # 1. Borrar TODOS los presupuestos de un mes
+    if re.search(r'(?:borra|borrar|elimina|eliminar|limpia|limpiar)\s+(?:todos?\s+)?(?:los\s+)?presupuestos\b', texto_lower):
+        m_cat = re.search(r'presupuestos?\s+de\s+([a-záéíóúñ]+)', texto_lower)
+        if not m_cat or m_cat.group(1) in _MESES_SET:
+            return {"todos": True}
 
+    # 2. Borrar categoría específica
+    m = re.search(r'(?:borra|borrar|elimina|eliminar|quita|quitar|remueve|remover)\s+(?:el\s+)?(?:presupuesto\s+(?:de\s+|del\s+)?)?(.+)', texto_lower)
+    if m:
+        resto = m.group(1).strip()
+        # Quitar sufijos de mes: 'de septiembre', 'en septiembre', 'septiembre 2026', etc.
+        resto = re.sub(r'\s+(?:de|en|del)?\s*(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|septimebre|setiembre|octubre|noviembre|diciembre)\b.*$', '', resto).strip()
+        resto = re.sub(r'\s+(?:de|del)\s+presupuestos?.*$', '', resto).strip()
+        resto = re.sub(r'^(?:de\s+|del\s+|la\s+|el\s+)', '', resto).strip()
+        resto = re.sub(r'\s+(?:de|del)$', '', resto).strip()
+        if resto and len(resto) >= 2 and resto not in ['el', 'la', 'los', 'las', 'de', 'del', 'un', 'una', 'y', 'presupuesto', 'presupuestos', 'todos', 'todos los']:
+            return {"categoria": resto.title()}
+
+    return None
+
+
+def _parse_renombrar_presupuesto(texto: str) -> dict | None:
+    """Detecta intención de renombrar un presupuesto.
+    Ejemplos:
+    - 'renombra el presupuesto de hola yerbis a mamá'
+    - 'cambia el nombre del presupuesto de mamá deudas a deudas'
+    - 'renombra presupuesto comida a alimentación'
+    """
+    texto_lower = texto.lower().strip()
+    m = re.search(
+        r'(?:renombra|renombrar|cambia\s+el\s+nombre\s+de(?:l)?)\s+(?:el\s+)?(?:presupuesto\s+(?:de\s+|del\s+)?)?(.+?)\s+(?:a|por)\s+(.+)',
+        texto_lower
+    )
+    if m:
+        ant = m.group(1).strip()
+        nue = m.group(2).strip()
+        # Quitar sufijos de mes si vienen al final de nue
+        nue = re.sub(r'\s+(?:de|en|del)?\s*(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|septimebre|setiembre|octubre|noviembre|diciembre)\b.*$', '', nue).strip()
+        ant = re.sub(r'^(?:de\s+|del\s+|la\s+|el\s+)', '', ant).strip()
+        nue = re.sub(r'^(?:de\s+|del\s+|la\s+|el\s+)', '', nue).strip()
+        if ant and nue and len(ant) >= 2 and len(nue) >= 2:
+            return {"cat_antigua": ant.title(), "cat_nueva": nue.title()}
     return None
 
 
@@ -1259,8 +1300,8 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str, es_audio: b
     # =========================================
     # 4. VER BALANCE/FINANZAS
     # =========================================
-    if any(k in texto_lc for k in ["balance", "finanzas", "ingresos", "gastos"]) and \
-       any(k in texto_lc for k in ["cual", "cúal", "cuanto", "cuánto", "ver", "mostrar", "consultar", "cuánto"]):
+    if any(k in texto_lc for k in ["balance", "finanzas", "ingresos", "gastos", "dinero", "plata", "fondos", "capital"]) and \
+       any(k in texto_lc for k in ["cual", "cúal", "cuanto", "cuánto", "ver", "mostrar", "consultar", "tengo", "disponible"]):
         balance, ingresos, gastos, _ = obtener_balance_financiero(usuario_id)
         presupuestos = obtener_resumen_presupuestos(usuario_id)
         msg = f"💰 **Balance financiero:**\n- Ingresos: +${ingresos:,.0f}\n- Gastos: -${gastos:,.0f}\n- Neto: ${balance:,.0f}\n"
@@ -1365,6 +1406,32 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str, es_audio: b
             return f"⚠️ No encontré la cuenta '{nombre_buscar}'."
 
     # =========================================
+    # 4b-rename. RENOMBRAR PRESUPUESTO
+    # =========================================
+    rename_data = _parse_renombrar_presupuesto(texto_lc)
+    if rename_data:
+        from datetime import datetime
+        year_match = re.search(r'\b(20\d{2})\b', texto_lc)
+        year = year_match.group(1) if year_match else str(datetime.now().year)
+        mes_num = None
+        for nombre, num in _MESES.items():
+            if nombre in texto_lc:
+                mes_num = num
+                break
+        if not mes_num:
+            mes_num = datetime.now().month
+
+        cat_ant = rename_data["cat_antigua"]
+        cat_nue = rename_data["cat_nueva"]
+        exito = renombrar_presupuesto_mes(usuario_id, cat_ant, cat_nue, year, f"{mes_num:02d}")
+        if exito:
+            print(f"[PARSER] renombrado: {cat_ant} -> {cat_nue}")
+            return f"✏️ Presupuesto de *{cat_ant}* renombrado a **{cat_nue}** ({_NOMBRES_MESES[mes_num]} {year})"
+        else:
+            print(f"[PARSER] rename fallido: {cat_ant} no encontrado en {year}-{mes_num:02d}")
+            return f"⚠️ No encontré presupuesto de *{cat_ant}* en {_NOMBRES_MESES[mes_num]} {year} para renombrar."
+
+    # =========================================
     # 4b-edit. EDITAR PRESUPUESTO EXISTENTE
     # =========================================
     editar_data = _parse_editar_presupuesto(texto_lc)
@@ -1382,6 +1449,9 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str, es_audio: b
 
         cat = editar_data["categoria"]
         nuevo_limite = editar_data["nuevo_limite"]
+        if es_audio and nuevo_limite < 1000:
+            nuevo_limite *= 1000
+
         exito = modificar_presupuesto_mes(usuario_id, cat, nuevo_limite, year, f"{mes_num:02d}")
         if exito:
             print(f"[PARSER] editado: {cat} -> {nuevo_limite}")
@@ -1405,6 +1475,14 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str, es_audio: b
                 break
         if not mes_num:
             mes_num = datetime.now().month
+
+        if borrar_data.get("todos"):
+            count = eliminar_todos_presupuestos_mes(usuario_id, year, f"{mes_num:02d}")
+            if count > 0:
+                print(f"[PARSER] eliminados todos ({count}) en {year}-{mes_num:02d}")
+                return f"🗑️ Se eliminaron **{count}** presupuestos de {_NOMBRES_MESES[mes_num]} {year}."
+            else:
+                return f"ℹ️ No había presupuestos registrados para {_NOMBRES_MESES[mes_num]} {year}."
 
         cat = borrar_data["categoria"]
         exito = eliminar_presupuesto_mes(usuario_id, cat, year, f"{mes_num:02d}")
