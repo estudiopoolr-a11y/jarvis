@@ -38,6 +38,8 @@ Autor: JARVIS AI Assistant
 """
 import os
 import json
+import re
+import unicodedata
 import firebase_admin
 from firebase_admin import credentials, initialize_app, firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -560,15 +562,26 @@ def establecer_presupuesto_mes(usuario_id, categoria_nombre, monto, year=None, m
         return False
 
 
+def _normalizar_cat_str(s):
+    """Normaliza un string de categoría para comparación insensible a acentos, puntuación y mayúsculas."""
+    if not s:
+        return ""
+    s_norm = ''.join(c for c in unicodedata.normalize('NFD', str(s)) if unicodedata.category(c) != 'Mn')
+    s_clean = re.sub(r'[^\w\s]', '', s_norm).strip().casefold()
+    return re.sub(r'\s+', ' ', s_clean)
+
+
+def _cat_exacta(nombre_doc, busqueda):
+    """Verifica si dos nombres de categoría coinciden exactamente tras normalizar."""
+    d = _normalizar_cat_str(nombre_doc)
+    b = _normalizar_cat_str(busqueda)
+    return bool(d and b and d == b)
+
+
 def _coincidir_categoria(nombre_doc, busqueda):
     """Compara nombres de categoría normalizando acentos, puntuación y mayúsculas."""
-    import unicodedata
-    import re
-    def _limpiar(s):
-        s_norm = ''.join(c for c in unicodedata.normalize('NFD', str(s)) if unicodedata.category(c) != 'Mn')
-        return re.sub(r'[^\w\s]', '', s_norm).strip().casefold()
-    d = _limpiar(nombre_doc)
-    b = _limpiar(busqueda)
+    d = _normalizar_cat_str(nombre_doc)
+    b = _normalizar_cat_str(busqueda)
     if not d or not b:
         return False
     if d == b:
@@ -590,13 +603,30 @@ def modificar_presupuesto_mes(usuario_id, categoria_nombre, nuevo_limite, year=N
     try:
         items_ref = user_ref.collection("budgets").document(f"{year}-{month}").collection("items")
         docs = list(items_ref.stream())
+        if not docs:
+            return False
 
+        # Pasada 1: Coincidencia EXACTA
+        for doc in docs:
+            data = doc.to_dict() or {}
+            nombre = str(data.get("category_name", "")).strip()
+            if _cat_exacta(nombre, categoria_nombre):
+                doc.reference.update({"amount": float(nuevo_limite)})
+                return True
+
+        # Pasada 2: Coincidencia PARCIAL (mejor coincidencia por longitud)
+        candidatos = []
         for doc in docs:
             data = doc.to_dict() or {}
             nombre = str(data.get("category_name", "")).strip()
             if _coincidir_categoria(nombre, categoria_nombre):
-                doc.reference.update({"amount": float(nuevo_limite)})
-                return True
+                candidatos.append(doc)
+
+        if candidatos:
+            b_norm = _normalizar_cat_str(categoria_nombre)
+            candidatos.sort(key=lambda d: abs(len(_normalizar_cat_str((d.to_dict() or {}).get("category_name", ""))) - len(b_norm)))
+            candidatos[0].reference.update({"amount": float(nuevo_limite)})
+            return True
 
         return False
     except Exception as e:
@@ -616,16 +646,32 @@ def eliminar_presupuesto_mes(usuario_id, categoria_nombre, year=None, month=None
     try:
         items_ref = user_ref.collection("budgets").document(f"{year}-{month}").collection("items")
         docs = list(items_ref.stream())
-        eliminado = False
+        if not docs:
+            return False
 
+        # Pasada 1: Coincidencia EXACTA
+        for doc in docs:
+            data = doc.to_dict() or {}
+            nombre = str(data.get("category_name", "")).strip()
+            if _cat_exacta(nombre, categoria_nombre):
+                doc.reference.delete()
+                return True
+
+        # Pasada 2: Coincidencia PARCIAL (mejor coincidencia por longitud)
+        candidatos = []
         for doc in docs:
             data = doc.to_dict() or {}
             nombre = str(data.get("category_name", "")).strip()
             if _coincidir_categoria(nombre, categoria_nombre):
-                doc.reference.delete()
-                eliminado = True
+                candidatos.append(doc)
 
-        return eliminado
+        if candidatos:
+            b_norm = _normalizar_cat_str(categoria_nombre)
+            candidatos.sort(key=lambda d: abs(len(_normalizar_cat_str((d.to_dict() or {}).get("category_name", ""))) - len(b_norm)))
+            candidatos[0].reference.delete()
+            return True
+
+        return False
     except Exception as e:
         print(f"Error eliminando presupuesto mes: {e}")
         return False
@@ -667,16 +713,37 @@ def renombrar_presupuesto_mes(usuario_id, categoria_antigua, categoria_nueva, ye
         cat_id = crear_categoria(usuario_id, categoria_nueva)
         items_ref = user_ref.collection("budgets").document(f"{year}-{month}").collection("items")
         docs = list(items_ref.stream())
+        if not docs:
+            return False
 
+        # Pasada 1: Coincidencia EXACTA
         for doc in docs:
             data = doc.to_dict() or {}
             nombre = str(data.get("category_name", "")).strip()
-            if _coincidir_categoria(nombre, categoria_antigua):
+            if _cat_exacta(nombre, categoria_antigua):
                 doc.reference.update({
                     "category_name": categoria_nueva,
                     "category_id": cat_id
                 })
                 return True
+
+        # Pasada 2: Coincidencia PARCIAL (mejor coincidencia por longitud)
+        candidatos = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            nombre = str(data.get("category_name", "")).strip()
+            if _coincidir_categoria(nombre, categoria_antigua):
+                candidatos.append(doc)
+
+        if candidatos:
+            b_norm = _normalizar_cat_str(categoria_antigua)
+            candidatos.sort(key=lambda d: abs(len(_normalizar_cat_str((d.to_dict() or {}).get("category_name", ""))) - len(b_norm)))
+            candidatos[0].reference.update({
+                "category_name": categoria_nueva,
+                "category_id": cat_id
+            })
+            return True
+
         return False
     except Exception as e:
         print(f"Error renombrando presupuesto mes: {e}")

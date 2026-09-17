@@ -258,6 +258,7 @@ MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
 SYSTEM_INSTRUCTION = """
 JARVIS: asistente financiero ejecutivo. Frío, analítico, directo. Responde con datos reales del usuario.
+REGLA CRÍTICA DE OPERACIÓN: En este modo conversacional tienes acceso de solo lectura al contexto financiero inyectado. NUNCA afirmes, simules ni finjas haber creado, modificado, depurado o eliminado registros en la base de datos (presupuestos, transacciones, cuentas, tareas). Si el usuario solicita una modificación en la base de datos que llegó hasta aquí, aclara brevemente que la acción no se pudo ejecutar directamente y sugiérele el formato exacto del comando (ej: 'borra el presupuesto de X', 'renombra el presupuesto de X a Y', 'presupuesto X monto').
 """
 
 class ItemIntencion(BaseModel):
@@ -651,6 +652,10 @@ def _parse_presupuesto_multiple(texto: str) -> list[dict] | None:
     resultados = []
     texto_lower = texto.lower()
 
+    # Si el texto contiene intenciones de renombrar o borrar, no es creación de presupuestos
+    if re.search(r'\b(?:ren[oó]mbra\w*|c[aá]mbia\w*\s+el\s+nombre|c[aá]mbiale\s+el\s+nombre|borr\w*|elimin\w*|quit\w*|remuev\w*)\b', texto_lower):
+        return None
+
     # Diccionario extendido de meses (incluye typos comunes)
     _MESES_ALIASES = {
         "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
@@ -692,6 +697,8 @@ def _parse_presupuesto_multiple(texto: str) -> list[dict] | None:
         'sube', 'baja', 'cambia', 'modifica', 'actualiza',
         'hola', 'necesito', 'quiero', 'puedes', 'puede',
         'jarvis', 'bot', 'please', 'por',
+        'no', 'son', 'era', 'eran', 'es', 'sea', 'sean', 'que', 'q',
+        'debe', 'ser', 'más', 'mas', 'pero',
         # Nombres de meses (no deben ser categorías)
         'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
         'julio', 'agosto', 'septiembre', 'setiembre', 'septimebre',
@@ -704,24 +711,27 @@ def _parse_presupuesto_multiple(texto: str) -> list[dict] | None:
         if not parte:
             continue
 
+        # Quitar años como 2024|2025|2026 para que no interfieran como monto
+        parte_sin_anio = re.sub(r'\b20\d{2}\b', '', parte).strip()
+
         # PASO 2: Encontrar EL ÚLTIMO número en esta parte (es el monto)
         # Patrón: dígitos opcionales con punto/coma/k/m
-        patron_num = list(re.finditer(r'([\d]+[.,]?[\d]*(?:k|m)?)\b', parte))
+        patron_num = list(re.finditer(r'([\d]+[.,]?[\d]*(?:k|m)?)\b', parte_sin_anio))
         if not patron_num:
             continue
 
         ultimo_num = patron_num[-1]
         monto_str = ultimo_num.group(1)
         # 1) categoría DESPUÉS del número: "150 para mamá" → "mamá"
-        despues_raw = parte[ultimo_num.end():].strip()
+        despues_raw = parte_sin_anio[ultimo_num.end():].strip()
         despues_raw = re.sub(r'^(?:para|en|de|del|la|el|los|las|un|una|y|el)\s+', '', despues_raw).strip()
         despues_raw = re.sub(r'\s+(?:para|en|de|del|y)$', '', despues_raw).strip()
         cat_despues = ''
         if despues_raw:
-            cat_despues_words = [w for w in despues_raw.split() if w.lower() not in _STOP_CATEGORIA]
+            cat_despues_words = [w for w in despues_raw.split() if re.sub(r'[^\w]', '', w.lower()) not in _STOP_CATEGORIA]
             cat_despues = ' '.join(cat_despues_words).strip()
         # 2) categoría ANTES del número (modo clásico)
-        cat_antes = parte[:ultimo_num.start()].strip()
+        cat_antes = parte_sin_anio[:ultimo_num.start()].strip()
         # Elegir la mejor opción
         cat_texto = ''
         if cat_despues and len(cat_despues) >= 2 and len(cat_despues.split()) <= 4:
@@ -751,13 +761,17 @@ def _parse_presupuesto_multiple(texto: str) -> list[dict] | None:
         # Quitar artículos/conectores residuales al inicio y final
         cat_texto = re.sub(r'^(?:de|del|el|la|los|las|un|una|y|en|para)\s+', '', cat_texto)
         cat_texto = re.sub(r'\s+(?:de|del|el|la|los|las|un|una|y)$', '', cat_texto)
-        cat_texto = cat_texto.strip()
+        cat_texto = cat_texto.strip(' ,.:;!?¿¡"\'')
 
-        # Filtrar palabras stop por palabra
+        # Filtrar palabras stop por palabra (normalizando puntuación)
         if cat_texto:
             words = cat_texto.split()
-            words_filtradas = [w for w in words if w.lower() not in _STOP_CATEGORIA]
+            words_filtradas = [w for w in words if re.sub(r'[^\w]', '', w.lower()) not in _STOP_CATEGORIA]
             cat_texto = ' '.join(words_filtradas).strip()
+
+        # Validación: no debe contener dígitos (ej: "Son 205.000 No")
+        if re.search(r'\d', cat_texto):
+            continue
 
         # Validación: categoría debe ser razonable (1-4 palabras, >=2 chars)
         if not cat_texto or len(cat_texto) < 2:
@@ -812,13 +826,12 @@ def _parse_editar_presupuesto(texto: str) -> dict | None:
 
 def _parse_borrar_presupuesto(texto: str) -> dict | None:
     """Detecta intención de borrar un presupuesto o todos los presupuestos de un mes.
+    Soporta subjuntivo ('necesito q elimines'), typos ('presupuestps') y múltiples categorías en una sola frase.
     Ejemplos:
     - 'borra todos los presupuestos de septiembre' -> {'todos': True}
-    - 'borra los presupuestos de septiembre' -> {'todos': True}
-    - 'limpia los presupuestos' -> {'todos': True}
-    - 'borra mamá de presupuestos' -> {'categoria': 'Mamá'}
-    - 'elimina el presupuesto de mamá de septiembre' -> {'categoria': 'Mamá'}
-    - 'borra hola yerbis' -> {'categoria': 'Hola Yerbis'}
+    - 'necesito q elimines los presupuestps de X y el de Y y el de Z' -> {'categorias': ['X', 'Y', 'Z']}
+    - 'borra mamá de presupuestos' -> {'categoria': 'Mamá', 'categorias': ['Mamá']}
+    - 'elimina el presupuesto de comida' -> {'categoria': 'Comida', 'categorias': ['Comida']}
     """
     texto_lower = texto.lower().strip()
 
@@ -829,47 +842,103 @@ def _parse_borrar_presupuesto(texto: str) -> dict | None:
     }
 
     # 1. Borrar TODOS los presupuestos de un mes
-    if re.search(r'(?:borra|borrar|elimina|eliminar|limpia|limpiar)\s+(?:todos?\s+)?(?:los\s+)?presupuestos\b', texto_lower):
-        m_cat = re.search(r'presupuestos?\s+de\s+([a-záéíóúñ]+)', texto_lower)
+    if re.search(r'(?:borra|borrar|borres|elimina|eliminar|elimines|limpia|limpiar|limpies)\s+(?:todos?\s+)?(?:los\s+)?presupue?[a-z]*\b', texto_lower):
+        m_cat = re.search(r'presupue?[a-z]*\s+de\s+([a-záéíóúñ]+)', texto_lower)
         if not m_cat or m_cat.group(1) in _MESES_SET:
             return {"todos": True}
 
-    # 2. Borrar categoría específica
-    m = re.search(r'(?:borra|borrar|elimina|eliminar|quita|quitar|remueve|remover)\s+(?:el\s+)?(?:presupuesto\s+(?:de\s+|del\s+)?)?(.+)', texto_lower)
+    # 2. Borrar categoría o categorías específicas
+    patron_verbo = r'(?:necesito\s+q(?:ue)?\s+|quiero\s+q(?:ue)?\s+|favor\s+|por\s+favor\s+)?(?:borra|borrar|borres|elimina|eliminar|elimines|quita|quitar|quites|remueve|remover|remuevas|limpia|limpiar)\s+(?:el\s+|los\s+)?(?:presupue?[a-z]*\s+(?:de\s+|del\s+)?)?'
+    m = re.search(patron_verbo, texto_lower)
     if m:
-        resto = m.group(1).strip()
-        # Quitar sufijos de mes: 'de septiembre', 'en septiembre', 'septiembre 2026', etc.
+        resto = texto_lower[m.end():].strip()
+        # Si no había prefijo de presupuesto pero venía al final ("borra X de presupuestos")
+        resto = re.sub(r'\s+(?:de|del|en)\s+(?:los\s+)?presupue?[a-z]*.*$', '', resto).strip()
+        # Quitar sufijos de mes globales al final
         resto = re.sub(r'\s+(?:de|en|del)?\s*(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|septimebre|setiembre|octubre|noviembre|diciembre)\b.*$', '', resto).strip()
-        resto = re.sub(r'\s+(?:de|del)\s+presupuestos?.*$', '', resto).strip()
-        resto = re.sub(r'^(?:de\s+|del\s+|la\s+|el\s+)', '', resto).strip()
-        resto = re.sub(r'\s+(?:de|del)$', '', resto).strip()
-        if resto and len(resto) >= 2 and resto not in ['el', 'la', 'los', 'las', 'de', 'del', 'un', 'una', 'y', 'presupuesto', 'presupuestos', 'todos', 'todos los']:
-            return {"categoria": resto.title()}
+
+        # Separar categorías
+        # Si tiene conectores explícitos como ' y el de ' o ' y de ' o ' y '
+        if re.search(r'\s+y\s+(?:el\s+de\s+|la\s+de\s+|de\s+|del\s+)?|,\s*(?:el\s+de\s+|la\s+de\s+)', resto):
+            segmentos = re.split(r'\s+y\s+(?:el\s+de\s+|la\s+de\s+|el\s+|la\s+|de\s+|del\s+)?|,\s*(?:el\s+de\s+|la\s+de\s+)', resto)
+        else:
+            segmentos = re.split(r'\s*,\s*|\s+y\s+', resto)
+
+        cats_encontradas = []
+        for seg in segmentos:
+            seg = seg.strip()
+            # Limpiar conectores y artículos
+            seg = re.sub(r'^(?:de\s+|del\s+|la\s+|el\s+|un\s+|una\s+)', '', seg).strip()
+            seg = re.sub(r'\s+(?:de|del|el|la)$', '', seg).strip()
+            seg = seg.strip(' ,.:;!?¿¡"\'')
+            if seg and len(seg) >= 2 and seg not in ['el', 'la', 'los', 'las', 'de', 'del', 'un', 'una', 'y', 'presupuesto', 'presupuestos', 'todos', 'todos los']:
+                cats_encontradas.append(seg.title())
+
+        if cats_encontradas:
+            return {
+                "categoria": cats_encontradas[0],
+                "categorias": cats_encontradas
+            }
 
     return None
 
 
 def _parse_renombrar_presupuesto(texto: str) -> dict | None:
-    """Detecta intención de renombrar un presupuesto.
+    """Detecta intención de renombrar un presupuesto, con soporte para formas enclíticas y montos.
     Ejemplos:
+    - 'el presupuesto de septiembre renómbralo y ponle q sea de deudas y son 205.000 no 105.000'
+    - 'el presupuesto de septiembre renómbralo y ponle q sea de deudas'
     - 'renombra el presupuesto de hola yerbis a mamá'
     - 'cambia el nombre del presupuesto de mamá deudas a deudas'
-    - 'renombra presupuesto comida a alimentación'
+    - 'renombra presupuesto comida a alimentación y ponle 200k'
     """
     texto_lower = texto.lower().strip()
-    m = re.search(
-        r'(?:renombra|renombrar|cambia\s+el\s+nombre\s+de(?:l)?)\s+(?:el\s+)?(?:presupuesto\s+(?:de\s+|del\s+)?)?(.+?)\s+(?:a|por)\s+(.+)',
-        texto_lower
+
+    # Patrón 1: Orden invertido / enclítico ("el presupuesto de X renómbralo a Y [y ponle Z]")
+    # ej: "el presupuesto de septiembre renómbralo y ponle q sea de deudas"
+    patron_invertido = (
+        r'(?:el\s+)?(?:presupuesto\s+(?:de\s+|del\s+)?)?(.+?)\s+'
+        r'(?:ren[oó]mbra(?:lo)?|c[aá]mbia(?:lo)?|c[aá]mbiale\s+el\s+nombre)'
+        r'\s+(?:a|por|y\s+ponle\s+q(?:ue)?\s+sea\s+(?:de)?|y\s+que\s+sea\s+(?:de)?|que\s+sea\s+(?:de)?)\s+'
+        r'(.+)'
     )
+    m = re.search(patron_invertido, texto_lower)
+
+    # Patrón 2: Orden directo ("renombra el presupuesto de X a Y")
+    if not m:
+        patron_directo = (
+            r'(?:ren[oó]mbra(?:lo)?|renombrar|cambia\s+el\s+nombre\s+de(?:l)?|c[aá]mbiale\s+el\s+nombre\s+a)\s+'
+            r'(?:el\s+)?(?:presupuesto\s+(?:de\s+|del\s+)?)?(.+?)'
+            r'\s+(?:a|por|y\s+ponle\s+q(?:ue)?\s+sea\s+(?:de)?)\s+'
+            r'(.+)'
+        )
+        m = re.search(patron_directo, texto_lower)
+
     if m:
         ant = m.group(1).strip()
-        nue = m.group(2).strip()
-        # Quitar sufijos de mes si vienen al final de nue
-        nue = re.sub(r'\s+(?:de|en|del)?\s*(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|septimebre|setiembre|octubre|noviembre|diciembre)\b.*$', '', nue).strip()
+        nue_raw = m.group(2).strip()
+
+        # Extraer posible nuevo monto al final: "y son 205.000 no 105.000", "y ponle 200k", "con 150000"
+        nuevo_monto = None
+        m_monto = re.search(r'\s+y\s+(?:son|ponle|que\s+sean?|con|el\s+monto\s+es|monto)\s+([\d.,]+(?:k|m)?)(?:\s+no\s+[\d.,]+(?:k|m)?)?$', nue_raw)
+        if m_monto:
+            monto_str = m_monto.group(1)
+            nue_raw = nue_raw[:m_monto.start()].strip()
+            nuevo_monto = _normalizar_monto(monto_str)
+
+        # Quitar sufijos de mes si vienen al final de nue_raw
+        nue = re.sub(r'\s+(?:de|en|del)?\s*(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|septimebre|setiembre|octubre|noviembre|diciembre)\b.*$', '', nue_raw).strip()
         ant = re.sub(r'^(?:de\s+|del\s+|la\s+|el\s+)', '', ant).strip()
         nue = re.sub(r'^(?:de\s+|del\s+|la\s+|el\s+)', '', nue).strip()
+        ant = ant.strip(' ,.:;!?¿¡"\'')
+        nue = nue.strip(' ,.:;!?¿¡"\'')
+
         if ant and nue and len(ant) >= 2 and len(nue) >= 2:
-            return {"cat_antigua": ant.title(), "cat_nueva": nue.title()}
+            res = {"cat_antigua": ant.title(), "cat_nueva": nue.title()}
+            if nuevo_monto and nuevo_monto > 0:
+                res["nuevo_limite"] = nuevo_monto
+            return res
+
     return None
 
 
@@ -1423,9 +1492,16 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str, es_audio: b
 
         cat_ant = rename_data["cat_antigua"]
         cat_nue = rename_data["cat_nueva"]
+        nuevo_limite = rename_data.get("nuevo_limite")
+        if es_audio and nuevo_limite and nuevo_limite < 1000:
+            nuevo_limite *= 1000
+
         exito = renombrar_presupuesto_mes(usuario_id, cat_ant, cat_nue, year, f"{mes_num:02d}")
         if exito:
             print(f"[PARSER] renombrado: {cat_ant} -> {cat_nue}")
+            if nuevo_limite:
+                modificar_presupuesto_mes(usuario_id, cat_nue, nuevo_limite, year, f"{mes_num:02d}")
+                return f"✏️ Presupuesto de *{cat_ant}* renombrado a **{cat_nue}** con nuevo monto de **${nuevo_limite:,.0f}** ({_NOMBRES_MESES[mes_num]} {year})"
             return f"✏️ Presupuesto de *{cat_ant}* renombrado a **{cat_nue}** ({_NOMBRES_MESES[mes_num]} {year})"
         else:
             print(f"[PARSER] rename fallido: {cat_ant} no encontrado en {year}-{mes_num:02d}")
@@ -1484,19 +1560,44 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str, es_audio: b
             else:
                 return f"ℹ️ No había presupuestos registrados para {_NOMBRES_MESES[mes_num]} {year}."
 
-        cat = borrar_data["categoria"]
-        exito = eliminar_presupuesto_mes(usuario_id, cat, year, f"{mes_num:02d}")
-        if exito:
-            print(f"[PARSER] eliminado: {cat}")
-            return f"🗑️ Presupuesto de *{cat}* eliminado ({_NOMBRES_MESES[mes_num]} {year})"
-        else:
-            return f"⚠️ No encontré presupuesto de *{cat}* en {_NOMBRES_MESES[mes_num]} {year}."
+        cats = borrar_data.get("categorias") or ([borrar_data.get("categoria")] if borrar_data.get("categoria") else [])
+        if not cats:
+            return None
+
+        eliminados = []
+        no_encontrados = []
+        for cat in cats:
+            exito = eliminar_presupuesto_mes(usuario_id, cat, year, f"{mes_num:02d}")
+            if exito:
+                print(f"[PARSER] eliminado: {cat}")
+                eliminados.append(cat)
+            else:
+                print(f"[PARSER] no encontrado para eliminar: {cat}")
+                no_encontrados.append(cat)
+
+        mensajes = []
+        if eliminados:
+            cats_str = ", ".join(f"*{c}*" for c in eliminados)
+            mensajes.append(f"🗑️ Presupuesto de {cats_str} eliminado ({_NOMBRES_MESES[mes_num]} {year}).")
+        if no_encontrados:
+            cats_str = ", ".join(f"*{c}*" for c in no_encontrados)
+            mensajes.append(f"⚠️ No encontré presupuesto de {cats_str} en {_NOMBRES_MESES[mes_num]} {year}.")
+
+        return "\n".join(mensajes) if mensajes else "⚠️ No se pudo procesar la eliminación."
 
     # =========================================
     # 4b-nuevo. CREAR PRESUPUESTOS (múltiples, lenguaje natural)
     # =========================================
     tiene_verbo_creacion = any(k in texto_lc for k in ["pon", "crea", "establece", "configura", "ponme", "ponte"])
-    tiene_presupuesto_con_monto = "presupuesto" in texto_lc and bool(re.search(r"\d[\d.,]*(?:k|m)?\b", texto_lc))
+    tiene_palabras_excluyentes = any(k in texto_lc for k in [
+        "renombra", "renombrar", "renombralo", "renómbralo", "cambia el nombre", "cámbiale el nombre",
+        "borra", "borres", "elimina", "elimines", "quita", "quites", "cuanto", "cuánto", "mostrar", "dame"
+    ])
+    tiene_presupuesto_con_monto = (
+        not tiene_palabras_excluyentes and
+        "presupuesto" in texto_lc and
+        bool(re.search(r"\d[\d.,]*(?:k|m)?\b", texto_lc))
+    )
     if tiene_verbo_creacion or tiene_presupuesto_con_monto:
         presupuestos_data = _parse_presupuesto_multiple(texto_lc)
         if presupuestos_data:
