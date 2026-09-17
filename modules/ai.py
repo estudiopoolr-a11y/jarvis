@@ -15,6 +15,7 @@ from modules.db import (
     guardar_tarea, registrar_transaccion, establecer_presupuesto,
     marcar_tarea_completada, inicializar_firebase, limpiar_y_cargar_datos_dinamicos,
     obtener_contexto_financiero, modificar_presupuesto_mes, eliminar_presupuesto_mes,
+    _normalizar_cat_str,
     eliminar_todos_presupuestos_mes, renombrar_presupuesto_mes,
     obtener_tareas_pendientes, obtener_balance_financiero, obtener_resumen_presupuestos,
     guardar_meta, obtener_metas, eliminar_meta, actualizar_progreso_meta, proyectar_meta,
@@ -22,7 +23,7 @@ from modules.db import (
     guardar_perfil, obtener_perfil,
     # Kebo functions
     registrar_transaccion_v2, obtener_balance_v2, obtener_presupuestos_v2,
-    listar_cuentas, crear_cuenta, actualizar_presupuesto_categoria,
+    listar_cuentas, listar_categorias, crear_cuenta, actualizar_presupuesto_categoria,
     registrar_transferencia, listar_metas_v2, guardar_meta_v2, agregar_aporte_meta,
     listar_recurrentes, guardar_recurrente, obtener_alertas_presupuesto,
     obtener_estadisticas, crear_categorias_predefinidas,
@@ -257,8 +258,10 @@ def _gemini_call_with_fallback(callable):
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
 SYSTEM_INSTRUCTION = """
-JARVIS: asistente financiero ejecutivo. Frío, analítico, directo. Responde con datos reales del usuario.
+JARVIS: asistente financiero ejecutivo. Directo pero amable. Responde con datos reales del usuario.
 REGLA CRÍTICA DE OPERACIÓN: En este modo conversacional tienes acceso de solo lectura al contexto financiero inyectado. NUNCA afirmes, simules ni finjas haber creado, modificado, depurado o eliminado registros en la base de datos (presupuestos, transacciones, cuentas, tareas). Si el usuario solicita una modificación en la base de datos que llegó hasta aquí, aclara brevemente que la acción no se pudo ejecutar directamente y sugiérele el formato exacto del comando (ej: 'borra el presupuesto de X', 'renombra el presupuesto de X a Y', 'presupuesto X monto').
+REGLA DE PERIODOS: Nunca compares presupuestos de un mes con gastos históricos. Si el usuario pide análisis, usa datos del mes actual a menos que diga "todas las bases" o "histórico".
+TONO: No contradecir ni regañar. Si el usuario dice algo incorrecto, preséntale los datos sin juzgar. Ofrece 1 interpretación + 1 comando concreto si la frase es ambigua, sin sermones.
 """
 
 class ItemIntencion(BaseModel):
@@ -1199,8 +1202,69 @@ def _parse_tasa_cambio(texto: str) -> dict | None:
 
 
 # ============================================================
-# ASESOR DE INVERSIONES COLOMBIA
+# PARSERS DE CONSULTA FINANCIERA (v3.2)
 # ============================================================
+
+def _parse_listar_categorias(texto: str) -> bool:
+    """Detecta intención de listar categorías."""
+    texto_lower = texto.lower()
+    patrones = [
+        r'categor[íi]as?\s+(hay|cu[áé]n?tas?|cu[áé]les?|listar|ver|mostrar|todas)',
+        r'qu[ée]?\s+categor[íi]as?\s+(hay|tienes)',
+        r'todas?\s+las?\s+categor[íi]as?',
+        r'list[ao]?\s+categor[íi]as?',
+    ]
+    return any(re.search(p, texto_lower) for p in patrones)
+
+
+def _parse_analisis_financiero(texto: str) -> bool:
+    """Detecta intención de análisis financiero."""
+    texto_lower = texto.lower()
+    patrones = [
+        r'an[áa]l[íi]s[íi]s\s+(financiero|mensual|del\s+mes|completo)',
+        r'dame\s+(?:un|una|el|la)\s+(?:an[áa]l[íi]s[íi]s|reporte|resumen)\s+(?:financiero|del\s+mes)?',
+        r'(?:un?\s+)?reporte\s+(?:mensual|financiero|del\s+mes)',
+        r'(?:un?\s+)?resumen\s+(?:mensual|financiero|del\s+mes)',
+    ]
+    return any(re.search(p, texto_lower) for p in patrones)
+
+
+def _parse_sobrante(texto: str) -> bool:
+    """Detecta intención de no asignar/remarcar sobrante."""
+    texto_lower = texto.lower()
+    patrones = [
+        r'deja\s+(lo\s+)?(que\s+)?sobr[ae]',
+        r'dejar\s+(lo\s+)?(que\s+)?sobr[ae]',
+        r'sobrante|excedente',
+        r'no\s+(asignes?|uses?|gastes?)\s+(lo\s+)?(sobrante|que\s+sobr[ae])',
+        r'queda\s+(libre|sin\s+asignar)',
+    ]
+    return any(re.search(p, texto_lower) for p in patrones)
+
+
+def _parse_ajustar_balance(texto: str) -> bool:
+    """Detecta intención de ajustar/alinear balance a presupuestos."""
+    texto_lower = texto.lower()
+    patrones = [
+        r'ajustar\s+(mi\s+)?balance\s+a\s+(los?\s+)?presupuestos',
+        r'alinear\s+(mi\s+)?balance\s+a\s+(los?\s+)?presupuestos',
+        r'presupuestos?\s+(son\s+)?techos',
+        r'balance\s+(no\s+)?(es\s+)?(presupuesto|techo)',
+    ]
+    return any(re.search(p, texto_lower) for p in patrones)
+
+
+def _parse_ver_presupuesto(texto: str) -> bool:
+    """Detecta intención de VER presupuestos (requiere palabra de consulta).
+    Evita que 'ajustar mi balance a los presupuestos' se interprete como ver.
+    """
+    texto_lower = texto.lower()
+    # Debe tener la palabra "presupuesto" Y una palabra de consulta
+    tiene_presupuesto = "presupuesto" in texto_lower or "presupuestos" in texto_lower
+    tiene_consulta = any(k in texto_lower for k in [
+        "dame", "ver", "mostrar", "hay", "cu[áé]les", "cuales", "lista", "listar", "consultar"
+    ])
+    return tiene_presupuesto and tiene_consulta
 
 def _es_intencion_inversion(texto: str) -> bool:
     """Detecta si el usuario está preguntando sobre inversiones."""
@@ -1294,6 +1358,193 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str, es_audio: b
     # =========================================
     if _es_intencion_inversion(texto_lc):
         return _asesorar_inversion(prompt_usuario, usuario_id)
+
+    # =========================================
+    # 0b. CONSULTAS FINANCIERAS (v3.2 - nueva)
+    # =========================================
+    # Estos parsers deben IR ANTES del bloque "ver presupuestos" general
+    # porque ese bloque es muy goloso y se dispara con cualquier "presupuesto"
+
+    # 0b-1. LISTAR CATEGORÍAS
+    if _parse_listar_categorias(texto_lc):
+        from modules.db import listar_categorias, listar_cuentas, obtener_presupuestos_v2
+        from datetime import datetime
+
+        ahora = datetime.now()
+        mes_actual = ahora.strftime("%Y-%m")
+
+        # Categorías Firestore
+        cats = listar_categorias(usuario_id)
+        # Cuentas
+        cuentas = listar_cuentas(usuario_id)
+        # Presupuestos del mes actual
+        presupuestos = obtener_presupuestos_v2(usuario_id, mes_actual)
+
+        msg = "📂 **Categorías disponibles:**\n"
+        if cats:
+            for c in cats:
+                nombre = c.get("nombre") or c.get("name", "?")
+                icono = c.get("icono") or c.get("icon", "📂")
+                msg += f"  {icono} {nombre}\n"
+        else:
+            msg += "  (ninguna definida)\n"
+
+        # Cuentas
+        if cuentas:
+            total_cuentas = sum(float(c.get("balance", 0) or 0) for c in cuentas)
+            msg += f"\n💳 **Cuentas ({len(cuentas)}):**\n"
+            for c in cuentas:
+                icono = c.get("icon") or c.get("icono", "💳")
+                nombre = c.get("nombre", "?")
+                balance = float(c.get("balance", 0) or 0)
+                msg += f"  {icono} {nombre}: ${balance:,.0f}\n"
+            msg += f"\n💰 **Total en cuentas: ${total_cuentas:,.0f}**\n"
+
+        # Presupuestos del mes
+        if presupuestos:
+            total_pres = sum(float(p.get("limite", 0) or 0) for p in presupuestos.values())
+            msg += f"\n🎯 **Presupuestos {ahora.strftime('%B %Y').title()}:**\n"
+            for nombre, info in presupuestos.items():
+                limite = float(info.get("limite", 0) or 0)
+                gastado = float(info.get("gastado", 0) or 0)
+                restante = limite - gastado
+                emoji = "✅" if restante >= 0 else "⚠️"
+                msg += f"  {emoji} {nombre}: $${limite:,.0f} (gastado: ${gastado:,.0f}, libre: ${restante:,.0f})\n"
+            msg += f"\n📊 **Total presupuestado: ${total_pres:,.0f}**\n"
+
+            # Comparar con cuentas
+            if total_cuentas > total_pres:
+                libre = total_cuentas - total_pres
+                msg += f"💡 **Libre (no asignado): ${libre:,.0f}**\n"
+        else:
+            msg += "\n🎯 No hay presupuestos para este mes.\n"
+
+        return msg
+
+    # 0b-2. ANÁLISIS FINANCIERO DEL MES
+    if _parse_analisis_financiero(texto_lc):
+        from modules.db import listar_cuentas, obtener_balance_financiero, obtener_presupuestos_v2
+        from datetime import datetime
+
+        ahora = datetime.now()
+        mes_actual = ahora.strftime("%Y-%m")
+        nombre_mes = _NOMBRES_MESES[ahora.month]
+
+        # Liquidez en cuentas
+        cuentas = listar_cuentas(usuario_id)
+        liquidez = sum(float(c.get("balance", 0) or 0) for c in cuentas)
+
+        # Balance del mes
+        mes_neto, mes_ingresos, mes_gastos, _ = obtener_balance_financiero(usuario_id, mes_actual)
+
+        # Presupuestos
+        presupuestos = obtener_presupuestos_v2(usuario_id, mes_actual)
+
+        msg = f"📊 **Análisis financiero - {nombre_mes} {ahora.year}**\n\n"
+
+        # Liquidez
+        msg += f"💰 **Liquidez en cuentas:** ${liquidez:,.0f}\n"
+
+        # Flujo del mes
+        msg += f"\n📈 **Flujo del mes:**\n"
+        msg += f"  Ingresos: +${mes_ingresos:,.0f}\n"
+        msg += f"  Gastos: -${mes_gastos:,.0f}\n"
+        msg += f"  Neto: ${mes_neto:,.0f}\n"
+
+        # Comparación presupuesto vs gasto
+        if presupuestos:
+            msg += f"\n🎯 **Presupuestos vs Gastado:**\n"
+            total_pres = 0
+            total_gastado = 0
+            for nombre, info in presupuestos.items():
+                limite = float(info.get("limite", 0) or 0)
+                gastado = float(info.get("gastado", 0) or 0)
+                restante = limite - gastado
+                pct = (gastado / limite * 100) if limite > 0 else 0
+                emoji = "✅" if restante >= 0 else "⚠️"
+                total_pres += limite
+                total_gastado += gastado
+                msg += f"  {emoji} {nombre}: $${limite:,.0f} / $${gastado:,.0f} ({pct:.0f}%)\n"
+
+            if total_pres > 0:
+                msg += f"\n📊 Total: ${total_pres:,.0f} presupuestado, ${total_gastado:,.0f} gastado ({total_gastado/total_pres*100:.0f}%)\n"
+
+            # Gastos sin presupuesto
+            gasto_sin_presupuesto = mes_gastos - total_gastado
+            if gasto_sin_presupuesto > 0:
+                msg += f"\n⚠️ **Gastos sin categoría de presupuesto:** ${gasto_sin_presupuesto:,.0f}\n"
+                msg += "💡 Considera agregar categorías para mejorar el seguimiento.\n"
+
+            # Sobrante libre
+            if liquidez > total_pres:
+                msg += f"\n💡 **Libre (no asignado):** ${liquidez - total_pres:,.0f}\n"
+        else:
+            msg += "\n⚠️ No hay presupuestos configurados para este mes.\n"
+
+        return msg
+
+    # 0b-3. SOBRANTE / NO ASIGNAR
+    if _parse_sobrante(texto_lc):
+        from modules.db import listar_cuentas, obtener_presupuestos_v2, obtener_resumen_presupuestos
+
+        cuentas = listar_cuentas(usuario_id)
+        liquidez = sum(float(c.get("balance", 0) or 0) for c in cuentas)
+
+        from datetime import datetime
+        ahora = datetime.now()
+        mes_actual = ahora.strftime("%Y-%m")
+
+        presupuestos = obtener_presupuestos_v2(usuario_id, mes_actual)
+        total_pres = sum(float(p.get("limite", 0) or 0) for p in presupuestos.values())
+
+        libre = liquidez - total_pres
+
+        msg = "💡 **Sobre el remanente:**\n\n"
+        msg += f"Tus cuentas suman **${liquidez:,.0f}**.\n"
+        msg += f"Tus techos de presupuesto para este mes suman **${total_pres:,.0f}**.\n"
+        if libre > 0:
+            msg += f"\n✅ Te quedan **${libre:,.0f}** libres (sin asignar a ningún presupuesto).\n"
+            msg += "No es necesario crear un presupuesto con este monto — queda disponible en tus cuentas.\n"
+        elif libre == 0:
+            msg += "\n✅ Todo tu dinero está asignado a presupuestos.\n"
+        else:
+            msg += f"\n⚠️ Tus presupuestos exceden la liquidez por **${abs(libre):,.0f}**.\n"
+
+        msg += "\n💡 Si quieres asignar este remanente a un presupuesto, usa:\n"
+        msg += "`presupuesto Libre <monto>` o `presupuesto Reserva <monto>`"
+
+        return msg
+
+    # 0b-4. AJUSTAR BALANCE A PRESUPUESTOS (explicación, no mutación)
+    if _parse_ajustar_balance(texto_lc):
+        from modules.db import listar_cuentas, obtener_presupuestos_v2
+
+        cuentas = listar_cuentas(usuario_id)
+        liquidez = sum(float(c.get("balance", 0) or 0) for c in cuentas)
+
+        from datetime import datetime
+        ahora = datetime.now()
+        mes_actual = ahora.strftime("%Y-%m")
+
+        presupuestos = obtener_presupuestos_v2(usuario_id, mes_actual)
+        total_pres = sum(float(p.get("limite", 0) or 0) for p in presupuestos.values())
+
+        msg = "💡 **Presupuestos vs Balance:**\n\n"
+        msg += "Los presupuestos son **techos de gasto**, no representan dinero real en tus cuentas.\n\n"
+        msg += f"📊 **Este mes ({ahora.strftime('%B')}):**\n"
+        msg += f"  • Liquidez en cuentas: ${liquidez:,.0f}\n"
+        msg += f"  • Techos presupuestarios: ${total_pres:,.0f}\n\n"
+
+        if liquidez > total_pres:
+            msg += f"✅ Tienes ${liquidez - total_pres:,.0f} libre (no asignado a ningún presupuesto).\n"
+        elif liquidez < total_pres:
+            msg += f"⚠️ Tus techos superan la liquidez por ${total_pres - liquidez:,.0f}.\n"
+            msg += "Esto significa que planeas gastar más de lo que tienes disponible.\n"
+
+        msg += "\n💡 Si quieres crear un presupuesto con el remanente disponible, usa:\n"
+        msg += "`presupuesto Libre <monto>` o dime \"crea presupuesto Otros con lo que sobra\""
+
+        return msg
 
     # =========================================
     # 1. LIMPIAR BASE DE DATOS

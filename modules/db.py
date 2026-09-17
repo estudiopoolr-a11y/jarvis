@@ -2264,16 +2264,57 @@ def limpiar_y_cargar_datos_dinamicos(usuario_id: str, presupuestos: dict, transa
         return f"❌ Error reestructurando base de datos: {e}"
 
 def obtener_contexto_financiero(usuario_id: str = "default") -> str:
-    """Contexto ultra-compacto para el AI."""
-    balance_neto, ingresos, gastos, transacciones = obtener_balance_financiero(usuario_id)
-    presupuestos = obtener_resumen_presupuestos(usuario_id)
+    """Construye contexto financiero etiquetado por periodo para el modelo.
+
+    Los presupuestos son techos mensuales; no representan dinero gastado ni deben
+    restarse del neto histórico. Mantener las etiquetas explícitas evita que el
+    modelo mezcle liquidez, mes actual e histórico.
+    """
+    ahora = datetime.now()
+    mes_actual = ahora.strftime("%Y-%m")
+
+    # Histórico: conserva la consulta existente, pero queda etiquetado como tal.
+    historico_neto, historico_ingresos, historico_gastos, _ = obtener_balance_financiero(usuario_id)
+
+    # Periodo actual: todas las comparaciones de presupuesto usan este mismo mes.
+    mes_neto, mes_ingresos, mes_gastos, transacciones_mes = obtener_balance_financiero(
+        usuario_id, mes_actual
+    )
+    presupuestos_mes = obtener_presupuestos_v2(usuario_id, mes_actual)
+
+    cuentas = listar_cuentas(usuario_id)
+    liquidez = sum(float(c.get("balance", 0) or 0) for c in cuentas)
+
+    pres_partes = []
+    for nombre, info in presupuestos_mes.items():
+        limite = float(info.get("limite", 0) or 0)
+        gastado = float(info.get("gastado", 0) or 0)
+        restante = limite - gastado
+        pres_partes.append(
+            f"{nombre}:limite=${limite:,.0f},gastado=${gastado:,.0f},restante=${restante:,.0f}"
+        )
+
+    movimientos = []
+    for transaccion in transacciones_mes[-3:]:
+        tipo = transaccion.get("tipo", "?")
+        monto = transaccion.get("monto", 0)
+        categoria = transaccion.get("categoria", "General")
+        movimientos.append(f"{tipo[:1].upper()}:{float(monto or 0):,.0f}@{categoria}")
+
     tareas = obtener_tareas_pendientes(usuario_id)
-    pres_str = str(presupuestos) if presupuestos else "{}"
-    ultimas = []
-    for t in transacciones[-3:]:
-        ultimas.append(f"{t.get('tipo','?')[:1].upper()}:{t.get('monto',0):,.0f}@{t.get('categoria','?')[:4]}")
     tareas_str = f"{len(tareas)} tareas" if tareas else "sin tareas"
-    return f"[JARVIS] Balance=${balance_neto:,.0f} Ing=${ingresos:,.0f} Gas=${gastos:,.0f} | Pres:{pres_str} | Mov:{ultimas} | {tareas_str}"
+    presupuestos_str = "{}" if not pres_partes else "{" + "; ".join(pres_partes) + "}"
+    movimientos_str = "[]" if not movimientos else "[" + ", ".join(movimientos) + "]"
+
+    return (
+        f"[JARVIS] LIQUIDEZ_CUENTAS=${liquidez:,.0f} | "
+        f"MES_ACTUAL({mes_actual}): Ing=${mes_ingresos:,.0f} "
+        f"Gas=${mes_gastos:,.0f} Neto=${mes_neto:,.0f} | "
+        f"PRESUPUESTOS_MES={presupuestos_str} | "
+        f"HISTORICO: Ing=${historico_ingresos:,.0f} "
+        f"Gas=${historico_gastos:,.0f} Neto=${historico_neto:,.0f} | "
+        f"MOV_ACTUAL={movimientos_str} | {tareas_str}"
+    )
 
 def guardar_mensaje(usuario_id: str, remitente: str, mensaje: str):
     """Guardar mensaje en historial (legacy)."""

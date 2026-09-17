@@ -4,6 +4,11 @@ from modules.ai import (
     _parse_renombrar_presupuesto,
     _parse_presupuesto_multiple,
     _parse_editar_presupuesto,
+    _parse_listar_categorias,
+    _parse_analisis_financiero,
+    _parse_sobrante,
+    _parse_ajustar_balance,
+    _parse_ver_presupuesto,
 )
 from modules.db import _coincidir_categoria, _cat_exacta, _normalizar_cat_str
 
@@ -119,5 +124,42 @@ class TestCoincidirCategoria(unittest.TestCase):
         self.assertTrue(_coincidir_categoria("Mamá Deudas", "mama"))
 
 
+class TestConsultasFinancieras(unittest.TestCase):
+    """Tests para los nuevos parsers de v3.2"""
+
+    def test_listar_categorias(self):
+        self.assertTrue(_parse_listar_categorias("q categorias hay"))
+        self.assertTrue(_parse_listar_categorias("cuales categorias hay"))
+        self.assertTrue(_parse_listar_categorias("lista categorias"))
+        self.assertFalse(_parse_listar_categorias("presupuesto de categoría"))
+
+    def test_analisis_financiero(self):
+        self.assertTrue(_parse_analisis_financiero("dame una analisis financiero"))  # typo ok
+        self.assertTrue(_parse_analisis_financiero("análisis financiero"))
+        self.assertTrue(_parse_analisis_financiero("reporte mensual"))
+        self.assertFalse(_parse_analisis_financiero("presupuesto de septiembre"))
+
+    def test_sobrante(self):
+        self.assertTrue(_parse_sobrante("deja lo que sobra"))
+        self.assertTrue(_parse_sobrante("sobrante"))
+        self.assertTrue(_parse_sobrante("excedente"))
+        self.assertFalse(_parse_sobrante("presupuesto de comida"))
+
+    def test_ajustar_balance(self):
+        self.assertTrue(_parse_ajustar_balance("ajustar mi balance a los presupuestos"))
+        self.assertTrue(_parse_ajustar_balance("ajustar mi balance a los presupuestos de septiembre"))
+        self.assertFalse(_parse_ajustar_balance("ver presupuestos"))
+
+    def test_ver_presupuesto_requiere_consulta(self):
+        # Debe tener palabra de consulta + presupuesto
+        self.assertTrue(_parse_ver_presupuesto("dame los presupuestos"))
+        self.assertTrue(_parse_ver_presupuesto("ver presupuestos"))
+        self.assertTrue(_parse_ver_presupuesto("hay presupuestos?"))
+        # Sin palabra de consulta, no se dispara
+        self.assertFalse(_parse_ver_presupuesto("ajustar mi balance a los presupuestos"))
+        self.assertFalse(_parse_ver_presupuesto("presupuesto comida 150k"))  # es crear
+
+
 if __name__ == "__main__":
     unittest.main()
+
