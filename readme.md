@@ -515,6 +515,50 @@ Usuario: @Jarvis presupuesto Women 300000
 JARVIS: ✅ Presupuesto establecido: Women = $300,000
 ```
 
+### Ejemplo 3b: Presupuestos Múltiples (Texto o Nota de Voz)
+
+```
+Usuario: @Jarvis para septiembre pon presupuesto para mi mamá 150.000 y deudas 205.000
+
+JARVIS: 🎯 Presupuestos configurados:
+       ✅ Mamá: $150,000 (Septiembre 2026)
+       ✅ Deudas: $205,000 (Septiembre 2026)
+```
+
+> 🎙️ **Nota de Voz:** Si envías un audio diciendo *"un presupuesto de 150 para mi mamá y en deudas pon 205"*, JARVIS reconoce automáticamente que son miles y los guarda como $150,000 y $205,000.
+
+### Ejemplo 3c: Edición y Renombramiento de Presupuestos
+
+```
+Usuario: @Jarvis edita mamá a 200.000
+JARVIS: ✅ Presupuesto de Mamá actualizado a $200,000 (Septiembre 2026)
+
+Usuario: @Jarvis renombra el presupuesto de hola yerbis a mamá
+JARVIS: ✏️ Presupuesto de Hola Yerbis renombrado a Mamá (Septiembre 2026)
+```
+
+### Ejemplo 3d: Borrado Individual y Masivo de Presupuestos
+
+```
+Usuario: @Jarvis borra el presupuesto de deudas
+JARVIS: 🗑️ Presupuesto de Deudas eliminado (Septiembre 2026)
+
+Usuario: @Jarvis borra todos los presupuestos de septiembre
+JARVIS: 🗑️ Se eliminaron 2 presupuestos de Septiembre 2026.
+```
+
+### Ejemplo 3e: Consulta de Dinero Disponible
+
+```
+Usuario: @Jarvis cuanto dinero tengo disponible
+
+JARVIS: 💰 Balance financiero:
+       - Ingresos: +$3,862,707
+       - Gastos: -$3,300,716
+       - Neto: $561,992
+       - Presupuestos: Mamá: $200,000, Deudas: $205,000
+```
+
 ### Ejemplo 4: Carga Masiva
 
 ```
@@ -1097,6 +1141,22 @@ Para cada servicio (Web + Background Worker), ve a **Environment** y agrega las 
 - ✅ Comando soporta `!mes actual`, `!mes anterior`, `!mes 08 2026`, `!mes agosto`
 - ✅ Cálculo automático de promedios diarios y proyecciones mensuales/anuales
 - ✅ Bug fix: parser de configuración masiva corregido
+### Presupuestos Naturales, CRUD Completo y Mejoras de Audio (Septiembre 2026 - v3.1)
+- ✅ **CRUD completo de presupuestos mensuales en Firestore (KEBO style)**:
+  - `establecer_presupuesto_mes`: Soporta múltiples presupuestos en lenguaje natural o notas de voz (`para septiembre pon presupuesto para mi mamá 150.000 y deudas 205.000`).
+  - `modificar_presupuesto_mes`: Edita montos de presupuestos existentes (`edita mamá a 200.000` o `cambia deudas a 300k`).
+  - `renombrar_presupuesto_mes`: Renombra la categoría manteniendo el monto (`renombra el presupuesto de hola yerbis a mamá`).
+  - `eliminar_presupuesto_mes`: Borra un presupuesto específico (`borra el presupuesto de deudas`).
+  - `eliminar_todos_presupuestos_mes`: Borrado masivo de todos los presupuestos de un mes (`borra todos los presupuestos de septiembre`).
+- ✅ **Inferencia inteligente de miles en notas de voz (`es_audio=True`)**:
+  - Transcripciones de audio con cifras como `150` o `205` en contexto de presupuestos se normalizan automáticamente a `$150,000` y `$205,000`.
+- ✅ **Parser bidireccional y limpieza conversacional agresiva**:
+  - Reconoce tanto categoría antes del monto (`mamá 150.000`) como después (`150 para mamá`).
+  - Limpieza de conectores, saludos, nombres de meses y muletillas conversacionales (`hola yerbis`, `por favor`, `puedes poner`, etc.).
+- ✅ **Búsqueda difusa y normalización de categorías**:
+  - Insensible a tildes, mayúsculas y caracteres de puntuación (`Mamá` = `mama`, `Hola, Yerbis.` coincide con `hola yerbis`).
+- ✅ **Consulta directa de dinero disponible**:
+  - Detección determinística para frases como `@Jarvis cuanto dinero tengo disponible` o `cuanta plata tengo`.
 
 ### Nuevos Comandos Discord (Septiembre 2026)
 - ✅ `!presupuestos` - Estado detallado con barras de progreso
@@ -1153,6 +1213,8 @@ Para cada servicio (Web + Background Worker), ve a **Environment** y agrega las 
 ---
 
 ## 🚀 Roadmap
+
+> 📌 **Tablero de Tareas y Contexto de IA:** Para el listado vivo de tareas, prioridades y guía arquitectónica para asistentes inteligentes, consulta [`TODO.md`](TODO.md) y [`AGENTS.md`](AGENTS.md).
 
 ### Próximas Mejoras Planeadas
 
