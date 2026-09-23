@@ -1,6 +1,7 @@
 """Firebase client shared by all domain modules."""
 import json
 import os
+from datetime import datetime
 
 import firebase_admin
 from firebase_admin import credentials, firestore, initialize_app
@@ -34,27 +35,27 @@ def inicializar_firebase():
 
                 cred = credentials.Certificate(cred_path)
                 initialize_app(cred)
-                print("✅ Firebase inicializado con éxito creando archivo de credenciales desde la variable de entorno de Render.")
+                print("Firebase inicializado con éxito creando archivo de credenciales desde la variable de entorno de Render.")
             except Exception as e:
-                print(f"❌ Error crítico procesando credenciales desde la variable de entorno: {e}")
+                print(f"Error crítico procesando credenciales desde la variable de entorno: {e}")
                 try:
                     cred_dict = json.loads(firebase_json_str)
                     cred = credentials.Certificate(cred_dict)
                     initialize_app(cred)
-                    print("✅ Firebase inicializado con éxito desde diccionario JSON directo.")
+                    print("Firebase inicializado con éxito desde diccionario JSON directo.")
                 except Exception as e2:
-                    print(f"❌ Error secundario al inicializar con diccionario: {e2}")
+                    print(f"Error secundario al inicializar con diccionario: {e2}")
 
         if not firebase_admin._apps:
             if os.path.exists(cred_path):
                 try:
                     cred = credentials.Certificate(cred_path)
                     initialize_app(cred)
-                    print(f"✅ Firebase inicializado desde archivo local '{cred_path}'.")
+                    print(f"Firebase inicializado desde archivo local '{cred_path}'.")
                 except Exception as e:
-                    print(f"❌ Error cargando archivo local '{cred_path}': {e}")
+                    print(f"Error cargando archivo local '{cred_path}': {e}")
             else:
-                print("⚠️ Advertencia CRÍTICA: No se encontró la variable de entorno FIREBASE_CREDENTIALS ni el archivo de credenciales en Render.")
+                print("ADVERTENCIA CRÍTICA: No se encontró la variable de entorno FIREBASE_CREDENTIALS ni el archivo de credenciales en Render.")
 
     if firebase_admin._apps:
         db = firestore.client()
@@ -77,3 +78,9 @@ def _get_user_ref(usuario_id="default"):
     if not usuario_id or str(usuario_id) in ("default", "iphone_user", "None", ""):
         usuario_id = USUARIO_PRINCIPAL
     return database, database.collection("users").document(str(usuario_id))
+
+
+def serialize_data(data):
+    if isinstance(data, datetime):
+        return data.isoformat()
+    raise TypeError(f"Type {type(data)} not serializable")
