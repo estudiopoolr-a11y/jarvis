@@ -58,7 +58,9 @@ def pensar_respuesta(prompt_usuario: str, usuario_id: str = "default") -> str:
     """Responde preguntas generales inyectando el contexto de Firebase y Google Search."""
     try:
         contexto_db = obtener_contexto_financiero(usuario_id)
-        prompt_completo = f"{SYSTEM_INSTRUCTION}{contexto_db}\n\nMensaje del usuario: {prompt_usuario}"
+        from modules.memory.rag import obtener_contexto_historico
+        contexto_historico = obtener_contexto_historico(prompt_usuario)
+        prompt_completo = f"{SYSTEM_INSTRUCTION}{contexto_db}\n{contexto_historico}\n\nMensaje del usuario: {prompt_usuario}"
 
         # OPTIMIZADO: Solo usar google_search si es necesario
         usar_web = _necesita_busqueda_web(prompt_usuario)

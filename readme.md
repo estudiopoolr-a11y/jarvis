@@ -280,7 +280,7 @@ jarvis/
     └── workflows/            # ⚙️ GitHub Actions (cron jobs)
         ├── daily-summary.yml # 📅 Resumen diario cada 30 min (7am-12pm, 7pm-12am COL)
         └── weekly-summary.yml # 📊 Resumen semanal domingo 8am COL
-```
+```    
 
 ---
 

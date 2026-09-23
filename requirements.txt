@@ -12,3 +12,4 @@ python-multipart
 pillow
 jinja2
 python-dateutil
+chromadb

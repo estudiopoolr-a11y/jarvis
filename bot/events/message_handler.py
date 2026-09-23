@@ -55,18 +55,20 @@ def _debe_ignorar_mensaje(message, usuario_id: str) -> bool:
 
 
 def _obtener_adjunto_relevante(message):
-    """Obtiene el adjunto relevante (audio, txt, csv) del mensaje."""
+    """Obtiene el adjunto relevante (audio, txt, csv, imagen) del mensaje."""
     formatos_audio = (".ogg", ".mp3", ".wav", ".m4a", ".aac", ".flac")
     formatos_txt = (".txt", ".csv")
+    formatos_img = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp")
 
     return next(
         (
             a
             for a in message.attachments
             if (
-                a.filename.lower().endswith(formatos_audio + formatos_txt)
+                a.filename.lower().endswith(formatos_audio + formatos_txt + formatos_img)
                 or "audio" in (a.content_type or "")
                 or (a.content_type or "").startswith("text/")
+                or (a.content_type or "").startswith("image/")
             )
         ),
         None,
@@ -185,6 +187,10 @@ async def handle_message(message):
     if await _procesar_saludo(message, usuario_id, texto_lower):
         return
 
+    # TTS si está habilitado el modo voz o el mensaje lo pide explícitamente
+    from bot.events.tts_handler import enviar_tts_si_corresponde, pide_respuesta_en_voz
+    quiere_voz = pide_respuesta_en_voz(texto_limpio)
+
     # Intento determinístico
     if await _procesar_intencion_deterministica(message, texto_limpio, usuario_id):
         registrar_mensaje_conversacion(usuario_id, message.channel.id)
@@ -196,9 +202,7 @@ async def handle_message(message):
     # Registrar conversación
     registrar_mensaje_conversacion(usuario_id, message.channel.id)
 
-    # TTS si está habilitado
-    from bot.events.tts_handler import enviar_tts_si_corresponde
-    await enviar_tts_si_corresponde(message, usuario_id, respuesta_ia)
+    await enviar_tts_si_corresponde(message, usuario_id, respuesta_ia, forzar=quiere_voz)
 
     # Guardar en Firestore
     try:

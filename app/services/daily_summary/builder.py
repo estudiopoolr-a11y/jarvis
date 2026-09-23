@@ -59,4 +59,14 @@ def construir_mensaje(db, hora_actual: datetime, balance, presupuestos, tareas) 
         partes.append("")
         partes.append("_Sistemas operativos. JARVIS a la espera de instrucciones._")
 
+    # Almacenar resumen en memoria episódica
+    from modules.memory.rag import almacenar_resumen
+    metadata = {
+        "user_id": "global",  # Cambiar si se necesita por usuario
+        "fecha": hora_actual.strftime("%Y-%m-%d"),
+        "tipo": "diario",
+        "tags": ["resumen", "diario"]
+    }
+    almacenar_resumen("\n".join(partes), metadata)
+
     return "\n".join(partes)
