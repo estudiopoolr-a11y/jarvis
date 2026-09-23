@@ -11,6 +11,15 @@ from modules.ai import (
     _parse_ver_presupuesto,
 )
 from modules.db import _coincidir_categoria, _cat_exacta, _normalizar_cat_str
+from modules.nlp.confirmations import (
+    CONFIRMATION_TTL_SECONDS,
+    cancel_budget_deletion,
+    consume_budget_deletion,
+    request_budget_deletion,
+)
+from modules.finance.transactions import obtener_sugerencias_categoria
+from modules.nlp.parsers.transacciones import _parse_transaccion
+from bot.state import completar_consulta_presupuesto, consultas_presupuesto_activas
 
 
 class TestBorrarPresupuesto(unittest.TestCase):
@@ -160,6 +169,41 @@ class TestConsultasFinancieras(unittest.TestCase):
         self.assertFalse(_parse_ver_presupuesto("presupuesto comida 150k"))  # es crear
 
 
+class TestConfirmacionBorradoMasivo(unittest.TestCase):
+    def test_confirmacion_se_consumen_una_sola_vez(self):
+        request_budget_deletion("usuario-prueba", "2026", 9, now=100)
+        pending = consume_budget_deletion("usuario-prueba", now=101)
+        self.assertEqual((pending.year, pending.month), ("2026", 9))
+        self.assertIsNone(consume_budget_deletion("usuario-prueba", now=101))
+
+    def test_confirmacion_expira_y_se_puede_cancelar(self):
+        request_budget_deletion("usuario-expira", "2026", 9, now=100)
+        self.assertIsNone(consume_budget_deletion("usuario-expira", now=100 + CONFIRMATION_TTL_SECONDS + 1))
+        request_budget_deletion("usuario-cancela", "2026", 9, now=100)
+        self.assertTrue(cancel_budget_deletion("usuario-cancela"))
+
+
+class TestSugerenciasComercio(unittest.TestCase):
+    def test_comercios_colombianos_no_requieren_firestore(self):
+        self.assertEqual(obtener_sugerencias_categoria("u", "D1")[0]["categoria"], "Alimentación")
+        self.assertEqual(obtener_sugerencias_categoria("u", "Uber")[0]["categoria"], "Transporte")
+
+
+class TestRegresionesConversacion(unittest.TestCase):
+    def test_gastos_categoria_primero_con_miles(self):
+        casa = _parse_transaccion("gaste en casa 150.000")
+        mama = _parse_transaccion("gasto en mama 150.000")
+        deuda = _parse_transaccion("ya pague la deuda de 205.000")
+        self.assertEqual((casa["categoria"], casa["monto"]), ("Casa", 150000.0))
+        self.assertEqual((mama["categoria"], mama["monto"]), ("Mamá", 150000.0))
+        self.assertEqual((deuda["categoria"], deuda["monto"]), ("Deudas", 205000.0))
+
+    def test_mes_suelto_reutiliza_consulta_presupuesto(self):
+        uid = "seguimiento-presupuesto"
+        consultas_presupuesto_activas.pop(uid, None)
+        completar_consulta_presupuesto(uid, "dame los presupuestos de agosto", ahora=100)
+        self.assertEqual(completar_consulta_presupuesto(uid, "de septiembre", ahora=101), "dame los presupuestos de septiembre")
+
+
 if __name__ == "__main__":
     unittest.main()
-

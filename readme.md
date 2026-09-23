@@ -238,10 +238,10 @@ jarvis/
 │
 ├── bot/                      # 🤖 Bot Discord
 │   ├── __init__.py           # Crea bot, TOKEN, ALLOWED_ROLE_IDS
-│   ├── events.py             # on_ready, on_message (procesa menciones, audio, TXT)
+│   ├── events/               # Listener de mensajes y procesadores (media, tts, context)
 │   ├── state.py              # Caches, cooldown, conversaciones activas
 │   ├── handlers/             # Comandos por dominio
-│   │   ├── finanzas.py       # !finanzas, !presupuestos, !historial, !buscar, !mes, !stats, !top
+│   │   ├── finanzas/         # !finanzas, !presupuestos, !historial, !balance
 │   │   ├── tareas.py         # !tareas, !hecho
 │   │   ├── metas.py          # !metas, !meta, !pagos, !pago, !presupuesto
 │   │   ├── sistema.py        # !inversion, !dormir, !pausar, !voz, !estado, !ayuda, !perfil
@@ -252,11 +252,18 @@ jarvis/
 │       └── tts.py            # Generación de audio edge-tts
 │
 ├── modules/                  # 🧩 Capa de datos e IA (shared)
-│   ├── db.py                 # Firebase Firestore (Kebo + legacy)
-│   ├── ai.py                 # Gemini client, parsers, intents, responses
-│   ├── alertas.py            # Alertas proactivas (presupuestos, tareas, gastos anormales)
-│   ├── importador_txt.py     # Importador de reportes financieros .txt
-│   └── migration.py          # Migración legacy → Kebo
+│   ├── finance/              # Cuentas, presupuestos, categorías y transacciones
+│   │   ├── budgets/          # Gestión de presupuestos
+│   │   └── transactions/     # Gestión de transacciones (create, transfer, future, recent, search, split)
+│   ├── nlp/                  # Router, parsers, acciones y confirmaciones
+│   ├── gemini/               # Cliente, transcripción y fallback de solo lectura
+│   ├── firestore/            # Inicialización y referencias de Firestore
+│   ├── goals/                # Metas de ahorro
+│   ├── reminders/            # Recordatorios y recurrentes
+│   ├── db.py                 # Fachada de compatibilidad para código anterior
+│   ├── ai.py                 # Fachada de compatibilidad pública
+│   ├── alertas.py            # Alertas proactivas
+│   └── importador_txt.py     # Importador de reportes financieros .txt
 │
 ├── scripts/                  # 📜 Scripts de carga/migración puntuales
 │   ├── cargar_finanzas_consolidadas.py

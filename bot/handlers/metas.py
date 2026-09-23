@@ -111,7 +111,7 @@ async def gestionar_meta(ctx, accion: str = None, *, texto: str = None):
             else:
                 await ctx.send("⚠️ Formato: `!meta crear <nombre> <monto> [mes]`")
 
-        elif accion == "progreso" and texto:
+        elif accion in {"progreso", "abonar"} and texto:
             partes = texto.split()
             if len(partes) >= 2:
                 try:
@@ -136,9 +136,9 @@ async def gestionar_meta(ctx, accion: str = None, *, texto: str = None):
                     else:
                         await ctx.send("⚠️ No encontré esa meta.")
                 except ValueError:
-                    await ctx.send("⚠️ Formato: `!meta progreso <nombre> <monto>`")
+                    await ctx.send("⚠️ Formato: `!meta abonar <nombre> <monto>`")
             else:
-                await ctx.send("⚠️ Formato: `!meta progreso <nombre> <monto>`")
+                await ctx.send("⚠️ Formato: `!meta abonar <nombre> <monto>`")
 
         elif accion == "borrar" and texto:
             if eliminar_meta(uid, texto):
@@ -151,103 +151,12 @@ async def gestionar_meta(ctx, accion: str = None, *, texto: str = None):
 
 `!metas` - Ver todas tus metas
 `!meta crear <nombre> <monto> [mes]` - Crear meta
-`!meta progreso <nombre> <monto>` - Sumar progreso
+`!meta abonar <nombre> <monto>` - Sumar progreso (alias: progreso)
 `!meta borrar <nombre>` - Eliminar meta
 
 **Ejemplos:**
 `!meta crear vacaciones 3000000 diciembre`
 `!meta crear casa 50000000`
 `!meta progreso vacaciones 500000`""")
-    except Exception as e:
-        await ctx.send(f"⚠️ Error: {e}")
-
-@bot.command(name="presupuesto")
-async def modificar_presupuesto_cmd(ctx, *, texto: str = None):
-    """Modifica un presupuesto existente: !presupuesto <cat> <nuevo_monto>"""
-    try:
-        uid = str(ctx.author.id)
-        from bot.services.db import modificar_presupuesto, obtener_resumen_presupuestos
-
-        if not texto:
-            presupuestos = obtener_resumen_presupuestos(uid)
-            if not presupuestos:
-                await ctx.send("📋 No tienes presupuestos. Crea uno con `@Jarvis presupuesto <cat> <monto>`")
-                return
-            lista = "\n".join([f"• **{k}**: ${v:,.0f}" for k, v in presupuestos.items()])
-            await ctx.send(f"🎯 **TUS PRESUPUESTOS**\n\n{lista}\n\n**Modificar:** `!presupuesto <cat> <nuevo_monto>`")
-            return
-
-        partes = texto.split()
-        if len(partes) >= 2:
-            try:
-                nuevo_monto = float(partes[-1].replace(',', ''))
-                categoria = " ".join(partes[:-1])
-                modificar_presupuesto(uid, categoria, nuevo_monto)
-                await ctx.send(f"🔄 **Presupuesto actualizado:** {categoria.title()} = **${nuevo_monto:,.0f}**")
-            except ValueError:
-                await ctx.send("⚠️ Formato: `!presupuesto <categoría> <monto>`")
-        else:
-            await ctx.send("⚠️ Formato: `!presupuesto <categoría> <monto>`\nEjemplo: `!presupuesto Women 400000`")
-    except Exception as e:
-        await ctx.send(f"⚠️ Error: {e}")
-
-@bot.command(name="pagos")
-async def ver_pagos_fijos(ctx):
-    """Muestra los pagos fijos mensuales."""
-    try:
-        uid = str(ctx.author.id)
-        from bot.services.db import obtener_pagos_fijos
-        pagos = obtener_pagos_fijos(uid)
-
-        if not pagos:
-            await ctx.send("📋 No tienes pagos fijos. Agrega con `@Jarvis pago fijo <nombre> <monto> día <N>`")
-            return
-
-        reporte = "⏰ **PAGOS FIJOS MENSUALES**\n\n"
-        for p in sorted(pagos, key=lambda x: x.get("dia_mes", 1)):
-            reporte += f"📅 **Día {p['dia_mes']}** - {p['nombre']}: ${p['monto']:,.0f}\n"
-            reporte += f"   Categoría: {p.get('categoria', 'General')}\n\n"
-
-        total = sum(p.get("monto", 0) for p in pagos)
-        reporte += f"💰 **Total mensual:** ${total:,.0f}"
-        await ctx.send(reporte)
-    except Exception as e:
-        await ctx.send(f"⚠️ Error: {e}")
-
-@bot.command(name="pago")
-async def gestionar_pago_fijo(ctx, accion: str = None, *, texto: str = None):
-    """Gestiona pagos fijos: !pago fijo <nombre> <monto> día <N>"""
-    try:
-        uid = str(ctx.author.id)
-        from bot.services.db import guardar_pago_fijo, eliminar_pago_fijo
-
-        if accion == "fijo" and texto:
-            # !pago fijo <nombre> <monto> día <N>
-            import re
-            match = re.search(r'(.+?)\s+([\d,.]+)\s+(?:d[ií]a\s+(\d+))?', texto.lower())
-            if match:
-                nombre = match.group(1).strip().title()
-                monto = float(match.group(2).replace(',', ''))
-                dia = int(match.group(3)) if match.group(3) else 1
-                guardar_pago_fijo(uid, nombre, monto, dia)
-                await ctx.send(f"⏰ **Pago fijo creado:** {nombre} = ${monto:,.0f} (día {dia} de cada mes)")
-            else:
-                await ctx.send("⚠️ Formato: `!pago fijo <nombre> <monto> día <N>`")
-        elif accion == "borrar" and texto:
-            if eliminar_pago_fijo(uid, texto):
-                await ctx.send(f"🗑️ Pago fijo *'{texto}'* eliminado.")
-            else:
-                await ctx.send("⚠️ No encontré ese pago.")
-        else:
-            await ctx.send("""⏰ **GESTIÓN DE PAGOS FIJOS**
-
-`!pagos` - Ver todos los pagos
-`!pago fijo <nombre> <monto> día <N>` - Crear
-`!pago borrar <nombre>` - Eliminar
-
-**Ejemplos:**
-`!pago fijo arriendo 1500000 día 5`
-`!pago fijo internet 120000 día 10`
-`!pago fijo celular 50000 día 20`""")
     except Exception as e:
         await ctx.send(f"⚠️ Error: {e}")

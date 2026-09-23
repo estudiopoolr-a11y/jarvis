@@ -1,59 +1,151 @@
 # 🤖 Guía Operativa para Asistentes de IA (AGENTS.md)
 
-Este documento define la arquitectura, convenciones y reglas operativas para cualquier agente de IA (Claude, Gemini, Antigravity, Cursor, Copilot) que colabore en el proyecto **JARVIS**.
+> **Versión**: v3.2 (2026-09-17)
+> **Documentación viva**: ver carpeta `docs/` para arquitectura, esquema de BD y API.
+
+Este documento define la arquitectura, convenciones y reglas operativas para cualquier agente de IA (Claude, Gemini, Cursor, Copilot) que colabore en el proyecto **JARVIS**.
 
 ---
 
 ## 🏛️ Arquitectura del Sistema
 
-El proyecto está diseñado para funcionar 24/7 de forma híbrida: determinística (parsers regex ultrarrápidos y sin costo) y generativa (Google Gemini con rotación de API keys).
+JARVIS funciona 24/7 en modo híbrido:
 
-### Servicios en Producción (Render.com)
-1. **Background Worker (`jarvis_discord.py`)**:
-   - Corre el bot de Discord de forma persistente.
-   - Escucha menciones, roles y notas de voz (`bot/events.py`).
-2. **Web Service (`server.py`)**:
-   - Servidor FastAPI con dashboard visual y endpoints REST (`app/routes.py`).
-   - Mantenido despierto mediante ping periódico de UptimeRobot (soporta `GET` y `HEAD /`).
+| Modo | Cuándo | Costo | Latencia |
+|---|---|---|---|
+| **Determinístico** | 90% de mensajes | $0 | <10ms |
+| **Generativo** | Cuando ningún parser coincide | Tokens Gemini | <3s |
 
-### Flujo de Ejecución de un Mensaje
-1. Mensaje llega a `bot/events.py:on_message`.
-2. Se limpia mención de bot (`<@ID>`) o rol (`<@&ID>`).
-3. Se invoca **`procesar_intencion_natural(texto, usuario_id, es_audio=...)`**:
-   - Si retorna un string, **se envía de inmediato** y termina el flujo (90% de los casos).
-   - No consume tokens ni cuota de Gemini.
-4. Si retorna `None`, cae al flujo generativo:
-   - Se inyecta contexto financiero reciente (`obtener_contexto_financiero`).
-   - Se invoca `pensar_respuesta()` -> Gemini 2.5 Flash / Flash Lite con rotación de keys (`GEMINI_API_KEYS`).
+### Servicios en producción (Render.com)
 
----
+| Servicio | Archivo | Función |
+|---|---|---|
+| **Background Worker** | `jarvis_discord.py` | Bot Discord persistente |
+| **Web Service** | `server.py` → `app/main.py` | FastAPI + Dashboard |
 
-## 🗄️ Esquema de Base de Datos (Firebase Firestore - Kebo Style)
+### Flujo de mensajes
 
-Todas las colecciones principales residen bajo la ruta del usuario:
-`users/{userId}/`
-- `budgets/{YYYY-MM}/items/{docId}`: Presupuestos mensuales (campos: `category_name`, `category_id`, `amount`, `year`, `month`, `created_at`).
-  - **REGLA CRÍTICA**: Siempre normalizar mes con dos dígitos (`09`, no `9`).
-- `transactions/{YYYY-MM}/items/{txId}`: Transacciones mensuales (campos: `type`, `amount`, `category_id`, `payee`, `description`, `date`).
-- `accounts/{accountId}`: Cuentas bancarias o de efectivo (campos: `name`, `balance`, `type`, `icon`, `color`).
-- `categories/{categoryId}`: Categorías personalizadas y predefinidas.
-- `goals/{goalId}`: Metas de ahorro.
-- `recurring/{recId}`: Pagos recurrentes fijos.
+```text
+Discord → bot/events.py:on_message
+       → procesar_intencion_natural() [modules/ai.py]
+       → parsers determinísticos
+       → respuesta directa
+       → si no hay match: pensar_respuesta() → Gemini
+```
+
+Para más detalle, consultar [`docs/architecture.md`](docs/architecture.md).
 
 ---
 
-## ⚠️ Reglas Operativas y Buenas Prácticas para Agentes
+## 🗄️ Base de Datos
 
-1. **Preservar Parsers Determinísticos**:
-   - **NUNCA** elimines ni reemplaces los parsers de `modules/ai.py` por llamadas directas al LLM. Los parsers evitan el error 429 (Rate Limit) y hacen que el bot responda en milisegundos.
-2. **Evitar Importaciones Dentro de Scopes Locales**:
-   - En Python, si pones `import re` o `from datetime import datetime` dentro de un bloque condicional en una función, Python marcará ese identificador como variable local para toda la función, provocando `UnboundLocalError` en líneas anteriores.
-   - Importa siempre a nivel de módulo o con nombres con prefijo si es estrictamente necesario.
-3. **Manejo de Notas de Voz (`es_audio=True`)**:
-   - En notas de voz, los usuarios suelen decir números como *"150"* o *"205"* para referirse a miles ($150,000 o $205,000 COP). Cuando `es_audio=True` y el monto sea `< 1000`, inferir miles.
-4. **Normalización de Nombres de Categoría**:
-   - Usa siempre `_coincidir_categoria` en `modules/db.py` para comparar nombres, garantizando tolerancia a acentos, mayúsculas y puntuación.
-5. **Windows UTF-8 Safety**:
-   - En scripts o comandos de terminal en Windows, asegura `PYTHONIOENCODING="utf-8"` o `sys.stdout.reconfigure(encoding='utf-8')` para evitar excepciones `UnicodeEncodeError` por emojis.
-6. **Consulta de Tareas Pendientes**:
-   - Consulta y mantén actualizado [`TODO.md`](TODO.md) antes de comenzar o al concluir nuevas funcionalidades.
+Motor: Firebase Firestore, modelo Kebo, con raíz `users/{userId}/`.
+
+```text
+users/{userId}/
+├── accounts/{accountId}
+├── categories/{categoryId}/subcategories/{subcategoryId}
+├── budgets/{YYYY-MM}/items/{budgetItemId}
+├── transactions/{YYYY-MM}/items/{transactionId}
+├── goals/{goalId}
+├── recurring/{recurringId}
+└── reminders/{reminderId}
+```
+
+Reglas críticas:
+
+1. Los periodos usan dos dígitos: `2026-09`, nunca `2026-9`.
+2. Un presupuesto es un **techo mensual**, no dinero separado; nunca se resta de `accounts.balance`.
+3. Un presupuesto solo se compara con gastos del mismo periodo `YYYY-MM`.
+4. El contexto para Gemini debe distinguir `LIQUIDEZ_CUENTAS`, `MES_ACTUAL`, `PRESUPUESTOS_MES` e `HISTORICO`.
+5. No guardar tokens, contraseñas ni credenciales bancarias en Firestore o Git.
+
+El esquema completo está en [`docs/database-schema.md`](docs/database-schema.md).
+
+---
+
+## ⚠️ Reglas para agentes
+
+### 1. Preservar parsers determinísticos
+
+- **Nunca** reemplazar parsers de `modules/ai.py` por llamadas directas al LLM.
+- Todo parser nuevo debe tener pruebas en `tests/test_parsers.py`.
+- Las mutaciones de Firestore deben ejecutarse solamente mediante flujo determinístico explícito.
+- Gemini opera en modo de solo lectura y nunca debe afirmar que modificó datos.
+
+### 2. Imports a nivel de módulo
+
+Evitar imports dentro de bloques condicionales porque pueden causar `UnboundLocalError`:
+
+```python
+# Correcto
+import re
+
+def buscar(texto):
+    return re.search(r"...", texto)
+```
+
+### 3. Notas de voz
+
+Con `es_audio=True`, un monto menor que 1000 puede representar miles de COP: `150` → `$150,000`.
+
+### 4. Categorías
+
+Usar `_coincidir_categoria()` o `_cat_exacta()` de `modules/db.py`. La comparación tolera acentos, mayúsculas y puntuación, priorizando coincidencia exacta antes de parcial.
+
+### 5. Consultas financieras
+
+- `q categorias hay` debe listar categorías, cuentas y presupuestos, no caer a Gemini.
+- `dame un analisis financiero` debe usar el periodo actual por defecto.
+- `deja lo que sobra` no crea ni modifica presupuestos automáticamente.
+- `ajustar mi balance a los presupuestos` debe explicar que son conceptos diferentes y no mutar saldos.
+- No comparar techos de septiembre con gastos históricos.
+
+### 6. Tono
+
+Respuestas directas pero amables:
+
+- No regañar ni contradecir de forma condescendiente.
+- Si falta información, explicar qué dato falta.
+- En frases ambiguas, ofrecer una interpretación y un comando concreto.
+
+### 7. Windows y UTF-8
+
+```bash
+PYTHONIOENCODING=utf-8 py -3 script.py
+```
+
+En Python:
+
+```python
+sys.stdout.reconfigure(encoding="utf-8")
+```
+
+### 8. Cambios en documentación
+
+Cuando cambien arquitectura, esquema o rutas:
+
+1. Actualizar el Markdown correspondiente en `docs/`.
+2. Actualizar `AGENTS.md` si cambia una regla operativa.
+3. Actualizar tests y ejecutar la suite.
+4. Mantener `TODO.md` alineado con el estado real.
+
+---
+
+## 🧪 Verificación
+
+```bash
+py -3 -m unittest tests.test_parsers -v
+```
+
+Las rutas FastAPI se documentan en [`docs/api-endpoints.md`](docs/api-endpoints.md).
+
+---
+
+## 📚 Archivos de contexto
+
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/database-schema.md`](docs/database-schema.md)
+- [`docs/api-endpoints.md`](docs/api-endpoints.md)
+- [`TODO.md`](TODO.md)
+- [`README.md`](README.md)

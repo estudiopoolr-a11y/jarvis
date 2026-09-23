@@ -31,6 +31,7 @@ canales_activos: set[int] = set()
 # Conversaciones activas por usuario:
 # {usuario_id: {"timestamp": float, "canal_id": int, "contador": int}}
 conversaciones_activas: dict[str, dict] = {}
+consultas_presupuesto_activas: dict[str, float] = {}
 
 # Cache de contexto financiero: {usuario_id: (datos_tuple, timestamp)}
 _finanzas_cache: dict[str, tuple] = {}
@@ -84,6 +85,22 @@ def registrar_mensaje_conversacion(usuario_id: str, canal_id: int) -> None:
             "canal_id": canal_id,
             "contador": 1,
         }
+
+
+def completar_consulta_presupuesto(usuario_id: str, texto: str, ahora: float | None = None) -> str:
+    """Completa un seguimiento de mes sin enviarlo como frase suelta a Gemini."""
+    momento = time.time() if ahora is None else ahora
+    texto_lc = texto.lower().strip()
+    meses = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "setiembre", "octubre", "noviembre", "diciembre")
+    if "presupuesto" in texto_lc and any(p in texto_lc for p in ("dame", "ver", "mostrar", "lista")):
+        consultas_presupuesto_activas[usuario_id] = momento
+        return texto
+    if (texto_lc.startswith("de ") or texto_lc in meses) and any(m in texto_lc for m in meses):
+        ultima = consultas_presupuesto_activas.get(usuario_id)
+        if ultima is not None and momento - ultima < _CONVERSACION_TTL:
+            consultas_presupuesto_activas[usuario_id] = momento
+            return f"dame los presupuestos {texto_lc}"
+    return texto
 
 
 def verificar_cooldown(usuario_id: str) -> bool:

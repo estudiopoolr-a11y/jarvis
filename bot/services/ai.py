@@ -1,33 +1,14 @@
-"""
-bot/services/ai.py - Wrappers a modules.ai para uso en handlers del bot.
+"""Lazy bridge from Discord handlers to specialised AI modules."""
+from __future__ import annotations
 
-Centraliza las funciones de IA que el bot usa: parsers, Gemini, TTS, imágenes.
-"""
-from modules.ai import (
-    # Parsers determinísticos
-    procesar_intencion_natural,
-    # Cliente Gemini / respuestas
-    pensar_respuesta,
-    pensar_respuesta_audio,
-    pensar_respuesta_imagen,
-    analizar_inversion,
-    transcribir_audio,
-    # Internos para estado/debug
-    _API_KEYS,
-    _key_index,
-    _esperar_por_rpm,
-    _gemini_call_with_fallback,
-)
+import modules.ai as _ai
 
-__all__ = [
-    "procesar_intencion_natural",
-    "pensar_respuesta",
-    "pensar_respuesta_audio",
-    "pensar_respuesta_imagen",
-    "analizar_inversion",
-    "transcribir_audio",
-    "_API_KEYS",
-    "_key_index",
-    "_esperar_por_rpm",
-    "_gemini_call_with_fallback",
-]
+
+def resolve_ai(name: str):
+    """Return an AI capability without importing unrelated features."""
+    return getattr(_ai, name)
+
+
+def __getattr__(name: str):
+    """Preserve legacy ``from bot.services.ai import name`` imports."""
+    return resolve_ai(name)

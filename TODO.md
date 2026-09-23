@@ -56,10 +56,14 @@ bot/events.py (limpieza de menciones)
 
 ### 🟡 2. Tareas Inmediatas / Próximo Sprint (Alta Prioridad)
 
-- [ ] **Limpieza de Documentos Corruptos en Firestore**:
+- [x] **Limpieza de Documentos Corruptos en Firestore**:
   - *Contexto*: Pruebas anteriores con el parser viejo crearon documentos con nombres como `"Hola, Yerbis. Yerbis, Puedes Poner"` y `"Mamá Deudas,"`.
-  - *Acción*: Ejecutar el comando en Discord `borra todos los presupuestos de septiembre` o crear un script en `modules/mantenimiento.py` para purgar documentos con nombres anómalos.
-- [ ] **Suite de Pruebas Unitarias Automatizadas (`tests/`)**:
+  - *Implementado*: Script `scripts/cleanup_budgets_sep2026.py` ejecutado con éxito. Estado final:
+    - Casa: $150,000
+    - Mamá: $150,000
+    - Deudas: $205,000
+    - Sin documentos corruptos.
+- [x] **Suite de Pruebas Unitarias Automatizadas (`tests/`)**:
   - *Contexto*: El parser determinístico tiene múltiples regex y stop-words que deben verificarse contra regresiones.
   - *Acción*: Crear `tests/test_parsers.py` con `pytest` cubriendo:
     - `_parse_presupuesto_multiple` (texto y notas de voz con y sin conectores).
@@ -67,11 +71,11 @@ bot/events.py (limpieza de menciones)
     - `_parse_renombrar_presupuesto` (cambios de nombre de categoría).
     - `_parse_borrar_presupuesto` (individual y masivo `todos`).
     - `_coincidir_categoria` (tildes, mayúsculas, substrings).
-- [ ] **Confirmación para Borrado Masivo**:
+- [x] **Confirmación para Borrado Masivo**:
   - *Contexto*: Si un usuario dice `borra todos los presupuestos de septiembre`, se eliminan sin confirmación previa.
-  - *Acción*: Solicitar confirmación interactiva (botón de Discord o comando de confirmación `!confirmar`) antes de ejecutar `eliminar_todos_presupuestos_mes`.
-- [ ] **GitHub Actions CI para Tests**:
-  - *Acción*: Agregar un workflow `.github/workflows/test.yml` que corra `pytest` en cada push a `main` antes de que Render despliegue.
+  - *Implementado*: Se guarda una confirmación por usuario durante cinco minutos. El bot solo ejecuta `eliminar_todos_presupuestos_mes` al recibir `confirmar presupuestos`; `cancelar presupuestos` la elimina.
+- [x] **GitHub Actions CI para Tests**:
+  - *Implementado*: `.github/workflows/test.yml` instala dependencias y ejecuta la suite estándar `python -m unittest discover -v` en push y pull request a `main`.
 
 ---
 
@@ -79,15 +83,15 @@ bot/events.py (limpieza de menciones)
 
 - [ ] **Function Calling Nativo con Gemini Tools**:
   - *Contexto*: Actualmente el fallback a Gemini solo genera texto y no puede modificar la base de datos de forma autónoma.
-  - *Acción*: Definir herramientas (`tools` en Google GenAI SDK) para que Gemini pueda invocar `registrar_transaccion`, `crear_meta`, `establecer_presupuesto`, etc., de forma estructurada.
+  - *Estado*: No implementar escrituras autónomas de Gemini. La regla operativa exige que Gemini sea solo lectura; cualquier futura herramienta debe limitarse a propuestas que se revaliden mediante el router determinístico y confirmación explícita del usuario.
 - [ ] **Reportes Financieros en PDF / Excel**:
   - *Acción*: Crear endpoint `/api/reportes/mensual` que genere un balance descargable con gráficos y tablas de transacciones.
-- [ ] **Categorización Automática de Gastos**:
-  - *Acción*: Enriquecer `modules/db.py:obtener_sugerencias_categoria` con mapeo inteligente de establecimientos colombianos comunes (D1, Éxito, Carulla, Oxxo, etc.).
+- [x] **Categorización Automática de Gastos**:
+  - *Implementado*: `modules/finance/transactions/search.py:obtener_sugerencias_categoria` reconoce comercios colombianos comunes (D1, Éxito, Carulla, Oxxo, Ara, Rappi, Uber, DiDi y otros) antes de consultar el historial.
 - [ ] **Manejo de Metas de Ahorro Interactivas**:
   - *Acción*: Agregar comandos directos para metas (`!meta crear [nombre] [monto] [fecha]` y `!meta abonar [nombre] [monto]`).
-- [ ] **Transferencias entre Cuentas en Lenguaje Natural**:
-  - *Acción*: Parser para frases como `"pasé 50.000 de Bancolombia a Nequi"` invocando `registrar_transferencia`.
+- [x] **Transferencias entre Cuentas en Lenguaje Natural**:
+  - *Implementado*: Refactorización de `modules/finance/transactions/` completada. Parser para frases como `"pasé 50.000 de Bancolombia a Nequi"` invoca `registrar_transferencia`.
 
 ---
 

@@ -10,6 +10,7 @@ from modules.db import (
     obtener_tareas_pendientes,
     marcar_tarea_completada,
     obtener_balance_financiero,
+    obtener_contexto_financiero,
     obtener_resumen_presupuestos,
     # Kebo (nueva estructura)
     registrar_transaccion_v2,
@@ -77,6 +78,7 @@ __all__ = [
     "obtener_tareas_pendientes",
     "marcar_tarea_completada",
     "obtener_balance_financiero",
+    "obtener_contexto_financiero",
     "obtener_resumen_presupuestos",
     "registrar_transaccion_v2",
     "obtener_balance_v2",

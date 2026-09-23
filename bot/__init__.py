@@ -28,4 +28,4 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 def register_handlers() -> None:
     """Importa eventos y comandos para registrarlos en ``bot``."""
     from bot import events  # noqa: F401
-    from bot.handlers import finanzas, tareas, metas, sistema, mantenimiento  # noqa: F401
+    from bot.handlers import finanzas, tareas, metas, pagos, presupuestos, sistema, mantenimiento  # noqa: F401

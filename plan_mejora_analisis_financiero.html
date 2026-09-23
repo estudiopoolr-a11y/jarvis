@@ -1,0 +1,473 @@
+<title>Análisis Financiero JARVIS</title>
+<style>
+:root {
+  --bg: #f8f6f3;
+  --surface: #ffffff;
+  --text: #1a1a1a;
+  --text-secondary: #555;
+  --text-muted: #888;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --border: #e0ddd8;
+  --warn-bg: #fef3c7;
+  --warn-text: #92400e;
+  --warn-border: #f59e0b;
+  --ok-bg: #d1fae5;
+  --ok-text: #065f46;
+  --ok-border: #10b981;
+  --err-bg: #fee2e2;
+  --err-text: #991b1b;
+  --err-border: #ef4444;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111113;
+    --surface: #1c1c20;
+    --text: #e8e8e8;
+    --text-secondary: #aaa;
+    --text-muted: #777;
+    --accent: #60a5fa;
+    --accent-light: #1e3a5f;
+    --border: #333;
+    --warn-bg: #422006;
+    --warn-text: #fbbf24;
+    --warn-border: #f59e0b;
+    --ok-bg: #052e16;
+    --ok-text: #6ee7b7;
+    --ok-border: #10b981;
+    --err-bg: #3b0d0d;
+    --err-text: #fca5a5;
+    --err-border: #ef4444;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #111113;
+  --surface: #1c1c20;
+  --text: #e8e8e8;
+  --text-secondary: #aaa;
+  --text-muted: #777;
+  --accent: #60a5fa;
+  --accent-light: #1e3a5f;
+  --border: #333;
+  --warn-bg: #422006;
+  --warn-text: #fbbf24;
+  --warn-border: #f59e0b;
+  --ok-bg: #052e16;
+  --ok-text: #6ee7b7;
+  --ok-border: #10b981;
+  --err-bg: #3b0d0d;
+  --err-text: #fca5a5;
+  --err-border: #ef4444;
+}
+
+body {
+  margin: 0;
+  padding: 16px;
+  padding-block: 16px;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+.container {
+  max-width: 768px;
+  margin: 0 auto;
+}
+
+h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  text-wrap: balance;
+  margin: 0 0 4px;
+  color: var(--text);
+}
+
+h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 32px 0 12px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 20px 0 8px;
+  color: var(--text);
+}
+
+.subtitle {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-ok { background: var(--ok-bg); color: var(--ok-text); border: 1px solid var(--ok-border); }
+.badge-warn { background: var(--warn-bg); color: var(--warn-text); border: 1px solid var(--warn-border); }
+.badge-err { background: var(--err-bg); color: var(--err-text); border: 1px solid var(--err-border); }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.card h4 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin: 12px 0;
+}
+
+table th, table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+table th {
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+table td {
+  color: var(--text-secondary);
+}
+
+table td:first-child {
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 0.82rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+code {
+  background: var(--accent-light);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  color: var(--accent);
+}
+
+pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  color: var(--text);
+}
+
+.list {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.list li {
+  margin: 4px 0;
+  color: var(--text-secondary);
+}
+
+.tag {
+  display: inline-block;
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 0.78rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.metric-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.metric-card .label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.metric-card .value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.metric-card .note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.timeline {
+  border-left: 2px solid var(--border);
+  padding-left: 16px;
+  margin: 16px 0;
+}
+
+.timeline-item {
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -21px;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.timeline-item .time {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.timeline-item .event {
+  margin-top: 4px;
+}
+
+.no-do {
+  background: var(--err-bg);
+  border: 1px solid var(--err-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 16px 0;
+}
+
+.no-do li {
+  color: var(--err-text);
+  margin: 4px 0;
+}
+</style>
+<div class="container">
+  <h1>Análisis Financiero JARVIS</h1>
+  <p class="subtitle">Plan de mejora · 17 Sep 2026 · v3.2</p>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px">
+    <span class="badge badge-warn">4 comandos sin parser</span>
+    <span class="badge badge-err">Gemini mezcla periodos</span>
+    <span class="badge badge-ok">Presupuestos CRUD limpio</span>
+  </div>
+
+  <h2>1. Diagnóstico</h2>
+
+  <p>La conversación del 17 Sep muestra que <strong>el CRUD de presupuestos funciona</strong> (Casa $150k se creó bien; Septiembre quedó Casa/Mamá/Deudas). El fallo es de <strong>comprensión financiera y de parsers de consulta</strong>, no de mutación.</p>
+
+  <h3>Comandos que el parser no entendió</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Comando</th>
+        <th>Esperaba</th>
+        >Gemini hizo
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>q categorias hay?
+total de todas las bases</td>
+        <td>Categorías + cuentas + presupuestos</td>
+        <td>Listó presupuestos del mes, regañó</td>
+      </tr>
+      <tr>
+        <td>ya he gastado todo… deja lo q sobra</td>
+        <td>Confirmar remanente libre</td>
+        <td>"excedente $56,992", "analice los datos"</td>
+      </tr>
+      <tr>
+        <td>ajustar mi balance a los presupuestos</td>
+        <td>Explicar techos vs saldo</td>
+        <td>Parser "ver presupuestos" se disparó</td>
+      </tr>
+      <tr>
+        <td>dame una analisis financiero</td>
+        <td>Informe determinístico del mes</td>
+        <td>Mezcló $505k (1 mes) con $3.3M (histórico)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Tres métricas distintas (NUNCA mezclar)</h3>
+
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="label">Liquidez en cuentas</div>
+      <div class="value">$561,992</div>
+      <div class="note">Dinero real disponible · listar_cuentas</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Presupuestos mes</div>
+      <div class="value">$505,000</div>
+      <div class="note">Techos de gasto · Sep 2026 solo</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Neto histórico</div>
+      <div class="value">$561,991</div>
+      <div class="note">Ingresos − gastos todos los meses</div>
+    </div>
+  </div>
+
+  <h2>2. Cambios</h2>
+
+  <h3>2.1 Parsers determinísticos <span class="tag">modules/ai.py</span></h3>
+
+  <p>Insertar <strong>antes</strong> del bloque <code>4b. VER PRESUPUESTOS</code> (línea ~1633), porque ese bloque se come cualquier mensaje que contenga la palabra <code>presupuesto</code>.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Intención</th>
+        <th>Patrón</th>
+        <th>Acción</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Listar categorías</td>
+        <td>
+          <code>categorias.*(hay|cuáles|listar)</code>
+        </td>
+        <td><code>listar_categorias()</code> + presupuestos del mes + cuentas. No Gemini.</td>
+      </tr>
+      <tr>
+        <td>Análisis del mes</td>
+        <td>
+          <code>(analisis|análisis|resumen) (financiero|mensual)</code>
+        </td>
+        <td>Informe: liquidez, neto del mes, cada presupuesto vs gastado, gastos sin categoría, excedente del mes.</td>
+      </tr>
+      <tr>
+        <td>Sobrante / no asignar</td>
+        <td>
+          <code>deja.*sobra|sobrante|excedente</code>
+        </td>
+        <td>Confirmar: no se crea presupuesto con el remanente. Mostrar diferencia cuentas vs techos.</td>
+      </tr>
+      <tr>
+        <td>Ajustar balance</td>
+        <td>
+          <code>ajustar.*balance.*presupuesto</code>
+        </td>
+        <td>No mutar cuentas. Explicar techos. Sugerir presupuesto "Libre/Otros".</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>2.2 Ver presupuestos más selectivo</h3>
+
+  <p>El parser actual (<code>"presupuesto" in texto_lc</code>) se dispara con <code>ajustar mi balance a los presupuestos de septiembre</code>. Exigir palabra de consulta:</p>
+
+  <pre>if ("presupuesto" in texto_lc or "presupuestos" in texto_lc) and
+   any(k in texto_lc for k in ["dame", "ver", "mostrar", "hay", "cuáles", "lista"]):
+</pre>
+
+  <h3>2.3 Contexto etiquetado <span class="tag">modules/db.py</span></h3>
+
+  <p><code>obtener_contexto_financiero</code> actualmente inyecta:</p>
+
+  <pre>[JARVIS] Balance=$561,992 Ing=$3,862,707 Gas=$3,300,716
+| Pres:{Casa:150k, Mamá:150k, Deudas:205k}</pre>
+
+  <p>El problema es que <code>Balance</code> (histórico) y <code>Pres</code> (mes) se presentan sin etiqueta de periodo, y Gemini los resta como si fueran lo mismo.</p>
+
+  <p>Nuevo formato:</p>
+
+  <pre>LIQUIDEZ_CUENTAS=$X
+MES_ACTUAL(2026-09): Ing=$Y Gas=$Z Neto=$W
+PRESUPUESTOS_MES:{Casa:150k(gastado:0), Mamá:150k(gastado:0), Deudas:205k(gastado:140k)}
+HISTORICO: Ing=$A Gas=$B Neto=$C
+MOV_ACTUAL:[D:35k@Gym, D:140k@Deudas, D:212k@Moto]</pre>
+
+  <h3>2.4 Tono del SYSTEM_INSTRUCTION</h3>
+
+  <p>El bloque actual de solo lectura se queda (evita alucinaciones de write). Añadir:</p>
+
+  <ul class="list">
+    <li>No contradecir ni regañar al usuario.</li>
+    <li>No restar presupuestos del neto histórico.</li>
+    <li>Si la frase es ambigua, ofrecer 1 interpretación + 1 comando concreto.</li>
+    <li>Si pide análisis, preferir datos del mes actual salvo que diga "todas las bases".</li>
+  </ul>
+
+  <h2>3. Tests</h2>
+
+  <p>Añadir a <code>tests/test_parsers.py</code>:</p>
+
+  <ul class="list">
+    <li><code>test_listar_categorias</code> → <code>"q categorias hay"</code> → True</li>
+    <li><code>test_analisis_financiero</code> → <code>"dame una analisis financiero"</code> → True (typo)</li>
+    <li><code>test_deja_lo_que_sobra</code> → <code>"deja lo que sobra"</code> → True</li>
+    <li><code>test_ajustar_balance</code> → <code>"ajustar mi balance a los presupuestos de septiembre"</code> → True</li>
+    <li><code>test_ver_presupuesto_no_se_dispara_en_ajustar</code> → <code>"ajustar mi balance a los presupuestos"</code> → None</li>
+  </ul>
+
+  <h2>4. No hacer</h2>
+
+  <ul class="no-do list">
+    <li>No borrar presupuestos de Casa/Mamá/Deudas (están correctos)</li>
+    <li>No mutar saldos de cuentas sin confirmación explícita</li>
+    <li>No llamar a Gemini para análisis mensuales (determinístico)</li>
+    <li>No restar techos presupuestarios del neto histórico (periodos distintos)</li>
+  </ul>
+
+  <h2>5. Verificación</h2>
+
+  <pre>py -3 -m unittest tests.test_parsers -v</pre>
+
+  <p>Confirmar que <code>obtener_contexto_financiero</code> devuelva etiquetas <code>LIQUIDEZ_CUENTAS</code>, <code>MES_ACTUAL</code>, <code>HISTORICO</code>.</p>
+
+  <p>Manual: el informe determinístico de septiembre debe comparar $505k de techos <strong>solo</strong> con gastos de <code>2026-09</code>, no con $3.3M históricos.</p>
+</div>
