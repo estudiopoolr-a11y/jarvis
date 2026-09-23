@@ -5,6 +5,9 @@ import os
 # Asegurar que el path incluya el directorio raíz
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+# Configurar la salida estándar para UTF-8 en Windows
+sys.stdout.reconfigure(encoding='utf-8')
+
 from modules.firestore.client import inicializar_firebase, USUARIO_PRINCIPAL, _get_user_ref
 from modules.finance.accounts import listar_cuentas, crear_cuenta
 

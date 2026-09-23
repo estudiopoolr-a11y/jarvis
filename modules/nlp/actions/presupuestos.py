@@ -170,6 +170,27 @@ def handle_cuentas_kebo(texto_lc: str, usuario_id: str, es_audio: bool = False) 
                 else:
                     return "⚠️ Error al crear la cuenta."
 
+            # Renombrar cuenta: "renombra cuenta viejo a nuevo", "!renombrar_cuenta viejo nuevo", "cambia nombre de cuenta X a Y"
+            rename_match = re.search(
+                r'(?:renombra|cambia\s+el\s+nombre\s+de\s+)\s*cuenta\s+(?:de\s+)?(.+?)\s+(?:a|por|hacia)\s+(.+)|'
+                r'!renombrar_cuenta\s+([^\s]+)\s+(.+)',
+                texto_lc
+            )
+            if rename_match:
+                if rename_match.group(1) and rename_match.group(2):
+                    viejo = rename_match.group(1).strip()
+                    nuevo = rename_match.group(2).strip().title()
+                else:
+                    viejo = rename_match.group(3).strip()
+                    nuevo = rename_match.group(4).strip().title()
+                
+                from modules.db import renombrar_cuenta
+                success, msg_resp = renombrar_cuenta(usuario_id, viejo, nuevo)
+                if success:
+                    return f"✅ {msg_resp}"
+                else:
+                    return f"⚠️ {msg_resp}"
+
             # Ver saldo de cuenta específica: "saldo nequi", "cuanto tengo en efectivo"
             saldo_match = re.search(r'(?:saldo|balance|cuanto\s+tengo|cuánto\s+tengo)\s+(?:en\s+|de\s+)?(.+)', texto_lc)
             if saldo_match:

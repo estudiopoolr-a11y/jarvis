@@ -2,7 +2,7 @@
 
 La implementación vive en modules/firestore, modules/finance, modules/goals y modules/reminders.
 """
-from modules.finance.accounts import actualizar_balance_cuenta, crear_cuenta, listar_cuentas
+from modules.finance.accounts import actualizar_balance_cuenta, crear_cuenta, listar_cuentas, renombrar_cuenta
 from modules.finance.analysis import (
     exportar_csv,
     exportar_json_completo,

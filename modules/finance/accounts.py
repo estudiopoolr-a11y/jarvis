@@ -86,3 +86,37 @@ def actualizar_balance_cuenta(usuario_id, cuenta_id, delta):
     except Exception as e:
         print(f"Error actualizando balance: {e}")
 
+def renombrar_cuenta(usuario_id, cuenta_id_o_nombre, nuevo_nombre):
+    """Renombra una cuenta existente buscando por ID o por nombre exacto/parcial."""
+    _, user_ref = _get_user_ref(usuario_id)
+    if not user_ref:
+        return False, "No se pudo obtener la referencia del usuario."
+    try:
+        accounts_ref = user_ref.collection("accounts")
+        # Primero intentamos buscar por ID directo
+        doc_ref = accounts_ref.document(cuenta_id_o_nombre)
+        doc = doc_ref.get()
+        
+        target_id = None
+        if doc.exists:
+            target_id = cuenta_id_o_nombre
+        else:
+            # Buscar por nombre (case-insensitive o parcial)
+            docs = accounts_ref.stream()
+            for d in docs:
+                data = d.to_dict()
+                if cuenta_id_o_nombre.lower() in data.get("nombre", "").lower():
+                    target_id = d.id
+                    break
+        
+        if not target_id:
+            return False, f"No se encontró la cuenta '{cuenta_id_o_nombre}'."
+            
+        accounts_ref.document(target_id).update({
+            "nombre": nuevo_nombre
+        })
+        return True, f"Cuenta renombrada exitosamente a '{nuevo_nombre}'."
+    except Exception as e:
+        print(f"Error renombrando cuenta: {e}")
+        return False, f"Error al renombrar cuenta: {e}"
+
