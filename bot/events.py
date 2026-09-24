@@ -16,6 +16,7 @@ async def on_ready():
     print("==================================================")
     print("Sistemas en línea. JARVIS v3.0 Operativo.")
     print(f"Conectado como: {bot.user}")
+    print(f"Intents activos: {bot.intents}")
     print("==================================================")
 
 
@@ -24,4 +25,5 @@ async def on_message(message):
     """Handler principal de mensajes entrantes."""
     print(f"🔥 [ENTRADA DISCORD] Autor: {message.author} | Canal: {message.channel} | Texto: '{message.content}' | Adjuntos: {len(message.attachments)}")
     from bot import bot
+    await bot.process_commands(message)
     await handle_message(message)
