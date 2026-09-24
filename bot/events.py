@@ -22,5 +22,6 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     """Handler principal de mensajes entrantes."""
+    print(f"🔥 [ENTRADA DISCORD] Autor: {message.author} | Canal: {message.channel} | Texto: '{message.content}' | Adjuntos: {len(message.attachments)}")
     from bot import bot
     await handle_message(message)
