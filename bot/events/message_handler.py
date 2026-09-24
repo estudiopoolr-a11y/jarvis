@@ -165,7 +165,7 @@ async def _ejecutar_gemini(message, texto_limpio: str, usuario_id: str, adjunto)
 
 async def handle_message(message):
     """Handler principal de mensajes."""
-    print(f"[ON_MESSAGE] Recibido: {message.content[:50] if message.content else 'sin texto'}")
+    print(f"📩 [EVENTO RECIBIDO] De: {message.author} | Contenido: {message.content} | Adjuntos: {len(message.attachments)}")
 
     usuario_id = str(message.author.id)
     canales_activos.add(message.channel.id)
