@@ -22,6 +22,9 @@ ALLOWED_ROLE_IDS = [1537704466407497738]
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.messages = True
+intents.guilds = True
+intents.dm_messages = True
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
