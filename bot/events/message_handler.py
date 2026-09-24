@@ -76,10 +76,13 @@ def _obtener_adjunto_relevante(message):
     )
 
 
-def _verificar_permisos_mencion(message) -> bool:
+def _verificar_permisos_mencion(message, adjunto) -> bool:
     """Verifica si es DM o mensaje tiene mención válida o está en conversación activa."""
-    if isinstance(message.channel, discord.DMChannel):
+    # Procesar mensajes con audio en DMs o #general sin mención exigida:
+    if adjunto and (isinstance(message.channel, discord.DMChannel) or
+                    (hasattr(message.channel, 'name') and message.channel.name == 'general')):
         return True
+
     es_mencion_usuario = bot.user.mentioned_in(message) or any(m.id == bot.user.id for m in message.mentions)
     es_mencion_rol = any(role.id in ALLOWED_ROLE_IDS for role in message.role_mentions)
     return es_mencion_usuario or es_mencion_rol
