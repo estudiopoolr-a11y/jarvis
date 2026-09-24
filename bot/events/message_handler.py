@@ -17,6 +17,7 @@ from bot.state import (
     completar_consulta_presupuesto,
 )
 from bot.services.ai import resolve_ai
+from jarvis_tools import ALL_TOOLS, TOOL_MAP
 from bot.services.db import (
     guardar_mensaje,
     obtener_tareas_pendientes,
@@ -77,7 +78,7 @@ def _obtener_adjunto_relevante(message):
 
 def _verificar_permisos_mencion(message) -> bool:
     """Verifica si el mensaje tiene mención válida o está en conversación activa."""
-    es_mencion_usuario = bot.user.mentioned_in(message)
+    es_mencion_usuario = bot.user.mentioned_in(message) or any(m.id == bot.user.id for m in message.mentions)
     es_mencion_rol = any(role.id in ALLOWED_ROLE_IDS for role in message.role_mentions)
     return es_mencion_usuario or es_mencion_rol
 
@@ -150,6 +151,10 @@ async def _ejecutar_gemini(message, texto_limpio: str, usuario_id: str, adjunto)
     if adjunto:
         return await procesar_adjunto(message, adjunto, texto_limpio, usuario_id, prompt_con_contexto)
     else:
+        # Nueva integración:
+        # Aqui deberiamos configurar el modelo con tools=ALL_TOOLS
+        # y manejar la llamada de funcion usando TOOL_MAP.
+        # Por ahora, mantenemos la logica existente y marcamos el punto de integracion.
         return resolve_ai("pensar_respuesta")(prompt_con_contexto)
 
 
@@ -173,7 +178,12 @@ async def handle_message(message):
     adjunto = _obtener_adjunto_relevante(message)
     en_conversacion = hay_conversacion_activa(usuario_id, message.channel.id, ahora=time.time())
 
-    if not _verificar_permisos_mencion(message) and not adjunto and not en_conversacion:
+    # Detectar intenciones claras en texto plano
+    texto_para_check = message.content.lower()
+    intenciones_claras = ["cuentas", "gastos de", "dame los movimientos", "dame mis cuentas"]
+    es_intencion_clara = any(i in texto_para_check for i in intenciones_claras)
+
+    if not _verificar_permisos_mencion(message) and not adjunto and not en_conversacion and not es_intencion_clara:
         return
 
     # Limpiar menciones
