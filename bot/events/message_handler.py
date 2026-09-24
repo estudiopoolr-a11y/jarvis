@@ -76,7 +76,7 @@ def _obtener_adjunto_relevante(message):
     )
 
 
-def _verificar_permisos_mencion(message, adjunto) -> bool:
+def _verificar_permisos_mencion(message, adjunto=None) -> bool:
     """Verifica si es DM o mensaje tiene mención válida o está en conversación activa."""
     # Procesar mensajes con audio en DMs o #general sin mención exigida:
     if adjunto and (isinstance(message.channel, discord.DMChannel) or
@@ -188,7 +188,7 @@ async def handle_message(message):
     intenciones_claras = ["cuentas", "gastos de", "dame los movimientos", "dame mis cuentas"]
     es_intencion_clara = any(i in texto_para_check for i in intenciones_claras)
 
-    if not _verificar_permisos_mencion(message) and not adjunto and not en_conversacion and not es_intencion_clara:
+    if not _verificar_permisos_mencion(message, adjunto) and not adjunto and not en_conversacion and not es_intencion_clara:
         return
 
     # Limpiar menciones

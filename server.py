@@ -1,9 +1,10 @@
 """
-server.py - Entrypoint del Web Service.
+server.py - Entrypoint del Web Service unificado (FastAPI + Discord Bot).
 
-Render tiene configurado 'python server.py' como Start Command.
-Este archivo arranca el servidor FastAPI real que vive en app/main.py.
+Render tiene configurado 'python server.py' o 'uvicorn server:app --host 0.0.0.0 --port $PORT' como Start Command.
+Este archivo arranca la aplicacion FastAPI que inicia concurrentemente el bot de Discord en el mismo event loop.
 """
+import os
 import sys
 from pathlib import Path
 
@@ -11,15 +12,14 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent
 sys.path.insert(0, str(ROOT_DIR))
 
-# Importar la app FastAPI
+# Importar la app FastAPI unificada
 from app.main import app  # noqa: E402
 
-print("[server.py] App importada desde app.main", flush=True)
+print("[server.py] App unificada importada desde app.main", flush=True)
 
 if __name__ == "__main__":
-    import os
     import uvicorn
 
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 8080))
     print(f"[server.py] Arrancando Uvicorn en 0.0.0.0:{port}", flush=True)
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False)
