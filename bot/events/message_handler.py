@@ -77,7 +77,9 @@ def _obtener_adjunto_relevante(message):
 
 
 def _verificar_permisos_mencion(message) -> bool:
-    """Verifica si el mensaje tiene mención válida o está en conversación activa."""
+    """Verifica si es DM o mensaje tiene mención válida o está en conversación activa."""
+    if isinstance(message.channel, discord.DMChannel):
+        return True
     es_mencion_usuario = bot.user.mentioned_in(message) or any(m.id == bot.user.id for m in message.mentions)
     es_mencion_rol = any(role.id in ALLOWED_ROLE_IDS for role in message.role_mentions)
     return es_mencion_usuario or es_mencion_rol
