@@ -412,8 +412,6 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str, es_audio: b
 
     # 8) SUBCATEGORÍAS
     if _parse_subcategoria(texto_lc):
-        from modules.nlp.parsers import _parse_subcategoria
-        from modules.db import crear_subcategoria
         sub_data = _parse_subcategoria(texto_lc)
         if sub_data:
             result = crear_subcategoria(
