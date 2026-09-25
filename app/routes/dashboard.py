@@ -9,8 +9,6 @@ from app.api import USUARIO_PRINCIPAL, ComandoPayload, app
 from modules.ai import pensar_respuesta, pensar_respuesta_imagen, procesar_intencion_natural
 from modules.db import obtener_balance_financiero, obtener_resumen_presupuestos, obtener_tareas_pendientes
 
-@app.get("/", response_class=HTMLResponse)
-@app.head("/", response_class=HTMLResponse)
 @app.get("/dashboard", response_class=HTMLResponse)
 @app.head("/dashboard", response_class=HTMLResponse)
 def render_dashboard(usuario_id: str = "default"):

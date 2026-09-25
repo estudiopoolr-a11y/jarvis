@@ -1,9 +1,11 @@
-"""FastAPI application instance con ciclo de vida asíncrono para Bot de Discord."""
+"""FastAPI application instance con ciclo de vida asíncrono para Bot de Discord y Telegram Webhook."""
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from fastapi import FastAPI
+import httpx
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 
 # Configurar logging centralizado
@@ -43,6 +45,8 @@ app = FastAPI(title="JARVIS Control Center", lifespan=lifespan)
 USUARIO_PRINCIPAL = "1536228767180136498"
 
 
+@app.get("/")
+@app.head("/")
 @app.get("/health")
 @app.head("/health")
 def health_check():
@@ -63,3 +67,47 @@ def health_check():
 class ComandoPayload(BaseModel):
     texto: str
     usuario_id: str = USUARIO_PRINCIPAL
+
+
+@app.post("/webhook")
+async def telegram_webhook(request: Request):
+    """Endpoint webhook para recibir mensajes de Telegram y responder con Gemini/NLP."""
+    try:
+        update = await request.json()
+        message = update.get("message") or update.get("edited_message")
+        if not message:
+            return {"status": "ok"}
+
+        texto = message.get("text")
+        chat = message.get("chat", {})
+        chat_id = chat.get("id")
+
+        if not texto or not chat_id:
+            return {"status": "ok"}
+
+        # Procesar con intención determinística o fallback a Gemini
+        from modules.ai import procesar_intencion_natural, pensar_respuesta
+
+        respuesta = procesar_intencion_natural(texto, str(chat_id), es_audio=False)
+        if not respuesta:
+            respuesta = pensar_respuesta(texto)
+
+        # Enviar respuesta al usuario mediante la API de Telegram
+        telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        if not telegram_token:
+            logger.error("TELEGRAM_BOT_TOKEN no configurado en variables de entorno.")
+            return {"status": "ok"}
+
+        url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": respuesta}
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, json=payload, timeout=10.0)
+            if resp.status_code != 200:
+                logger.error(f"Telegram API error {resp.status_code}: {resp.text}")
+
+        return {"status": "ok"}
+
+    except Exception as e:
+        logger.error(f"Error procesando webhook de Telegram: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}
