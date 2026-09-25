@@ -64,9 +64,8 @@ def pensar_respuesta(prompt_usuario: str, usuario_id: str = "default") -> str:
         tools = [{"google_search": {}}] if usar_web else None
 
         response_text = _gemini_call_with_fallback(
-            lambda c: c.models.generate_content(
-                model=MODEL_NAME,
-                contents=prompt_completo,
+            lambda c: c.chats.create(model=MODEL_NAME).send_message(
+                message=prompt_completo,
                 config=types.GenerateContentConfig(
                     tools=tools,
                     max_output_tokens=1500,
@@ -98,9 +97,8 @@ def pensar_respuesta_imagen(ruta_imagen: str, prompt_adicional: str = "", usuari
         )
 
         response_text = _gemini_call_with_fallback(
-            lambda c: c.models.generate_content(
-                model=MODEL_NAME,
-                contents=[prompt, imagen_file],
+            lambda c: c.chats.create(model=MODEL_NAME).send_message(
+                message=[prompt, imagen_file],
                 config=types.GenerateContentConfig(
                     max_output_tokens=1000,
                     safety_settings=[
@@ -147,9 +145,8 @@ def pensar_respuesta_audio(ruta_audio: str, prompt_adicional: str = "", usuario_
             prompt_completo = f"{SYSTEM_INSTRUCTION}\n{contexto_db}\n{prompt_base}"
 
         response_text = _gemini_call_with_fallback(
-            lambda c: c.models.generate_content(
-                model=MODEL_NAME,
-                contents=[prompt_completo, audio_file],
+            lambda c: c.chats.create(model=MODEL_NAME).send_message(
+                message=[prompt_completo, audio_file],
                 config=types.GenerateContentConfig(
                     max_output_tokens=1000,
                     temperature=0.3,
