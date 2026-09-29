@@ -185,7 +185,7 @@ class NvidiaProvider:
 
     NAME = "nvidia"
     DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
-    DEFAULT_MODEL = "meta/llama-3.1-70b-instruct"
+    DEFAULT_MODEL = "meta/llama-3.3-70b-instruct"
 
     def __init__(self):
         self._ready: Optional[bool] = None
@@ -305,6 +305,9 @@ class LLMProvider:
         self._gemini = GeminiProvider()
         self._nvidia = NvidiaProvider()
         primary = os.getenv("LLM_PRIMARY", "gemini").lower()
+        gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEYS")
+        if gemini_key:
+            primary = "gemini"
         if primary == "nvidia":
             self._providers = [self._nvidia, self._gemini]
         else:

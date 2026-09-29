@@ -1,0 +1,227 @@
+# Operaciones CRUD usadas por modules/sql/repository.py.
+# Firebase Data Connect las expone como GraphQL sobre PostgreSQL.
+
+query GetUser($id: String!) @auth(level: NO_ACCESS) {
+  user(id: $id) {
+    id
+    nombre
+    moneda
+    tema
+  }
+}
+
+mutation UpsertUser($id: String!, $nombre: String!) @auth(level: NO_ACCESS) {
+  user_upsert(data: { id: $id, nombre: $nombre })
+}
+
+query ListAccounts($userId: String!) @auth(level: NO_ACCESS) {
+  accounts(where: { user: { id: { eq: $userId } } }) {
+    id
+    nombre
+    type
+    currency
+    institution
+    bankLast4
+    balance
+    icon
+    color
+  }
+}
+
+mutation CreateAccount(
+  $userId: String!
+  $nombre: String!
+  $type: String!
+  $currency: String!
+  $institution: String!
+  $bankLast4: String!
+  $balance: Float!
+  $icon: String!
+  $color: String!
+) @auth(level: NO_ACCESS) {
+  account_insert(
+    data: {
+      user: { id: $userId }
+      nombre: $nombre
+      type: $type
+      currency: $currency
+      institution: $institution
+      bankLast4: $bankLast4
+      balance: $balance
+      icon: $icon
+      color: $color
+    }
+  )
+}
+
+mutation UpdateAccount($id: UUID!, $nombre: String, $balance: Float) @auth(level: NO_ACCESS) {
+  account_update(key: { id: $id }, data: { nombre: $nombre, balance: $balance })
+}
+
+query ListCategories($userId: String!) @auth(level: NO_ACCESS) {
+  categories(where: { user: { id: { eq: $userId } } }) {
+    id
+    nombre
+    budget
+    tipo
+    icono
+    color
+  }
+}
+
+mutation CreateCategory(
+  $userId: String!
+  $nombre: String!
+  $budget: Float!
+  $tipo: String!
+  $icono: String!
+  $color: String!
+) @auth(level: NO_ACCESS) {
+  category_insert(
+    data: {
+      user: { id: $userId }
+      nombre: $nombre
+      budget: $budget
+      tipo: $tipo
+      icono: $icono
+      color: $color
+    }
+  )
+}
+
+mutation UpdateCategoryBudget($id: UUID!, $budget: Float!) @auth(level: NO_ACCESS) {
+  category_update(key: { id: $id }, data: { budget: $budget })
+}
+
+query ListSubcategories($categoryId: UUID!) @auth(level: NO_ACCESS) {
+  subcategories(where: { category: { id: { eq: $categoryId } } }) {
+    id
+    nombre
+    icono
+    color
+  }
+}
+
+mutation CreateSubcategory(
+  $categoryId: UUID!
+  $nombre: String!
+  $icono: String!
+  $color: String!
+) @auth(level: NO_ACCESS) {
+  subcategory_insert(
+    data: { category: { id: $categoryId }, nombre: $nombre, icono: $icono, color: $color }
+  )
+}
+
+query ListBudgetItems($userId: String!, $period: String!) @auth(level: NO_ACCESS) {
+  budgetItems(where: { user: { id: { eq: $userId } }, period: { eq: $period } }) {
+    id
+    categoryName
+    amount
+    year
+    month
+    category { id }
+  }
+}
+
+mutation UpsertBudgetItem(
+  $userId: String!
+  $categoryId: UUID
+  $categoryName: String!
+  $amount: Float!
+  $period: String!
+  $year: String!
+  $month: String!
+) @auth(level: NO_ACCESS) {
+  budgetItem_upsert(
+    data: {
+      user: { id: $userId }
+      category: { id: $categoryId }
+      categoryName: $categoryName
+      amount: $amount
+      period: $period
+      year: $year
+      month: $month
+    }
+  )
+}
+
+mutation UpdateBudgetItem($id: UUID!, $amount: Float, $categoryName: String, $categoryId: UUID)
+  @auth(level: NO_ACCESS) {
+  budgetItem_update(
+    key: { id: $id }
+    data: { amount: $amount, categoryName: $categoryName, category: { id: $categoryId } }
+  )
+}
+
+mutation DeleteBudgetItem($id: UUID!) @auth(level: NO_ACCESS) {
+  budgetItem_delete(key: { id: $id })
+}
+
+query ListTransactions($userId: String!, $period: String!) @auth(level: NO_ACCESS) {
+  transactions(where: { user: { id: { eq: $userId } }, period: { eq: $period } }) {
+    id
+    type
+    amount
+    payee
+    description
+    fee
+    status
+    tags
+    date
+    period
+    isSplit
+    isSplitChild
+    account { id }
+    category { id }
+    toAccount { id }
+    parent { id }
+    recurring { id }
+  }
+}
+
+mutation CreateTransaction(
+  $userId: String!
+  $accountId: UUID
+  $categoryId: UUID
+  $toAccountId: UUID
+  $parentId: UUID
+  $recurringId: UUID
+  $type: String!
+  $amount: Float!
+  $payee: String!
+  $description: String!
+  $fee: Float!
+  $status: String!
+  $tags: [String!]
+  $date: Date!
+  $period: String!
+  $isSplit: Boolean!
+  $isSplitChild: Boolean!
+) @auth(level: NO_ACCESS) {
+  transaction_insert(
+    data: {
+      user: { id: $userId }
+      account: { id: $accountId }
+      category: { id: $categoryId }
+      toAccount: { id: $toAccountId }
+      parent: { id: $parentId }
+      recurring: { id: $recurringId }
+      type: $type
+      amount: $amount
+      payee: $payee
+      description: $description
+      fee: $fee
+      status: $status
+      tags: $tags
+      date: $date
+      period: $period
+      isSplit: $isSplit
+      isSplitChild: $isSplitChild
+    }
+  )
+}
+
+mutation DeleteTransaction($id: UUID!) @auth(level: NO_ACCESS) {
+  transaction_delete(key: { id: $id })
+}
