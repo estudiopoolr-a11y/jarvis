@@ -115,13 +115,18 @@ class HermesAgent:
         self._llm = get_llm_provider()
         self._tool_declarations = [t.to_function_declaration() for t in self._tools]
 
-    def _build_system_prompt(self, skills_context: str = "") -> str:
-        """Construye el system prompt completo: SOUL + skills del usuario."""
+    def _build_system_prompt(self, skills_context: str = "", usuario_id: str = "") -> str:
+        """Construye el system prompt completo: SOUL + skills del usuario + fecha actual."""
         soul = _cargar_soul()
         prompt = soul
         if skills_context:
             prompt += "\n\n" + skills_context
+        # Inyectar fecha actual para que el agente conozca el contexto temporal
+        from datetime import datetime
+        fecha_actual = datetime.now().strftime("%Y-%m-%d (%B %Y)")
         prompt += (
+            f"\n\n## Contexto temporal:\n"
+            f"La fecha actual del sistema es {fecha_actual}. Usa este año y mes como referencia para 'este mes', 'mes actual' o consultas relativas.\n"
             "\n\n## Instrucciones de operación:\n"
             "Tienes acceso a herramientas para consultar y modificar los datos financieros del usuario. "
             "Usa las herramientas cuando necesites datos concretos antes de responder. "
@@ -218,6 +223,10 @@ class HermesAgent:
         Returns:
             Respuesta final del agente como texto.
         """
+        # Normalizar usuario_id si es genérico o falso
+        if not usuario_id or str(usuario_id) in ("user_1234", "default", "None", ""):
+            usuario_id = os.getenv("DEFAULT_USER_ID") or os.getenv("USUARIO_PRINCIPAL") or "1536228767180136498"
+
         logger.info("HermesAgent procesando mensaje de usuario=%s", usuario_id)
 
         # 1. Cargar contexto: skills del usuario
@@ -277,9 +286,11 @@ class HermesAgent:
                     obs = f"❌ Herramienta desconocida: '{tool_nombre}'."
                     logger.warning("Herramienta no encontrada: %s", tool_nombre)
                 else:
-                    # Inyectar usuario_id automáticamente si el tool lo requiere
+                    # Inyectar usuario_id automáticamente si el tool lo requiere (y sobreescribir si es genérico)
                     if "usuario_id" in tool.parametros.get("properties", {}):
-                        tool_args.setdefault("usuario_id", usuario_id)
+                        current_uid = tool_args.get("usuario_id")
+                        if not current_uid or str(current_uid) in ("user_1234", "default", "None", ""):
+                            tool_args["usuario_id"] = usuario_id
 
                     logger.info("Ejecutando herramienta: %s(%s)", tool_nombre, tool_args)
                     obs = await self._ejecutar_herramienta_con_retry(
