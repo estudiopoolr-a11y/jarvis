@@ -16,6 +16,7 @@ REGLAS AGENTS.md:
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
@@ -68,6 +69,13 @@ def _periodo_actual() -> str:
     return datetime.now().strftime("%Y-%m")
 
 
+def _resolver_usuario_id(usuario_id: Optional[str]) -> str:
+    """Rechaza IDs de prueba y usa el usuario real configurado."""
+    if not usuario_id or usuario_id in ["usuario_1234", "user_1234", "default"]:
+        usuario_id = os.getenv("DEFAULT_USER_ID") or os.getenv("USUARIO_PRINCIPAL") or "8418729793"
+    return str(usuario_id)
+
+
 def _safe_str(val) -> str:
     return str(val) if val is not None else ""
 
@@ -84,6 +92,8 @@ def _fmt_cop(monto: float) -> str:
 
 def _obtener_balance(usuario_id: str) -> str:
     """Suma los saldos de users/{usuario_id}/accounts (colección Kebo, no 'cuentas')."""
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
     logger.info("Consultando Firestore para el usuario: %s", usuario_id)
     from modules.finance.accounts import listar_cuentas
 
@@ -123,6 +133,8 @@ TOOL_OBTENER_BALANCE = AgentTool(
 
 
 def _listar_cuentas(usuario_id: str) -> str:
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
     logger.info("Consultando Firestore para el usuario: %s", usuario_id)
     from modules.finance.accounts import listar_cuentas
     cuentas = listar_cuentas(usuario_id)
@@ -162,6 +174,8 @@ def _registrar_transaccion(
     cuenta: str = "Efectivo",
     fecha: Optional[str] = None,
 ) -> str:
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
     from modules.finance.transactions.create import registrar_transaccion_v2
     tx_id = registrar_transaccion_v2(
         usuario_id=usuario_id,
@@ -215,6 +229,8 @@ TOOL_REGISTRAR_TRANSACCION = AgentTool(
 
 
 def _listar_transacciones(usuario_id: str, periodo: Optional[str] = None) -> str:
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
     from modules.firestore.client import _get_user_ref
     periodo = periodo or _periodo_actual()
     _, user_ref = _get_user_ref(usuario_id)
@@ -266,6 +282,8 @@ TOOL_LISTAR_TRANSACCIONES = AgentTool(
 
 
 def _obtener_presupuestos(usuario_id: str, periodo: Optional[str] = None) -> str:
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
     logger.info("Consultando Firestore para el usuario: %s", usuario_id)
     from modules.finance.budgets.retrieve import obtener_presupuestos_mes
     periodo = periodo or _periodo_actual()
@@ -314,6 +332,8 @@ def _establecer_presupuesto(
     monto: float,
     periodo: Optional[str] = None,
 ) -> str:
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
     from modules.finance.budgets.create import establecer_presupuesto_mes
     periodo = periodo or _periodo_actual()
     year, month = periodo.split("-")
@@ -353,6 +373,8 @@ TOOL_ESTABLECER_PRESUPUESTO = AgentTool(
 
 
 def _listar_recordatorios(usuario_id: str) -> str:
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
     from modules.reminders.service import listar_recordatorios
     recordatorios = listar_recordatorios(usuario_id)
     if not recordatorios:
@@ -391,6 +413,8 @@ def _guardar_recordatorio(
     categoria: str = "",
     monto: float = 0,
 ) -> str:
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
     from modules.reminders.service import guardar_recordatorio
     rec_id = guardar_recordatorio(
         usuario_id=usuario_id,
@@ -423,6 +447,8 @@ TOOL_GUARDAR_RECORDATORIO = AgentTool(
 
 
 def _obtener_contexto_financiero(usuario_id: str) -> str:
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
     from modules.finance.legacy import obtener_contexto_financiero
     return obtener_contexto_financiero(usuario_id)
 
@@ -447,6 +473,8 @@ TOOL_CONTEXTO_FINANCIERO = AgentTool(
 
 def _guardar_skill(usuario_id: str, nombre: str, contenido: str, tipo: str = "preferencia") -> str:
     """Guarda una habilidad/preferencia en la colección 'skills' de Firestore."""
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
     from modules.firestore.client import _get_user_ref
     from firebase_admin import firestore as fs
 
@@ -493,6 +521,8 @@ TOOL_GUARDAR_SKILL = AgentTool(
 
 def _listar_skills(usuario_id: str) -> str:
     """Lista las habilidades/preferencias guardadas del usuario."""
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
     from modules.firestore.client import _get_user_ref
 
     _, user_ref = _get_user_ref(usuario_id)

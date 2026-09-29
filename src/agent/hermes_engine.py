@@ -36,6 +36,32 @@ logger = logging.getLogger("JARVIS.hermes")
 MAX_REACT_ITERATIONS = 6   # Máximo de ciclos Reason→Act en una sola petición
 MAX_RETRIES = 3             # Reintentos en auto-corrección por herramienta
 SOUL_PATH = Path(__file__).parents[2] / "SOUL.md"  # Raíz del proyecto / SOUL.md
+_IDS_INVALIDOS = {"usuario_1234", "user_1234", "default", "none", "null", ""}
+
+
+def _usuario_real(usuario_id: Optional[str] = None) -> str:
+    """Reemplaza IDs de prueba, vacíos o None por el usuario real de la petición."""
+    candidato = "" if usuario_id is None else str(usuario_id).strip()
+    if candidato.lower() in _IDS_INVALIDOS:
+        return (
+            os.getenv("DEFAULT_USER_ID")
+            or os.getenv("USUARIO_PRINCIPAL")
+            or "8418729793"
+        )
+    return candidato
+
+
+def _sanitizar_args_usuario(args: Dict, usuario_id: str) -> Dict:
+    """Reemplaza usuario_1234, user_1234, default, None o vacío por el user_id real."""
+    limpios = dict(args or {})
+    real = _usuario_real(usuario_id)
+    for clave in ("usuario_id", "user_id"):
+        if clave in limpios:
+            limpios[clave] = _usuario_real(limpios.get(clave) or real)
+    for clave, valor in list(limpios.items()):
+        if str(valor).strip().lower() in {"usuario_1234", "user_1234", "default"}:
+            limpios[clave] = real
+    return limpios
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +166,7 @@ class HermesAgent:
         self,
         tool: AgentTool,
         args: Dict,
+        usuario_id: str,
         historial: List[LLMMessage],
         system_prompt: str,
     ) -> str:
@@ -152,6 +179,9 @@ class HermesAgent:
 
         for intento in range(1, MAX_RETRIES + 1):
             try:
+                args = _sanitizar_args_usuario(args, usuario_id)
+                if "usuario_id" in tool.parametros.get("properties", {}):
+                    args["usuario_id"] = _usuario_real(args.get("usuario_id") or usuario_id)
                 loop = asyncio.get_event_loop()
                 # Ejecutar en executor (las funciones de Firestore son síncronas)
                 resultado = await loop.run_in_executor(
@@ -193,7 +223,7 @@ class HermesAgent:
                         if correccion.tool_calls:
                             for tc in correccion.tool_calls:
                                 if tc.get("name") == tool.nombre:
-                                    args = tc.get("args", args)
+                                    args = _sanitizar_args_usuario(tc.get("args", args), usuario_id)
                                     break
                         historial.append(
                             LLMMessage(role="assistant", content=correccion.text or "")
@@ -223,9 +253,8 @@ class HermesAgent:
         Returns:
             Respuesta final del agente como texto.
         """
-        # Normalizar usuario_id si es genérico o falso
-        if not usuario_id or str(usuario_id) in ("user_1234", "default", "None", ""):
-            usuario_id = os.getenv("DEFAULT_USER_ID") or os.getenv("USUARIO_PRINCIPAL") or "1536228767180136498"
+        # Normalizar usuario_id si es genérico, de prueba o vacío
+        usuario_id = _usuario_real(usuario_id)
 
         logger.info("HermesAgent procesando mensaje de usuario=%s", usuario_id)
 
@@ -286,16 +315,17 @@ class HermesAgent:
                     obs = f"❌ Herramienta desconocida: '{tool_nombre}'."
                     logger.warning("Herramienta no encontrada: %s", tool_nombre)
                 else:
-                    # Inyectar usuario_id automáticamente si el tool lo requiere (y sobreescribir si es genérico)
+                    tool_args = _sanitizar_args_usuario(tool_args, usuario_id)
                     if "usuario_id" in tool.parametros.get("properties", {}):
-                        current_uid = tool_args.get("usuario_id")
-                        if not current_uid or str(current_uid) in ("user_1234", "default", "None", ""):
-                            tool_args["usuario_id"] = usuario_id
+                        tool_args["usuario_id"] = _usuario_real(
+                            tool_args.get("usuario_id") or usuario_id
+                        )
 
                     logger.info("Ejecutando herramienta: %s(%s)", tool_nombre, tool_args)
                     obs = await self._ejecutar_herramienta_con_retry(
                         tool=tool,
                         args=tool_args,
+                        usuario_id=usuario_id,
                         historial=historial,
                         system_prompt=system_prompt,
                     )
