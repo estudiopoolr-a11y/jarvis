@@ -16,13 +16,6 @@ from firebase_admin import firestore
 from modules.firestore.client import _get_user_ref
 
 
-def ensure_user(usuario_id="default", nombre=""):
-    """Crea el documento de usuario si no existe."""
-    _, user_ref = _get_user_ref(usuario_id)
-    if not user_ref:
-        return
-    user_ref.set({
-        "nombre": nombre or usuario_id,
-        "config": {"moneda": "COP", "tema": "dark"},
-        "created_at": firestore.SERVER_TIMESTAMP
-    }, merge=True)
+def ensure_user(usuario_id=None, nombre=""):
+    """[APLANADO] Ya no crea documentos de usuario. No-op salvo para compatibilidad."""
+    return

@@ -70,14 +70,12 @@ def get_db():
     return db
 
 
-def _get_user_ref(usuario_id="default"):
-    """Obtiene referencia al documento del usuario (estructura Kebo)."""
+def _get_user_ref(usuario_id=None):
+    """[APLANADO] Devuelve (db, None). Las rutas de usuario ya no existen. Usar db.collection("budgets"), etc."""
     database = get_db()
     if not database:
         return None, None
-    if not usuario_id or str(usuario_id) in ("default", "iphone_user", "None", ""):
-        usuario_id = USUARIO_PRINCIPAL
-    return database, database.collection("users").document(str(usuario_id))
+    return database, None
 
 
 def serialize_data(data):
