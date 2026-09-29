@@ -1,20 +1,44 @@
-google-genai
+# ── Core framework ────────────────────────────────────────────────────────────
 fastapi
 uvicorn
 python-dotenv
-firebase-admin
-discord.py
-yfinance
-gTTS
-edge-tts
 pydantic
 python-multipart
-pillow
-jinja2
+httpx
+
+# ── LLM Providers ─────────────────────────────────────────────────────────────
+# Google Gemini (proveedor primario)
+google-genai
+
+# Nvidia NIM / OpenAI-compatible (proveedor secundario/fallback)
+# También usado para cualquier API compatible con OpenAI (GPT-4, etc.)
+openai>=1.0.0
+
+# ── Firebase / Firestore ──────────────────────────────────────────────────────
+firebase-admin
+
+# ── Bot de Discord ────────────────────────────────────────────────────────────
+discord.py
+
+# ── Datos y finanzas ──────────────────────────────────────────────────────────
+yfinance
 python-dateutil
+
+# ── Text-to-speech ────────────────────────────────────────────────────────────
+gTTS
+edge-tts
+
+# ── Imágenes ──────────────────────────────────────────────────────────────────
+pillow
+
+# ── Templates ─────────────────────────────────────────────────────────────────
+jinja2
+
+# ── Búsqueda semántica / RAG ──────────────────────────────────────────────────
 chromadb
+
+# ── Google APIs (Calendar, etc.) ──────────────────────────────────────────────
 google-api-python-client
 google-auth
 google-auth-httplib2
 google-auth-oauthlib
-httpx

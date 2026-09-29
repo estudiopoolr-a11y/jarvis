@@ -71,43 +71,107 @@ class ComandoPayload(BaseModel):
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
-    """Endpoint webhook para recibir mensajes de Telegram y responder con Gemini/NLP."""
+    """
+    Endpoint webhook para recibir mensajes de Telegram.
+
+    Flujo de procesamiento (AGENTS.md §1 — Preservar parsers determinísticos):
+      1. Parsers determinísticos de modules/ai.py (90 % de los mensajes, $0, <10 ms).
+      2. Si ningún parser coincide → HermesAgent ReAct (Gemini / Nvidia NIM).
+
+    Siempre responde 200 OK para evitar reintentos duplicados de Telegram.
+    """
+    # Respuesta vacía inmediata — nunca dejamos que Telegram reintente
     try:
         update = await request.json()
+    except Exception as parse_exc:
+        logger.warning("Webhook: payload JSON inválido: %s", parse_exc)
+        return {"status": "ok"}
+
+    try:
         message = update.get("message") or update.get("edited_message")
         if not message:
             return {"status": "ok"}
 
-        texto = message.get("text")
+        texto = message.get("text", "").strip()
         chat = message.get("chat", {})
         chat_id = chat.get("id")
 
         if not texto or not chat_id:
             return {"status": "ok"}
 
-        # Procesar con intención determinística o fallback a Gemini
-        from modules.ai import procesar_intencion_natural, pensar_respuesta
+        usuario_id = str(chat_id)
 
-        respuesta = procesar_intencion_natural(texto, str(chat_id), es_audio=False)
+        # ----------------------------------------------------------------
+        # Paso 1: Parsers determinísticos (rápidos, sin costo de tokens)
+        # ----------------------------------------------------------------
+        from modules.ai import procesar_intencion_natural
+
+        respuesta: str | None = procesar_intencion_natural(
+            texto, usuario_id, es_audio=False
+        )
+
+        # ----------------------------------------------------------------
+        # Paso 2: Fallback agéntico — HermesAgent ReAct
+        # ----------------------------------------------------------------
         if not respuesta:
-            respuesta = pensar_respuesta(texto)
+            try:
+                from src.agent.hermes_engine import get_hermes_agent
 
-        # Enviar respuesta al usuario mediante la API de Telegram
+                agent = get_hermes_agent()
+                respuesta = await agent.process_message(texto, usuario_id)
+            except Exception as agent_exc:
+                logger.error(
+                    "HermesAgent falló, usando fallback Gemini directo: %s",
+                    agent_exc,
+                    exc_info=True,
+                )
+                # Último recurso: Gemini sin herramientas
+                try:
+                    from modules.ai import pensar_respuesta
+                    respuesta = pensar_respuesta(texto)
+                except Exception as gemini_exc:
+                    logger.error("Fallback Gemini también falló: %s", gemini_exc)
+                    respuesta = (
+                        "⚠️ No pude procesar tu solicitud en este momento. "
+                        "Por favor, inténtalo de nuevo en unos segundos."
+                    )
+
+        if not respuesta:
+            respuesta = "No entendí tu solicitud. ¿Puedes reformularla?"
+
+        # ----------------------------------------------------------------
+        # Paso 3: Enviar respuesta a Telegram
+        # ----------------------------------------------------------------
         telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
         if not telegram_token:
             logger.error("TELEGRAM_BOT_TOKEN no configurado en variables de entorno.")
             return {"status": "ok"}
 
         url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
-        payload = {"chat_id": chat_id, "text": respuesta}
+        # Telegram limita mensajes a 4096 caracteres
+        texto_respuesta = respuesta[:4096] if len(respuesta) > 4096 else respuesta
+        payload = {
+            "chat_id": chat_id,
+            "text": texto_respuesta,
+            "parse_mode": "Markdown",
+        }
 
         async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload, timeout=10.0)
-            if resp.status_code != 200:
-                logger.error(f"Telegram API error {resp.status_code}: {resp.text}")
+            try:
+                resp = await client.post(url, json=payload, timeout=15.0)
+                if resp.status_code != 200:
+                    logger.error(
+                        "Telegram API error %s: %s", resp.status_code, resp.text
+                    )
+                    # Reintentar sin parse_mode en caso de error de formato Markdown
+                    payload_plain = {"chat_id": chat_id, "text": texto_respuesta}
+                    await client.post(url, json=payload_plain, timeout=10.0)
+            except Exception as send_exc:
+                logger.error("Error enviando mensaje a Telegram: %s", send_exc)
 
         return {"status": "ok"}
 
     except Exception as e:
-        logger.error(f"Error procesando webhook de Telegram: {e}", exc_info=True)
-        return {"status": "error", "message": str(e)}
+        logger.error("Error procesando webhook de Telegram: %s", e, exc_info=True)
+        # Siempre 200 OK para evitar reintentos de Telegram
+        return {"status": "ok"}
