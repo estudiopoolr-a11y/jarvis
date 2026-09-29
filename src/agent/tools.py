@@ -478,11 +478,11 @@ def _guardar_skill(usuario_id: str, nombre: str, contenido: str, tipo: str = "pr
     from modules.firestore.client import _get_user_ref
     from firebase_admin import firestore as fs
 
-    _, user_ref = _get_user_ref(usuario_id)
-    if not user_ref:
+    db = get_db()
+    if not db:
         return "❌ No se pudo conectar con la base de datos."
     try:
-        skill_ref = user_ref.collection("skills").document()
+        skill_ref = db.collection("skills").document()
         skill_ref.set({
             "nombre": nombre,
             "contenido": contenido,
@@ -525,11 +525,11 @@ def _listar_skills(usuario_id: str) -> str:
         usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
     from modules.firestore.client import _get_user_ref
 
-    _, user_ref = _get_user_ref(usuario_id)
-    if not user_ref:
+    db = get_db()
+    if not db:
         return "❌ No se pudo conectar con la base de datos."
     try:
-        docs = list(user_ref.collection("skills").stream())
+        docs = list(db.collection("skills").stream())
         if not docs:
             return "No hay habilidades guardadas aún."
         lines = ["🧠 Habilidades/preferencias guardadas:"]

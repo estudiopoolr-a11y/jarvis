@@ -71,11 +71,11 @@ def get_db():
 
 
 def _get_user_ref(usuario_id=None):
-    """[APLANADO] Devuelve (db, None). Las rutas de usuario ya no existen. Usar db.collection("budgets"), etc."""
+    """[APLANADO] Devuelve (db, db). Las rutas de usuario ya no existen. user_ref apunta al cliente root db."""
     database = get_db()
     if not database:
         return None, None
-    return database, None
+    return database, database
 
 
 def serialize_data(data):
