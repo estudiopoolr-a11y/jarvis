@@ -179,13 +179,13 @@ class NvidiaProvider:
     Proveedor Nvidia NIM usando la API compatible con OpenAI (openai SDK).
     Variables de entorno:
       NVIDIA_API_KEY   → Bearer token
-      NVIDIA_BASE_URL  → Ej: https://integrate.api.nvidia.com/v1
-      NVIDIA_MODEL     → Ej: meta/llama-3.3-70b-instruct
+      NVIDIA_BASE_URL  → https://integrate.api.nvidia.com/v1
+      NVIDIA_MODEL     → meta/llama-3.1-70b-instruct
     """
 
     NAME = "nvidia"
     DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
-    DEFAULT_MODEL = "nvidia/llama-3.1-nemotron-70b-instruct"
+    DEFAULT_MODEL = "meta/llama-3.1-70b-instruct"
 
     def __init__(self):
         self._ready: Optional[bool] = None
@@ -341,6 +341,12 @@ class LLMProvider:
                 )
                 return response
             except Exception as exc:
+                if provider.NAME == "gemini":
+                    logger.error(
+                        "Gemini falló antes del fallback. Causa exacta: %s",
+                        exc,
+                        exc_info=True,
+                    )
                 logger.warning(
                     "Proveedor %s falló: %s. Intentando fallback...",
                     provider.NAME,

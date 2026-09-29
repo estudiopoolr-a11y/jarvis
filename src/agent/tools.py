@@ -82,7 +82,48 @@ def _fmt_cop(monto: float) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _obtener_balance(usuario_id: str) -> str:
+    """Suma los saldos de users/{usuario_id}/accounts (colección Kebo, no 'cuentas')."""
+    logger.info("Consultando Firestore para el usuario: %s", usuario_id)
+    from modules.finance.accounts import listar_cuentas
+
+    cuentas = listar_cuentas(usuario_id)
+    if not cuentas:
+        return (
+            f"No se encontraron cuentas en users/{usuario_id}/accounts. "
+            "El balance es $0 COP."
+        )
+    total = sum(float(c.get("balance", 0) or 0) for c in cuentas)
+    lines = [f"Balance total de {usuario_id}: {_fmt_cop(total)}"]
+    for c in cuentas:
+        lines.append(
+            f"  • {c['nombre']} ({c.get('type', 'cash')}) — {_fmt_cop(float(c.get('balance', 0) or 0))}"
+        )
+    return "\n".join(lines)
+
+
+TOOL_OBTENER_BALANCE = AgentTool(
+    nombre="obtener_balance",
+    descripcion=(
+        "Obtiene el balance total sumando los saldos de las cuentas del usuario "
+        "en Firestore (users/{usuario_id}/accounts)."
+    ),
+    parametros={
+        "type": "object",
+        "properties": {
+            "usuario_id": {
+                "type": "string",
+                "description": "ID único del usuario en Firestore.",
+            }
+        },
+        "required": ["usuario_id"],
+    },
+    funcion=_obtener_balance,
+)
+
+
 def _listar_cuentas(usuario_id: str) -> str:
+    logger.info("Consultando Firestore para el usuario: %s", usuario_id)
     from modules.finance.accounts import listar_cuentas
     cuentas = listar_cuentas(usuario_id)
     if not cuentas:
@@ -225,6 +266,7 @@ TOOL_LISTAR_TRANSACCIONES = AgentTool(
 
 
 def _obtener_presupuestos(usuario_id: str, periodo: Optional[str] = None) -> str:
+    logger.info("Consultando Firestore para el usuario: %s", usuario_id)
     from modules.finance.budgets.retrieve import obtener_presupuestos_mes
     periodo = periodo or _periodo_actual()
     year, month = periodo.split("-")
@@ -495,6 +537,7 @@ TOOL_LISTAR_SKILLS = AgentTool(
 
 ALL_TOOLS: List[AgentTool] = [
     TOOL_CONTEXTO_FINANCIERO,
+    TOOL_OBTENER_BALANCE,
     TOOL_LISTAR_CUENTAS,
     TOOL_REGISTRAR_TRANSACCION,
     TOOL_LISTAR_TRANSACCIONES,
