@@ -180,12 +180,16 @@ class NvidiaProvider:
     Variables de entorno:
       NVIDIA_API_KEY   → Bearer token
       NVIDIA_BASE_URL  → https://integrate.api.nvidia.com/v1
-      NVIDIA_MODEL     → nvidia/llama-3.1-nemotron-70b-instruct
+      NVIDIA_MODEL     → meta/llama-3.3-70b-instruct
     """
 
     NAME = "nvidia"
     DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
-    DEFAULT_MODEL = "nvidia/llama-3.1-nemotron-70b-instruct"
+    DEFAULT_MODEL = "meta/llama-3.3-70b-instruct"
+    CATALOG_MODELS = {
+        "meta/llama-3.3-70b-instruct",
+        "nvidia/llama-3.1-nemotron-70b-instruct",
+    }
 
     def __init__(self):
         self._ready: Optional[bool] = None
@@ -224,7 +228,16 @@ class NvidiaProvider:
             raise RuntimeError("NVIDIA_API_KEY no configurado.")
 
         client = self._get_client()
-        model = os.getenv("NVIDIA_MODEL", self.DEFAULT_MODEL)
+        model = (os.getenv("NVIDIA_MODEL") or self.DEFAULT_MODEL).strip()
+        if model not in self.CATALOG_MODELS:
+            logger.warning(
+                "NVIDIA_MODEL '%s' no está en el catálogo NIM vigente %s. "
+                "Usando '%s'.",
+                model,
+                sorted(self.CATALOG_MODELS),
+                self.DEFAULT_MODEL,
+            )
+            model = self.DEFAULT_MODEL
 
         # Construir lista de mensajes en formato OpenAI
         oai_messages = []
@@ -293,21 +306,49 @@ class NvidiaProvider:
 # Orquestador con fallback
 # ---------------------------------------------------------------------------
 
+_TRANSIENT_STATUS = {429, 500, 502, 503, 504}
+_PERMANENT_STATUS = {400, 401, 403, 404, 410}
+MAX_TRANSIENT_RETRIES = 2
+
+
+def _status_code(exc: Exception) -> Optional[int]:
+    for attr in ("status_code", "code", "status"):
+        value = getattr(exc, attr, None)
+        if isinstance(value, int):
+            return value
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    return status if isinstance(status, int) else None
+
+
+def _es_error_transitorio(exc: Exception) -> bool:
+    """503, 429 y timeouts se reintentan; 404/410 pasan directo al fallback."""
+    status = _status_code(exc)
+    if status in _PERMANENT_STATUS:
+        return False
+    if status in _TRANSIENT_STATUS:
+        return True
+    text = str(exc).lower()
+    if any(token in text for token in ("404", "410", "401", "403", "not found", "gone")):
+        return False
+    return any(
+        token in text
+        for token in ("503", "429", "unavailable", "rate limit", "ratelimit", "timeout", "overloaded")
+    )
+
+
 class LLMProvider:
     """
-    Orquestador que intenta con Gemini primero; si falla, usa Nvidia NIM.
-    El orden puede configurarse con la variable de entorno LLM_PRIMARY.
-      LLM_PRIMARY=gemini  → Gemini primero, Nvidia de fallback
+    Orquestador con orden configurable via LLM_PRIMARY.
+      LLM_PRIMARY=gemini  → Gemini primero, Nvidia de fallback (predeterminado)
       LLM_PRIMARY=nvidia  → Nvidia primero, Gemini de fallback
+    La presencia de GEMINI_API_KEY no anula LLM_PRIMARY.
     """
 
     def __init__(self):
         self._gemini = GeminiProvider()
         self._nvidia = NvidiaProvider()
-        primary = os.getenv("LLM_PRIMARY", "gemini").lower()
-        gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEYS")
-        if gemini_key:
-            primary = "gemini"
+        primary = os.getenv("LLM_PRIMARY", "gemini").strip().lower()
         if primary == "nvidia":
             self._providers = [self._nvidia, self._gemini]
         else:
@@ -322,7 +363,7 @@ class LLMProvider:
     ) -> LLMResponse:
         """
         Intenta generar respuesta con el proveedor primario.
-        Si falla, intenta con el siguiente proveedor disponible.
+        Reintenta errores transitorios antes de pasar al fallback.
         """
         last_error: Optional[Exception] = None
 
@@ -331,28 +372,45 @@ class LLMProvider:
             if hasattr(provider, "_check_ready") and not provider._check_ready():
                 logger.debug("Proveedor %s no disponible, saltando.", provider.NAME)
                 continue
-            try:
-                logger.info("Llamando a proveedor LLM: %s", provider.NAME)
-                response = await provider.generate(
-                    messages=messages,
-                    system_prompt=system_prompt,
-                    max_tokens=max_tokens,
-                    tools=tools,
-                )
-                return response
-            except Exception as exc:
-                if provider.NAME == "gemini":
-                    logger.error(
-                        "Gemini falló antes del fallback. Causa exacta: %s",
-                        exc,
-                        exc_info=True,
+            for intento in range(1, MAX_TRANSIENT_RETRIES + 1):
+                try:
+                    logger.info(
+                        "Llamando a proveedor LLM: %s (intento %d/%d)",
+                        provider.NAME,
+                        intento,
+                        MAX_TRANSIENT_RETRIES,
                     )
-                logger.warning(
-                    "Proveedor %s falló: %s. Intentando fallback...",
-                    provider.NAME,
-                    exc,
-                )
-                last_error = exc
+                    response = await provider.generate(
+                        messages=messages,
+                        system_prompt=system_prompt,
+                        max_tokens=max_tokens,
+                        tools=tools,
+                    )
+                    return response
+                except Exception as exc:
+                    last_error = exc
+                    if intento < MAX_TRANSIENT_RETRIES and _es_error_transitorio(exc):
+                        logger.warning(
+                            "Proveedor %s error transitorio (intento %d/%d): %s. Reintentando en 1s.",
+                            provider.NAME,
+                            intento,
+                            MAX_TRANSIENT_RETRIES,
+                            exc,
+                        )
+                        await asyncio.sleep(1)
+                        continue
+                    if provider.NAME == "gemini":
+                        logger.error(
+                            "Gemini falló antes del fallback. Causa exacta: %s",
+                            exc,
+                            exc_info=True,
+                        )
+                    logger.warning(
+                        "Proveedor %s falló: %s. Intentando fallback...",
+                        provider.NAME,
+                        exc,
+                    )
+                    break
 
         raise RuntimeError(
             f"Todos los proveedores LLM fallaron. Último error: {last_error}"
