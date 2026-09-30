@@ -2,7 +2,7 @@
 // Muestra cuentas (disponible), Presupuesto vs Gastos por categoría y Préstamos
 // Usa /api/widget/dashboard (UNA sola llamada HTTP)
 
-const BASE_URL = "https://jarvis-h20g.onrender.com"
+const BASE_URL = "https://jarvis-vy8k.onrender.com"
 const USUARIO = "1536228767180136498"
 
 // Colores tema oscuro

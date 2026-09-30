@@ -39,20 +39,23 @@ def get_september_data():
                 data['_id'] = item_doc.id
                 all_transactions.append(data)
         
-        # Filtrar solo Septiembre 2026
-        september_transactions = [t for t in all_transactions if t.get('_period') == '2026-09']
-        
+        # Listar todos los periodos encontrados
         print(f"\n=== Total de transacciones en todos los periodos: {len(all_transactions)} ===")
-        print(f"=== Transacciones en Septiembre 2026: {len(september_transactions)} ===")
         
-        if september_transactions:
-            print("\n=== Datos de Septiembre 2026 ===")
-            for t in september_transactions:
+        # Agrupar por periodo
+        from collections import defaultdict
+        by_period = defaultdict(list)
+        for t in all_transactions:
+            by_period[t.get('_period')].append(t)
+            
+        for period, trans in by_period.items():
+            print(f"\nPeriodo: {period}, Transacciones: {len(trans)}")
+            for t in trans[:5]: # Mostrar primeras 5
                 print(f"  - {t.get('description', 'Sin descripción')}: ${t.get('amount', 0)} ({t.get('type', 'N/A')})")
         
         return {
             'all_periods': all_transactions,
-            'september': september_transactions
+            'by_period': dict(by_period)
         }
 
     except Exception as e:
