@@ -110,6 +110,7 @@
             "state": {
               "type": "backlink",
               "state": {
+                "file": "estado_proyecto.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -196,8 +197,9 @@
       "bases:Create new base": false
     }
   },
-  "active": "9552a230f7817232",
+  "active": "a3d02a2d88c28787",
   "lastOpenFiles": [
+    "Índice Principal.md",
     "estado_proyecto.md",
     "src/core/llm_provider.py.md",
     "src/core",

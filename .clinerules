@@ -1,3 +1,12 @@
-1. Cada vez que crees, modifiques o resumas un archivo de documentación (.md), utiliza enlaces de formato wiki tipo [[NombreDeLaNota]] para conectar conceptos, módulos, tecnologías o archivos.
-2. Mantén un archivo central llamado `Índice Principal.md` o `Mapa Mental.md` que enlace a todas las subnotas del proyecto.
-3. Al finalizar una tarea, actualiza `estado_proyecto.md` enlazando las tecnologías y módulos trabajados (ej. [[modules/finance/accounts.py]], [[Firestore]], [[NVIDIA NIM]]).
+# 🧠 REGLAS GLOBALES DE DESARROLLO Y OBSIDIAN (JARVIS)
+
+## 1. FLUJO DE TRABAJO Y LECTURA OBLIGATORIA
+- LECTURA PREVIA: Antes de ejecutar o modificar cualquier archivo de código, lee `Jarvis/estado_proyecto.md` y la nota correspondiente al módulo afectado.
+- EJECUCIÓN: Aplica las modificaciones de código o configuraciones requeridas.
+- REGISTRO Y GIT: Al finalizar, documenta los cambios, registra el avance en la bitácora y ejecuta `git add .`, `git commit` y `git push`.
+
+## 2. ESTÁNDAR DE DOCUMENTACIÓN WIKI EN OBSIDIAN
+- WIKILINKS OBLIGATORIOS: Cada vez que crees, modifiques o resumas un archivo de documentación (`.md`), utiliza enlaces de formato wiki tipo `[[NombreDeLaNota]]` para conectar conceptos, módulos, tecnologías o archivos.
+- MAPA CENTRAL: Mantén actualizado el archivo central `[[Índice Principal.md]]` o `[[Mapa Mental.md]]`, asegurando que enlace a todas las subnotas del proyecto.
+- REGISTRO DE ESTADO: Al finalizar una tarea, actualiza `[[Jarvis/estado_proyecto.md]]` enlazando explícitamente las tecnologías y módulos trabajados (ej. `[[modules/finance/accounts.py]]`, `[[Firestore]]`, `[[Vercel]]`).
+- CREACIÓN AUTOMÁTICA: Si una tarea introduce un nuevo módulo, API, script o arquitectura que no exista en el Grafo, crea su nueva nota `.md` y vincúlala desde el índice principal.
