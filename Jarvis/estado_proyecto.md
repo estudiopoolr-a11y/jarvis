@@ -57,3 +57,4 @@
   - Mejora en el registro de gastos para capturar frases como "Me gasté X en Y" (ajuste de regex en NLP).
   - Actualización del endpoint del widget iPhone para usar la colección raíz `accounts` en lugar de la subcolección obsoleta.
 - **2026-10-02:** Auditoría de conocimiento en Obsidian. Chequeo y refactorización de `[[Índice Principal.md]]` estableciendo jerarquía, corrigiendo estructura del Grafo, alineando con reglas globales y enlazando despliegue de infraestructura (`Vercel`).
+- **2026-10-02:** Migración de Telegram Bot a Webhook serverless en Vercel. Se eliminó el polling y se creó el endpoint `/api/telegram/webhook` en FastAPI, junto con el helper `/api/telegram/set-webhook`. Se borró el Procfile de Render y se actualizó `vercel.json` para rutas de Telegram. Documentado en [[Jarvis/telegram_bot_webhook.md]].
