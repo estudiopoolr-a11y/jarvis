@@ -51,7 +51,9 @@ Se implementaron mejoras críticas en la lógica de presupuestos y el procesamie
 
 ## Adaptación de Widget iPhone
 Se actualizó el endpoint del dashboard en [[app/routes/widgets.py]] para alinearse con la nueva arquitectura de base de datos:
-- Las consultas de cuentas ahora se realizan sobre la colección raíz `accounts` filtrando por `usuario_id`, eliminando la dependencia de la ruta obsoleta `users/{user_id}/accounts`.
+- Las consultas de cuentas ahora se realizan sobre la colección raíz `accounts` sin filtrado por usuario, obteniendo todas las cuentas disponibles (Nu, Nequi, Efectivo).
+- El endpoint ya no depende de la ruta obsoleta `users/{user_id}/accounts`.
+- Los parámetros de consulta como `usuario_id` son ahora opcionales y se usan solo para presupuestos y transacciones.
 
 ---
 *Última actualización: 2026-10-02 - Normalización de categorías, corrección de NLP para gastos y actualización de endpoints del Widget.*
