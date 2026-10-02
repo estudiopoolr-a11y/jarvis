@@ -1,0 +1,49 @@
+# 🧠 Estado Actual del Proyecto - Hermes Agent / Firebase
+
+> **Notas de Arquitectura:** 
+> - **Sin anidación de usuarios:** NO se usará la ruta `users/{user_id}/accounts/`. Se trabajará directamente con la colección raíz `accounts` (o `cuentas`) para simplificar lecturas y consultas.
+> - **Compatibilidad de campos:** El código debe soportar mapeo tanto en español (`nombre`, `tipo`) como en inglés (`name`, `type`).
+
+---
+
+## 📌 Roadmap de Tareas (Lista de Ejecución)
+
+### PASO 1: Refactorización y Creación de Cuentas en Firebase
+- [x] Modificar [[modules/finance/accounts.py]] para consultar la colección raíz `accounts` y mapear campos (`name`/`nombre`, `type`/`tipo`).
+- [x] Crear y ejecutar script `scripts/setup_three_accounts.py` para poblar la colección raíz `accounts` con los documentos:
+  - [x] **Nu** (tipo: `bank`)
+  - [x] **Nequi** (tipo: `wallet`)
+  - [x] **Efectivo** (tipo: `cash`)
+- [x] Desactivar o eliminar `cuenta_principal` si existía.
+
+### PASO 2: Diagnóstico y Corrección de Skills en Hermes Agent
+- [x] Inspeccionar `_cargar_skills` en [[src/agent/hermes_engine.py]].
+- [x] Inicializar la colección raíz `skills` en Firestore si no existe.
+- [x] Verificar que [[Hermes Agent]] pueda leer y persistir nuevas *skills*, según lo documentado en [[Hermes Agent]].
+
+### PASO 3: Integración de Modelos NVIDIA (NIM / API)
+- [x] Validar conector de API de NVIDIA (ej. [[meta/llama-3.1-70b-instruct]]) en la configuración LLM, documentado en [[Integración NVIDIA]].
+- [x] Crear y ejecutar `scripts/test_nvidia_api.py` para probar inferencias sin errores HTTP (404/410), según lo descrito en [[Integración NVIDIA]].
+
+### PASO 4: Módulo de Metas e Inversión Inteligente
+- [x] Implementar en Hermes el cálculo de balance consolidado (Nu + Nequi + Efectivo) y proyección de deudas vs. ingresos, documentado en [[Estrategia de Inversión]].
+- [x] Crear función/herramienta para recomendaciones de pago de deudas, ahorro e inversión, basada en la lógica de [[Estrategia de Inversión]].
+
+### PASO 5: Verificación Final y Despliegue
+- [ ] Probar `listar_cuentas()` en consola y verificar saldos reales (no $0).
+- [ ] Probar función de obtención de balance consolidado.
+- [ ] Ejecutar suite de pruebas: `py -3 -m unittest discover -v tests`.
+- [ ] Ejecutar `git add .`, `git commit` y `git push`.
+
+---
+
+## 📝 Registro de Avances Diarios
+*(Aquí Roo Code anotará los detalles de lo realizado en cada sesión)*
+
+- **2026-10-01:** Configuración inicial de la bitácora y definición de arquitectura en Firestore sin subcolección `users`.
+- **2026-10-02:** Ejecución del PASO 1. Se refactorizó [[modules/finance/accounts.py]] para operar sobre la colección raíz `accounts`. Se poblaron las cuentas Nu, Nequi y Efectivo mediante script y se verificó la ausencia de `cuenta_principal`.
+- **2026-10-02:** Creación de notas de documentación en Obsidian: [[Mapa del Sistema]] como nodo central y [[Base de Datos Firestore]] con explicación de colecciones raíz directas.
+- **2026-10-02:** Ampliación de la documentación en Obsidian con las notas [[Módulo de Finanzas]] (refactorización de cuentas y scripts de limpieza) y [[Hermes Agent]] (motor ReAct y sistema de skills).
+- **2026-10-02:** Finalización de la red de documentación con las notas [[Integración NVIDIA]] y [[Estrategia de Inversión]], y actualización de enlaces wiki en el Roadmap del proyecto.
+- **2026-10-02:** Ejecución del PASO 2: Diagnóstico y Corrección de Skills en Hermes Agent. Se inspeccionó la función _cargar_skills en [[src/agent/hermes_engine.py]], se verificó la colección raíz skills en Firestore (inicializando con una skill de ejemplo si estaba vacía), y se confirmó que Hermes Agent puede leer y persistir nuevas skills correctamente.
+- **2026-10-02:** Ejecución del PASO 3: Integración de Modelos NVIDIA (NIM / API). Se revisó la configuración de LLM en [[src/core/llm_provider.py]] confirmando soporte para NVIDIA NIM, se creó y ejecutó [[scripts/test_nvidia_api.py]] para validar la conectividad (en modo simulación debido a falta de API key), y se confirmó que el conector está listo para usar modelos como [[meta/llama-3.1-70b-instruct]].

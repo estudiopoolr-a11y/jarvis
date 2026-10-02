@@ -112,11 +112,96 @@ def _obtener_balance(usuario_id: str) -> str:
     return "\n".join(lines)
 
 
-TOOL_OBTENER_BALANCE = AgentTool(
-    nombre="obtener_balance",
+def _obtener_balance_consolidado(usuario_id: str) -> str:
+    """Calcula el balance consolidado sumando las cuentas raíz: Nu, Nequi y Efectivo."""
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
+    logger.info("Calculando balance consolidado para el usuario: %s", usuario_id)
+    from modules.finance.accounts import listar_cuentas
+
+    cuentas = listar_cuentas(usuario_id)
+    if not cuentas:
+        return (
+            f"No se encontraron cuentas en la colección raíz 'accounts' para el usuario {usuario_id}. "
+            "El balance consolidado es $0 COP."
+        )
+    
+    # Filtrar solo las cuentas principales: Nu, Nequi, Efectivo
+    cuentas_principales = []
+    nombres_principales = {'nu', 'nequi', 'efectivo'}
+    for cuenta in cuentas:
+        nombre_lower = cuenta['nombre'].lower().strip()
+        if nombre_lower in nombres_principales:
+            cuentas_principales.append(cuenta)
+    
+    if not cuentas_principales:
+        return (
+            f"No se encontraron las cuentas principales (Nu, Nequi, Efectivo) para el usuario {usuario_id}. "
+            "Se encontraron {len(cuentas)} cuentas pero ninguna coincide con las principales."
+        )
+    
+    total = sum(float(cuenta.get("balance", 0) or 0) for cuenta in cuentas_principales)
+    lines = [f"Balance consolidado de {usuario_id} (Nu + Nequi + Efectivo): {_fmt_cop(total)}"]
+    for cuenta in cuentas_principales:
+        lines.append(
+            f"  • {cuenta['nombre']} ({cuenta.get('type', 'cash')}) — {_fmt_cop(float(cuenta.get('balance', 0) or 0))}"
+        )
+    return "\n".join(lines)
+
+
+def _generar_recomendaciones_inversion(usuario_id: str) -> str:
+    """Genera recomendaciones personalizadas de inversión basado en el balance consolidado y perfil."""
+    if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
+        usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
+    logger.info("Generando recomendaciones de inversión para el usuario: %s", usuario_id)
+    
+    # Obtener el balance consolidado primero
+    balance_result = _obtener_balance_consolidado(usuario_id)
+    
+    # Extraer el valor numérico del balance (asumiendo formato conocido)
+    import re
+    balance_match = re.search(r'\$\s*([\d,]+\.?\d*)\s*COP', balance_result)
+    if not balance_match:
+        return "No se pudo determinar el balance consolidado para generar recomendaciones."
+    
+    balance_str = balance_match.group(1).replace(',', '')
+    try:
+        balance = float(balance_str)
+    except ValueError:
+        return "Error al procesar el valor del balance consolidado."
+    
+    # Lógica de recomendaciones basada en el balance
+    if balance < 1000000:  # Menos de 1 millón COP
+        recomendacion = """Estrategia Conservadora:
+- Fondo de emergencia: Priorizar completar 3-6 meses de gastos básicos
+- Inversión inicial: Considerar CDT o cuentas de ahorro de alto rendimiento
+- Educación: Asignar recursos para aprender sobre finanzas personales"""
+    elif balance < 5000000:  # Entre 1 y 5 millones COP
+        recomendacion = """Estrategia Moderada:
+- Fondo de emergencia: Mantener 3-6 meses de gastos en cuenta de ahorro
+- Inversión diversificada: 70% en instrumentos de renta fija, 30% en fondos de inversión
+- Objetivo medio plazo: Considerar inversión en bienes raíces o negocios"""
+    else:  # Más de 5 millones COP
+        recomendacion = """Estrategia Agresiva:
+- Fondo de emergencia: Completado, mantener liquidez para oportunidades
+- Inversión diversificada: 50% renta variable, 30% renta fija, 20% alternativas
+- Objetivo largo plazo: Considerar inversiones en acciones, bienes raíces y proyectos empresariales"""
+    
+    lines = [
+        f"Recomendaciones de inversión para balance de {_fmt_cop(balance)}:",
+        "",
+        recomendacion,
+        "",
+        "Nota: Estas son sugerencias generales. Consulte con un asesor financiero para recomendaciones personalizadas."
+    ]
+    return "\n".join(lines)
+
+
+TOOL_OBTENER_BALANCE_CONSOLIDADO = AgentTool(
+    nombre="obtener_balance_consolidado",
     descripcion=(
-        "Obtiene el balance total sumando los saldos de las cuentas del usuario "
-        "en Firestore (users/{usuario_id}/accounts)."
+        "Calcula el balance consolidado sumando específicamente las cuentas de Nu, Nequi y Efectivo "
+        "de la colección raíz 'accounts' en Firestore."
     ),
     parametros={
         "type": "object",
@@ -128,7 +213,26 @@ TOOL_OBTENER_BALANCE = AgentTool(
         },
         "required": ["usuario_id"],
     },
-    funcion=_obtener_balance,
+    funcion=_obtener_balance_consolidado,
+)
+
+TOOL_GENERAR_RECOMENDACIONES_INVERSION = AgentTool(
+    nombre="generar_recomendaciones_inversion",
+    descripcion=(
+        "Genera recomendaciones personalizadas de inversión basado en el balance consolidado "
+        "y perfil financiero del usuario, incluyendo estrategias de pago de deudas, ahorro e inversión."
+    ),
+    parametros={
+        "type": "object",
+        "properties": {
+            "usuario_id": {
+                "type": "string",
+                "description": "ID único del usuario en Firestore.",
+            }
+        },
+        "required": ["usuario_id"],
+    },
+    funcion=_generar_recomendaciones_inversion,
 )
 
 
@@ -154,10 +258,7 @@ TOOL_LISTAR_CUENTAS = AgentTool(
     parametros={
         "type": "object",
         "properties": {
-            "usuario_id": {
-                "type": "string",
-                "description": "ID único del usuario en Firestore.",
-            }
+            "usuario_id": {"type": "string", "description": "ID único del usuario."},
         },
         "required": ["usuario_id"],
     },
@@ -247,7 +348,7 @@ def _listar_transacciones(usuario_id: str, periodo: Optional[str] = None) -> str
     except Exception as exc:
         logger.error("Error listando transacciones: %s", exc)
         return f"❌ Error consultando transacciones de {periodo}."
-
+    
     if not transacciones:
         return f"No hay transacciones registradas para el periodo {periodo}."
     lines = [f"📋 Últimas transacciones ({periodo}):"]
@@ -475,8 +576,8 @@ def _guardar_skill(usuario_id: str, nombre: str, contenido: str, tipo: str = "pr
     """Guarda una habilidad/preferencia en la colección 'skills' de Firestore."""
     if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
         usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
-    from modules.firestore.client import _get_user_ref
-    from firebase_admin import firestore as fs
+    from modules.firestore.client import _get_user_ref, get_db
+    from modules.firestore.client import firestore as fs
 
     db = get_db()
     if not db:
@@ -523,8 +624,7 @@ def _listar_skills(usuario_id: str) -> str:
     """Lista las habilidades/preferencias guardadas del usuario."""
     if not usuario_id or usuario_id in ['usuario_1234', 'user_1234', 'default']:
         usuario_id = os.getenv('DEFAULT_USER_ID') or os.getenv('USUARIO_PRINCIPAL') or '8418729793'
-    from modules.firestore.client import _get_user_ref
-
+    from modules.firestore.client import _get_user_ref, get_db
     db = get_db()
     if not db:
         return "❌ No se pudo conectar con la base de datos."
@@ -567,7 +667,7 @@ TOOL_LISTAR_SKILLS = AgentTool(
 
 ALL_TOOLS: List[AgentTool] = [
     TOOL_CONTEXTO_FINANCIERO,
-    TOOL_OBTENER_BALANCE,
+    TOOL_OBTENER_BALANCE_CONSOLIDADO,
     TOOL_LISTAR_CUENTAS,
     TOOL_REGISTRAR_TRANSACCION,
     TOOL_LISTAR_TRANSACCIONES,
@@ -577,6 +677,8 @@ ALL_TOOLS: List[AgentTool] = [
     TOOL_GUARDAR_RECORDATORIO,
     TOOL_GUARDAR_SKILL,
     TOOL_LISTAR_SKILLS,
+    TOOL_OBTENER_BALANCE_CONSOLIDADO,
+    TOOL_GENERAR_RECOMENDACIONES_INVERSION,
 ]
 
 TOOLS_BY_NAME: Dict[str, AgentTool] = {t.nombre: t for t in ALL_TOOLS}

@@ -1,0 +1,3 @@
+1. Cada vez que crees, modifiques o resumas un archivo de documentación (.md), utiliza enlaces de formato wiki tipo [[NombreDeLaNota]] para conectar conceptos, módulos, tecnologías o archivos.
+2. Mantén un archivo central llamado `Índice Principal.md` o `Mapa Mental.md` que enlace a todas las subnotas del proyecto.
+3. Al finalizar una tarea, actualiza `estado_proyecto.md` enlazando las tecnologías y módulos trabajados (ej. [[modules/finance/accounts.py]], [[Firestore]], [[NVIDIA NIM]]).

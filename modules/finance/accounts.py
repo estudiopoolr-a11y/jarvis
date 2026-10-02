@@ -11,7 +11,6 @@ from modules.firestore.client import (
     inicializar_firebase,
 )
 
-from modules.firestore.users import ensure_user
 
 # ==================== CUENTAS (KEBO) ====================
 
@@ -19,28 +18,43 @@ def listar_cuentas(usuario_id="default"):
     """Lista todas las cuentas del usuario (estilo Kebo).
     Incluye: nombre, type, currency, institution, bank_last4, balance, icon, color.
     """
-    _, user_ref = _get_user_ref(usuario_id)
-    if not user_ref:
+    db = get_db()
+    if not db:
         return []
     try:
-        docs = user_ref.collection("accounts").stream()
+        docs = db.collection("accounts").stream()
         cuentas = []
         for d in docs:
             data = d.to_dict()
             # Compatibilidad: viejo (tipo/icono) -> nuevo (type/icon)
+            # Compatibilidad de campos (Kebo: nombre/institution/bank_last4 vs legacy: name/bank/type)
+            nombre = data.get("nombre")
+            if not nombre:
+                nombre = data.get("name") or ""
+
+            institution = data.get("institution")
+            if not institution:
+                institution = data.get("bank") or ""
+
+            bank_last4 = data.get("bank_last4")
+            if not bank_last4:
+                bank_last4 = data.get("bank_last4") or data.get("bankLast4") or ""
+
+            tipo_kebo = data.get("type") or data.get("tipo") or "cash"
+
             cuentas.append({
                 "_id": d.id,
-                "nombre": data.get("nombre", ""),
-                "type": data.get("type") or data.get("tipo", "cash"),    # Kebo: type
-                "currency": data.get("currency", "COP"),                   # Kebo: currency
-                "institution": data.get("institution", ""),              # Kebo: institution
-                "bank_last4": data.get("bank_last4", ""),                  # Kebo: bank_last4
+                "nombre": nombre,
+                "type": tipo_kebo,  # Kebo: type
+                "currency": data.get("currency", "COP"),  # Kebo: currency
+                "institution": institution,  # Kebo: institution
+                "bank_last4": bank_last4,  # Kebo: bank_last4
                 "balance": float(data.get("balance", 0)),
-                "icon": data.get("icon") or data.get("icono", "💵"),      # Kebo: icon
+                "icon": data.get("icon") or data.get("icono") or "💵",  # Kebo: icon
                 "color": data.get("color", "#10b981"),
                 # Alias legacy
-                "tipo": data.get("type") or data.get("tipo", "cash"),
-                "icono": data.get("icon") or data.get("icono", "💵"),
+                "tipo": tipo_kebo,
+                "icono": data.get("icon") or data.get("icono") or "💵",
             })
         return cuentas
     except Exception as e:
@@ -52,12 +66,11 @@ def crear_cuenta(usuario_id, nombre, tipo="cash", balance=0, icono="💵", color
     """Crea una nueva cuenta con metadata estilo Kebo.
     tipo: cash | savings | checking | credit | investment
     """
-    _, user_ref = _get_user_ref(usuario_id)
-    if not user_ref:
+    db = get_db()
+    if not db:
         return None
     try:
-        ensure_user(usuario_id)
-        doc_ref = user_ref.collection("accounts").document()
+        doc_ref = db.collection("accounts").document()
         doc_ref.set({
             "nombre": nombre,
             "type": tipo,                          # Campo Kebo: 'type' en inglés
@@ -76,11 +89,11 @@ def crear_cuenta(usuario_id, nombre, tipo="cash", balance=0, icono="💵", color
 
 def actualizar_balance_cuenta(usuario_id, cuenta_id, delta):
     """Suma delta al balance de una cuenta."""
-    _, user_ref = _get_user_ref(usuario_id)
-    if not user_ref:
+    db = get_db()
+    if not db:
         return
     try:
-        user_ref.collection("accounts").document(cuenta_id).update({
+        db.collection("accounts").document(cuenta_id).update({
             "balance": firestore.Increment(delta)
         })
     except Exception as e:
@@ -88,11 +101,11 @@ def actualizar_balance_cuenta(usuario_id, cuenta_id, delta):
 
 def renombrar_cuenta(usuario_id, cuenta_id_o_nombre, nuevo_nombre):
     """Renombra una cuenta existente buscando por ID o por nombre exacto/parcial."""
-    _, user_ref = _get_user_ref(usuario_id)
-    if not user_ref:
-        return False, "No se pudo obtener la referencia del usuario."
+    db = get_db()
+    if not db:
+        return False, "No se pudo obtener la referencia de la base de datos."
     try:
-        accounts_ref = user_ref.collection("accounts")
+        accounts_ref = db.collection("accounts")
         # Primero intentamos buscar por ID directo
         doc_ref = accounts_ref.document(cuenta_id_o_nombre)
         doc = doc_ref.get()
