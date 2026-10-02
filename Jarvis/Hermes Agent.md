@@ -28,3 +28,11 @@ El agente posee un sistema de auto-mejora y personalización a través de la fun
   - Colección raíz `skills` en Firestore verificada e inicializada con skill de ejemplo
   - Confirmado que Hermes Agent puede leer y persistir nuevas skills correctamente
   - Scripts de validación creados: `scripts/check_skills.py` y `scripts/test_skills_persistence.py`
+
+## Integración de Normalización de Texto
+
+- **2026-10-02:** Implementación de normalización de texto para skills en Hermes Agent:
+  - Importada y utilizada la función `normalizar_texto` desde `src/agent/tools.py` en `src/agent/hermes_engine.py`
+  - Modificada la función `_cargar_skills` para hacer la comparación por nombre de skill insensible a mayúsculas, minúsculas, tildes y espacios extra
+  - Actualizada la herramienta `_guardar_skill` en `src/agent/tools.py` para evitar duplicados al guardar skills, normalizando el nombre antes de verificar existencia
+  - Verificada la funcionalidad con el script `scripts/test_skills_persistence.py` que confirma que buscar 'ejemplo_inicial', 'EJEMPLO_INICIAL' o 'Ejemplo_Inicial' recupera la misma skill sin duplicar registros en Firestore

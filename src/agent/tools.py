@@ -615,6 +615,24 @@ def _guardar_skill(usuario_id: str, nombre: str, contenido: str, tipo: str = "pr
     if not db:
         return "❌ No se pudo conectar con la base de datos."
     try:
+        # Normalizar el nombre para evitar duplicados por mayúsculas/minúsculas/acentos
+        nombre_normalizado = _normalizar_texto(nombre)
+        # Verificar si ya existe una skill con este nombre normalizado
+        _, user_ref = _get_user_ref(usuario_id)
+        if user_ref:
+            skills_existentes = user_ref.collection("skills").stream()
+            for skill_doc in skills_existentes:
+                skill_data = skill_doc.to_dict()
+                if skill_data and _normalizar_texto(skill_data.get("nombre", "")) == nombre_normalizado:
+                    # Actualizar la skill existente en lugar de crear una nueva
+                    skill_doc.reference.update({
+                        "contenido": contenido,
+                        "tipo": tipo,
+                        "created_at": fs.SERVER_TIMESTAMP,
+                    })
+                    return f"✅ Habilidad '{nombre}' actualizada exitosamente (evitando duplicado)."
+        
+        # Si no existe, crear nueva skill
         skill_ref = db.collection("skills").document()
         skill_ref.set({
             "nombre": nombre,

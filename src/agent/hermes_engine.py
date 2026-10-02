@@ -24,7 +24,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from src.agent.tools import ALL_TOOLS, TOOLS_BY_NAME, AgentTool
+from src.agent.tools import ALL_TOOLS, TOOLS_BY_NAME, AgentTool, _normalizar_texto
 from src.core.llm_provider import LLMMessage, LLMResponse, get_llm_provider
 
 logger = logging.getLogger("JARVIS.hermes")
@@ -110,8 +110,18 @@ async def _cargar_skills(usuario_id: str) -> str:
         if not skills:
             return ""
 
-        lines = ["\n## Preferencias y reglas del usuario (Skills guardados):"]
+        # Normalizar nombres de skills para evitar duplicados por mayúsculas/minúsculas/acentos
+        skills_normalizadas = {}
         for s in skills:
+            nombre_original = s.get("nombre", "")
+            nombre_normalizado = _normalizar_texto(nombre_original)
+            # Si ya existe una skill con este nombre normalizado, la sobrescribimos (manteniendo la última)
+            if nombre_normalizado in skills_normalizadas:
+                logger.warning("Skill duplicada detectada (normalizada): '%s' -> '%s'", nombre_original, nombre_normalizado)
+            skills_normalizadas[nombre_normalizado] = s
+
+        lines = ["\n## Preferencias y reglas del usuario (Skills guardados):"]
+        for s in skills_normalizadas.values():
             tipo = s.get("tipo", "preferencia")
             nombre = s.get("nombre", "")
             contenido = s.get("contenido", "")
