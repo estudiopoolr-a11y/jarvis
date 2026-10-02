@@ -31,7 +31,7 @@ def _serializar_valor(valor):
 
 
 @app.get("/api/widget/dashboard")
-def api_widget_dashboard(usuario_id: str = "iphone_user"):
+def api_widget_dashboard(usuario_id: str = "default"):
     """Endpoint único que devuelve TODO lo que necesita el widget iPhone.
 
     Optimizado para hacer UNA sola llamada HTTP desde el widget.
@@ -156,10 +156,9 @@ def api_widget_dashboard(usuario_id: str = "iphone_user"):
         total_balance_cuentas = 0.0
         try:
             # MIGRACIÓN: Las cuentas ahora están en la colección raíz 'accounts'
-            # Filtramos por usuario_id dentro de los documentos de la colección raíz
+            # Se obtienen todas las cuentas de la colección raíz independientemente de usuario_id
             accounts_ref = db.collection('accounts')
-            query = accounts_ref.where(filter=firestore.FieldFilter("usuario_id", "==", usuario_id))
-            accounts = query.stream()
+            accounts = accounts_ref.stream()
 
             for acc in accounts:
                 acc_data = acc.to_dict()

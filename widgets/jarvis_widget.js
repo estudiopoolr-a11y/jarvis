@@ -3,7 +3,6 @@
 // Usa /api/widget/dashboard (UNA sola llamada HTTP)
 
 const BASE_URL = "https://jarvis-vy8k.onrender.com"
-const USUARIO = "1536228767180136498"
 
 // Colores tema oscuro
 const COLORS = {
@@ -56,7 +55,7 @@ async function buildWidget() {
 
     const widgetFamily = config.widgetFamily || "medium"
 
-    const url = BASE_URL + "/api/widget/dashboard?usuario_id=" + USUARIO
+    const url = BASE_URL + "/api/widget/dashboard"
     const data = await fetchJSON(url)
 
     if (!data || data.error) {
