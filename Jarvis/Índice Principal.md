@@ -15,6 +15,7 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[FastAPI.md|FastAPI]] - API principal alojada en servidor web.
 - [[Vercel.md|Vercel]] - Infraestructura para serverless deployment.
 - [[Jarvis/telegram_bot_webhook.md|Telegram Bot Webhook]] - Integración serverless con Telegram vía Vercel.
+- [[Jarvis/monitoreo_uptimerobot.md|Monitoreo UptimeRobot]] - Monitoreo de salud de la API y prevención de Cold Starts.
 
 ## Gestión del Royecto
 - [[estado_proyecto.md|Estado del Proyecto]] - Bitácora de avances, roadmap y logs diarios.
