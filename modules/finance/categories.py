@@ -55,13 +55,15 @@ def crear_categoria(usuario_id, nombre, budget=0, tipo="variable", icono="📊",
         return None
     try:
         ensure_user(usuario_id)
-        existing = user_ref.collection("categories").where("nombre", "==", nombre).limit(1).stream()
+        # Normalizar nombre para búsqueda consistente
+        nombre_norm = nombre.strip()
+        existing = user_ref.collection("categories").where("nombre", "==", nombre_norm).limit(1).stream()
         existing_list = list(existing)
         if existing_list:
             return existing_list[0].id
         doc_ref = user_ref.collection("categories").document()
         doc_ref.set({
-            "nombre": nombre,
+            "nombre": nombre_norm,
             "budget": float(budget),
             "tipo": tipo,
             "icono": icono,
@@ -82,12 +84,13 @@ def crear_categorias_predefinidas(usuario_id="default"):
         ensure_user(usuario_id)
         count = 0
         for cat in CATEGORIAS_PREDEFINIDAS:
-            existing = user_ref.collection("categories").where("nombre", "==", cat["nombre"]).limit(1).stream()
+            nombre_cat = cat["nombre"].strip()
+            existing = user_ref.collection("categories").where("nombre", "==", nombre_cat).limit(1).stream()
             existing_list = list(existing)
             if not existing_list:
                 doc_ref = user_ref.collection("categories").document()
                 doc_ref.set({
-                    "nombre": cat["nombre"],
+                    "nombre": nombre_cat,
                     "icono": cat["icono"],
                     "color": cat["color"],
                     "tipo": cat["tipo"],
@@ -138,8 +141,9 @@ def listar_subcategorias(usuario_id, categoria_nombre):
     if not user_ref:
         return []
     try:
-        # Buscar categoría padre
-        cats = user_ref.collection("categories").where("nombre", "==", categoria_nombre).limit(1).stream()
+        # Buscar categoría padre normalizada
+        cat_nombre_norm = categoria_nombre.strip()
+        cats = user_ref.collection("categories").where("nombre", "==", cat_nombre_norm).limit(1).stream()
         cats_list = list(cats)
         if not cats_list:
             return []
@@ -157,7 +161,9 @@ def crear_subcategoria(usuario_id, categoria_nombre, sub_nombre, icono="📁", c
     if not user_ref:
         return None
     try:
-        cats = user_ref.collection("categories").where("nombre", "==", categoria_nombre).limit(1).stream()
+        # Buscar categoría padre normalizada
+        cat_nombre_norm = categoria_nombre.strip()
+        cats = user_ref.collection("categories").where("nombre", "==", cat_nombre_norm).limit(1).stream()
         cats_list = list(cats)
         if not cats_list:
             return None
@@ -182,7 +188,8 @@ def crear_subcategorias_predefinidas(usuario_id):
         return 0
     count = 0
     for cat_nombre, subcats in SUB_CATEGORIAS_PREDEFINIDAS.items():
-        cats = user_ref.collection("categories").where("nombre", "==", cat_nombre).limit(1).stream()
+        cat_nombre_norm = cat_nombre.strip()
+        cats = user_ref.collection("categories").where("nombre", "==", cat_nombre_norm).limit(1).stream()
         cats_list = list(cats)
         if not cats_list:
             continue

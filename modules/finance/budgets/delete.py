@@ -6,6 +6,11 @@ from datetime import datetime
 
 def eliminar_presupuesto_mes(usuario_id, categoria_nombre, year=None, month=None):
     """Elimina un presupuesto mensual de la estructura KEBO."""
+    # Normalizar nombre de categoría para búsqueda consistente
+    categoria_norm = _normalizar_cat_str(categoria_nombre)
+    if not categoria_norm:
+        categoria_norm = categoria_nombre.strip()
+    
     year = str(year) if year else str(datetime.now().year)
     month = f"{int(month):02d}" if month else f"{datetime.now().month:02d}"
 
@@ -23,7 +28,7 @@ def eliminar_presupuesto_mes(usuario_id, categoria_nombre, year=None, month=None
         for doc in docs:
             data = doc.to_dict() or {}
             nombre = str(data.get("category_name", "")).strip()
-            if _cat_exacta(nombre, categoria_nombre):
+            if _cat_exacta(nombre, categoria_norm):  # Comparar con nombre normalizado
                 doc.reference.delete()
                 return True
 
@@ -32,11 +37,11 @@ def eliminar_presupuesto_mes(usuario_id, categoria_nombre, year=None, month=None
         for doc in docs:
             data = doc.to_dict() or {}
             nombre = str(data.get("category_name", "")).strip()
-            if _coincidir_categoria(nombre, categoria_nombre):
+            if _coincidir_categoria(nombre, categoria_norm):  # Comparar con nombre normalizado
                 candidatos.append(doc)
 
         if candidatos:
-            b_norm = _normalizar_cat_str(categoria_nombre)
+            b_norm = _normalizar_cat_str(categoria_norm)  # Ya está normalizado
             candidatos.sort(key=lambda d: abs(len(_normalizar_cat_str((d.to_dict() or {}).get("category_name", ""))) - len(b_norm)))
             candidatos[0].reference.delete()
             return True

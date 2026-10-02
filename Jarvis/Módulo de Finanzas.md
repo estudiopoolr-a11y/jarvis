@@ -43,4 +43,15 @@ Esta mejora permite que usuarios se refieran a cuentas y skills usando variacion
 - [[Mapa del Sistema]] - Volver al nodo central de documentación
 
 ---
-*Última actualización: 2026-10-02 - Se agregó documentación sobre la normalización de nombres de cuentas y skills para mejorar la flexibilidad de consulta.*
+## Gestión de Presupuestos y Transacciones
+Se implementaron mejoras críticas en la lógica de presupuestos y el procesamiento de lenguaje natural (NLP):
+- **Normalización Estricta de Categorías:** Se integró `_normalizar_cat_str` en [[modules/finance/categories.py]] y se aplicó en todas las operaciones CRUD de presupuestos ([[modules/finance/budgets/create.py]], [[modules/finance/budgets/update.py]], [[modules/finance/budgets/delete.py]]) para evitar duplicados por mayúsculas/minúsculas (ej. 'Madre' vs 'madre').
+- **Priorización Temporal:** Se corrigió la lógica de parseo de presupuestos para que, si el usuario especifica un mes/año en el prompt, este tenga prioridad sobre la fecha actual del sistema.
+- **Mejora en Registro de Gastos:** Se actualizaron los patrones de regex en [[modules/nlp/parsers/transacciones.py]] para capturar correctamente frases naturales como "Me gasté X en Y", asegurando que el registro de transacciones no falle por el uso de pronombres iniciales.
+
+## Adaptación de Widget iPhone
+Se actualizó el endpoint del dashboard en [[app/routes/widgets.py]] para alinearse con la nueva arquitectura de base de datos:
+- Las consultas de cuentas ahora se realizan sobre la colección raíz `accounts` filtrando por `usuario_id`, eliminando la dependencia de la ruta obsoleta `users/{user_id}/accounts`.
+
+---
+*Última actualización: 2026-10-02 - Normalización de categorías, corrección de NLP para gastos y actualización de endpoints del Widget.*

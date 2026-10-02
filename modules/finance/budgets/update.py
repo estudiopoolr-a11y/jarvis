@@ -7,12 +7,17 @@ from datetime import datetime
 
 def actualizar_presupuesto_categoria(usuario_id, nombre, nuevo_budget):
     """Actualiza el presupuesto de una categoría por nombre (compatibilidad)."""
+    # Normalizar nombre para búsqueda consistente
+    nombre_norm = _normalizar_cat_str(nombre)
+    if not nombre_norm:
+        nombre_norm = nombre.strip()
+    
     _, user_ref = _get_user_ref(usuario_id)
     if not user_ref:
         return False
     try:
-        # Actualizar el default en categories
-        docs = user_ref.collection("categories").where("nombre", "==", nombre).limit(1).stream()
+        # Actualizar el default en categories (usando nombre normalizado)
+        docs = user_ref.collection("categories").where("nombre", "==", nombre_norm).limit(1).stream()
         docs_list = list(docs)
         if docs_list:
             docs_list[0].reference.update({"budget": float(nuevo_budget)})
@@ -22,7 +27,7 @@ def actualizar_presupuesto_categoria(usuario_id, nombre, nuevo_budget):
         year = str(ahora.year)
         month = f"{ahora.month:02d}"
         budget_ref = user_ref.collection("budgets").document(f"{year}-{month}").collection("items")
-        existing = budget_ref.where("category_name", "==", nombre).limit(1).stream()
+        existing = budget_ref.where("category_name", "==", nombre_norm).limit(1).stream()
         existing_list = list(existing)
         if existing_list:
             existing_list[0].reference.update({"amount": float(nuevo_budget)})
@@ -30,7 +35,7 @@ def actualizar_presupuesto_categoria(usuario_id, nombre, nuevo_budget):
             cat_id = docs_list[0].id if docs_list else None
             budget_ref.document().set({
                 "category_id": cat_id,
-                "category_name": nombre,
+                "category_name": nombre_norm,  # Guardar nombre normalizado
                 "amount": float(nuevo_budget),
                 "created_at": firestore.SERVER_TIMESTAMP
             })
@@ -41,6 +46,11 @@ def actualizar_presupuesto_categoria(usuario_id, nombre, nuevo_budget):
 
 def modificar_presupuesto_mes(usuario_id, categoria_nombre, nuevo_limite, year=None, month=None):
     """Modifica el monto de un presupuesto mensual en la estructura KEBO."""
+    # Normalizar nombre de categoría para búsqueda consistente
+    categoria_norm = _normalizar_cat_str(categoria_nombre)
+    if not categoria_norm:
+        categoria_norm = categoria_nombre.strip()
+    
     year = str(year) if year else str(datetime.now().year)
     month = f"{int(month):02d}" if month else f"{datetime.now().month:02d}"
 
@@ -58,7 +68,7 @@ def modificar_presupuesto_mes(usuario_id, categoria_nombre, nuevo_limite, year=N
         for doc in docs:
             data = doc.to_dict() or {}
             nombre = str(data.get("category_name", "")).strip()
-            if _cat_exacta(nombre, categoria_nombre):
+            if _cat_exacta(nombre, categoria_norm):  # Comparar con nombre normalizado
                 doc.reference.update({"amount": float(nuevo_limite)})
                 return True
 
@@ -67,11 +77,11 @@ def modificar_presupuesto_mes(usuario_id, categoria_nombre, nuevo_limite, year=N
         for doc in docs:
             data = doc.to_dict() or {}
             nombre = str(data.get("category_name", "")).strip()
-            if _coincidir_categoria(nombre, categoria_nombre):
+            if _coincidir_categoria(nombre, categoria_norm):  # Comparar con nombre normalizado
                 candidatos.append(doc)
 
         if candidatos:
-            b_norm = _normalizar_cat_str(categoria_nombre)
+            b_norm = _normalizar_cat_str(categoria_norm)  # Ya está normalizado
             candidatos.sort(key=lambda d: abs(len(_normalizar_cat_str((d.to_dict() or {}).get("category_name", ""))) - len(b_norm)))
             candidatos[0].reference.update({"amount": float(nuevo_limite)})
             return True

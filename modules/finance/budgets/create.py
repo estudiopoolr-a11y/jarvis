@@ -3,12 +3,17 @@
 from firebase_admin import firestore
 from modules.firestore.client import _get_user_ref
 from modules.firestore.users import ensure_user
-from modules.finance.categories import crear_categoria
+from modules.finance.categories import crear_categoria, _normalizar_cat_str
 from datetime import datetime
 
 
 def establecer_presupuesto_mes(usuario_id, categoria_nombre, monto, year=None, month=None):
     """Establece un presupuesto para una categoría en un mes específico (Kebo style)."""
+    # Normalizar nombre de categoría para evitar duplicados por mayúsculas/acentos
+    categoria_norm = _normalizar_cat_str(categoria_nombre)
+    if not categoria_norm:
+        categoria_norm = categoria_nombre.strip()  # fallback a strip si normalización falla
+    
     year = str(year) if year else str(datetime.now().year)
     month = f"{int(month):02d}" if month else f"{datetime.now().month:02d}"
 
@@ -19,8 +24,8 @@ def establecer_presupuesto_mes(usuario_id, categoria_nombre, monto, year=None, m
         # Normalizar año y mes SIEMPRE (evita docs "2026-7" vs "2026-07")
         ensure_user(usuario_id)
 
-        # Buscar o crear categoría
-        cat_id = crear_categoria(usuario_id, categoria_nombre)
+        # Buscar o crear categoría (usando nombre normalizado)
+        cat_id = crear_categoria(usuario_id, categoria_norm)
 
         # Buscar si ya existe un presupuesto para esta categoría en este mes
         items_ref = user_ref.collection("budgets").document(f"{year}-{month}").collection("items")
@@ -32,7 +37,7 @@ def establecer_presupuesto_mes(usuario_id, categoria_nombre, monto, year=None, m
         else:
             items_ref.document().set({
                 "category_id": cat_id,
-                "category_name": categoria_nombre,
+                "category_name": categoria_norm,  # Guardar nombre normalizado
                 "amount": float(monto),
                 "year": year,
                 "month": month,

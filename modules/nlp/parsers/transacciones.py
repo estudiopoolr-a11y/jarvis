@@ -55,12 +55,12 @@ def _parse_transaccion(texto: str) -> dict | None:
 
     gasto_patterns = [
         (
-            r"(?:gasto|gast[eé]|gastó|compr[eéó]|pag(?:ue|ué|ó))\s+"
+            r"(?:\w+\s+)?(?:gasto|gast[eé]|gastó|compr[eéó]|pag(?:ue|ué|ó))\s+"
             r"([\d.,]+(?:[km])?)\s*(?:en\s+)?(.+?)(?:\s*$|$)",
             "monto_primero",
         ),
         (
-            r"(?:gasto|gast[eé]|gastó|compr[eéó]|pag(?:ue|ué|ó))\s+"
+            r"(?:\w+\s+)?(?:gasto|gast[eé]|gastó|compr[eéó]|pag(?:ue|ué|ó))\s+"
             r"(?:en\s+)?(.+?)\s+([\d.,]+(?:[km])?)(?:\s*$|$)",
             "categoria_primero",
         ),

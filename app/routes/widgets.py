@@ -55,6 +55,7 @@ def api_widget_dashboard(usuario_id: str = "iphone_user"):
             inicializar_firebase, _get_user_ref,
             obtener_presupuestos_v2, listar_prestamos, obtener_balance_v2
         )
+        from firebase_admin import firestore
 
         db = inicializar_firebase()
         if not db:
@@ -127,6 +128,7 @@ def api_widget_dashboard(usuario_id: str = "iphone_user"):
         total_ingresos = 0.0
         total_gastos_categoria = 0.0
         try:
+            # Las transacciones siguen estando en users/{id}/transactions/{mes}/items
             user_ref = db.collection('users').document(usuario_id)
             transactions_ref = user_ref.collection('transactions').document(mes_actual).collection('items')
             transactions = transactions_ref.stream()
@@ -153,9 +155,11 @@ def api_widget_dashboard(usuario_id: str = "iphone_user"):
         cuentas = []
         total_balance_cuentas = 0.0
         try:
-            user_ref = db.collection('users').document(usuario_id)
-            accounts_ref = user_ref.collection('accounts')
-            accounts = accounts_ref.stream()
+            # MIGRACIÓN: Las cuentas ahora están en la colección raíz 'accounts'
+            # Filtramos por usuario_id dentro de los documentos de la colección raíz
+            accounts_ref = db.collection('accounts')
+            query = accounts_ref.where(filter=firestore.FieldFilter("usuario_id", "==", usuario_id))
+            accounts = query.stream()
 
             for acc in accounts:
                 acc_data = acc.to_dict()

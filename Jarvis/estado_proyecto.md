@@ -51,3 +51,8 @@
 - **2026-10-02:** Mantenimiento de Base de Datos: Ejecución de `scripts/deduplicate_accounts.py`. Se detectaron y eliminaron 4 cuentas duplicadas en la colección raíz `accounts`, conservando únicamente los documentos canónicos para Nu, Nequi y Efectivo.
 - **2026-10-02:** Mejora de Inteligencia Conversacional: Agregada función de normalización de texto en `src/agent/tools.py` y actualizada lógica de búsqueda en `modules/finance/accounts.py` para hacer coincidencias insensibles a mayúsculas, minúsculas y tildes. Documentado en [[Módulo de Finanzas]].
 - **2026-10-02:** Implementación de normalización de texto para skills en Hermes Agent: Integrada la función `normalizar_texto` en `src/agent/hermes_engine.py` para hacer la búsqueda y carga de skills insensible a mayúsculas, minúsculas, tildes y espacios extra. Actualizada la herramienta `_guardar_skill` en `src/agent/tools.py` para evitar duplicados al guardar skills. Verificado con `scripts/test_skills_persistence.py`.
+- **2026-10-02:** Corrección de múltiples bugs reportados:
+  - Normalización estricta de categorías en presupuestos (evitando duplicados por mayúsculas/minúsculas).
+  - Priorización de mes especificado en prompts de presupuestos sobre la fecha actual.
+  - Mejora en el registro de gastos para capturar frases como "Me gasté X en Y" (ajuste de regex en NLP).
+  - Actualización del endpoint del widget iPhone para usar la colección raíz `accounts` en lugar de la subcolección obsoleta.
