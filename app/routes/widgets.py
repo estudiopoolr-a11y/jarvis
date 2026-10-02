@@ -5,10 +5,13 @@ from datetime import datetime
 
 from fastapi import File, Form, UploadFile
 from fastapi.responses import HTMLResponse
+from fastapi import APIRouter
 
 from app.api import USUARIO_PRINCIPAL, ComandoPayload, app
 from modules.ai import pensar_respuesta, pensar_respuesta_imagen, procesar_intencion_natural
 from modules.db import obtener_balance_financiero, obtener_resumen_presupuestos, obtener_tareas_pendientes
+
+router = APIRouter()
 
 # ============================================================
 # 🆕 WIDGET DASHBOARD — Endpoint único para el widget iPhone
@@ -30,7 +33,7 @@ def _serializar_valor(valor):
     return valor
 
 
-@app.get("/api/widget/dashboard")
+@router.get("/dashboard")
 def api_widget_dashboard(usuario_id: str = ""):
     """Endpoint único que devuelve TODO lo que necesita el widget iPhone.
 
