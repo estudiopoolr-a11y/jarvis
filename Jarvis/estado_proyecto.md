@@ -30,10 +30,10 @@
 - [x] Crear función/herramienta para recomendaciones de pago de deudas, ahorro e inversión, basada en la lógica de [[Estrategia de Inversión]].
 
 ### PASO 5: Verificación Final y Despliegue
-- [ ] Probar `listar_cuentas()` en consola y verificar saldos reales (no $0).
-- [ ] Probar función de obtención de balance consolidado.
-- [ ] Ejecutar suite de pruebas: `py -3 -m unittest discover -v tests`.
-- [ ] Ejecutar `git add .`, `git commit` y `git push`.
+- [x] Probar `listar_cuentas()` en consola y verificar saldos reales (no $0).
+- [x] Probar función de obtención de balance consolidado.
+- [x] Ejecutar suite de pruebas: `py -3 -m unittest discover -v tests`.
+- [x] Ejecutar `git add .`, `git commit` y `git push`.
 
 ---
 
@@ -47,3 +47,6 @@
 - **2026-10-02:** Finalización de la red de documentación con las notas [[Integración NVIDIA]] y [[Estrategia de Inversión]], y actualización de enlaces wiki en el Roadmap del proyecto.
 - **2026-10-02:** Ejecución del PASO 2: Diagnóstico y Corrección de Skills en Hermes Agent. Se inspeccionó la función _cargar_skills en [[src/agent/hermes_engine.py]], se verificó la colección raíz skills en Firestore (inicializando con una skill de ejemplo si estaba vacía), y se confirmó que Hermes Agent puede leer y persistir nuevas skills correctamente.
 - **2026-10-02:** Ejecución del PASO 3: Integración de Modelos NVIDIA (NIM / API). Se revisó la configuración de LLM en [[src/core/llm_provider.py]] confirmando soporte para NVIDIA NIM, se creó y ejecutó [[scripts/test_nvidia_api.py]] para validar la conectividad (en modo simulación debido a falta de API key), y se confirmó que el conector está listo para usar modelos como [[meta/llama-3.1-70b-instruct]].
+- **2026-10-02:** Ejecución del PASO 5: Verificación Final y Despliegue. Se realizó la limpieza profunda de archivos obsoletos (eliminación de carpeta `bot/`, scripts de Discord y conectores antiguos). Se ejecutó la suite de pruebas y se consolidó el repositorio mediante Git, completando así el roadmap de JARVIS v1.0.
+- **2026-10-02:** Mantenimiento de Base de Datos: Ejecución de `scripts/deduplicate_accounts.py`. Se detectaron y eliminaron 4 cuentas duplicadas en la colección raíz `accounts`, conservando únicamente los documentos canónicos para Nu, Nequi y Efectivo.
+- **2026-10-02:** Mejora de Inteligencia Conversacional: Agregada función de normalización de texto en `src/agent/tools.py` y actualizada lógica de búsqueda en `modules/finance/accounts.py` para hacer coincidencias insensibles a mayúsculas, minúsculas y tildes. Documentado en [[Módulo de Finanzas]].

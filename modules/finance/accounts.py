@@ -114,11 +114,14 @@ def renombrar_cuenta(usuario_id, cuenta_id_o_nombre, nuevo_nombre):
         if doc.exists:
             target_id = cuenta_id_o_nombre
         else:
-            # Buscar por nombre (case-insensitive o parcial)
+            # Buscar por nombre (insensible a mayúsculas, minúsculas y tildes)
+            from src.agent.tools import _normalizar_texto
+            nombre_buscado_norm = _normalizar_texto(cuenta_id_o_nombre)
             docs = accounts_ref.stream()
             for d in docs:
                 data = d.to_dict()
-                if cuenta_id_o_nombre.lower() in data.get("nombre", "").lower():
+                nombre_cuenta_norm = _normalizar_texto(data.get("nombre", ""))
+                if nombre_buscado_norm in nombre_cuenta_norm:
                     target_id = d.id
                     break
         

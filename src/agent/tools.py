@@ -80,6 +80,37 @@ def _safe_str(val) -> str:
     return str(val) if val is not None else ""
 
 
+def _normalizar_texto(texto: str) -> str:
+    """Normaliza texto: convierte a minúsculas, elimina acentos y espacios extra.
+    
+    Args:
+        texto: Texto a normalizar
+        
+    Returns:
+        Texto normalizado (minúsculas, sin acentos, espacios simples)
+    """
+    if not texto:
+        return ""
+    
+    # Convertir a string y hacer strip
+    texto = str(texto).strip()
+    
+    # Convertir a minúsculas
+    texto = texto.lower()
+    
+    # Eliminar acentos usando normalización Unicode
+    import unicodedata
+    texto = ''.join(
+        c for c in unicodedata.normalize('NFD', texto)
+        if unicodedata.category(c) != 'Mn'
+    )
+    
+    # Normalizar espacios múltiples a uno solo
+    texto = ' '.join(texto.split())
+    
+    return texto
+
+
 def _fmt_cop(monto: float) -> str:
     """Formatea un monto en COP con separador de miles."""
     return f"${monto:,.0f} COP"
@@ -129,9 +160,10 @@ def _obtener_balance_consolidado(usuario_id: str) -> str:
     # Filtrar solo las cuentas principales: Nu, Nequi, Efectivo
     cuentas_principales = []
     nombres_principales = {'nu', 'nequi', 'efectivo'}
+    from src.agent.tools import _normalizar_texto
     for cuenta in cuentas:
-        nombre_lower = cuenta['nombre'].lower().strip()
-        if nombre_lower in nombres_principales:
+        nombre_norm = _normalizar_texto(cuenta['nombre'])
+        if nombre_norm in nombres_principales:
             cuentas_principales.append(cuenta)
     
     if not cuentas_principales:
