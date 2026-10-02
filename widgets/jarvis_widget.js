@@ -27,7 +27,7 @@ const COLORS = {
 async function fetchJSON(url) {
     try {
         const req = new Request(url)
-        req.timeoutInterval = 10
+        req.timeout = 10
         return await req.loadJSON()
     } catch (e) {
         console.error("Error fetching: " + url + " - " + e)
@@ -227,7 +227,7 @@ function renderLargeWidget(w, data) {
 
             const dTxt = row.addText(textDetail)
             dTxt.font = Font.boldSystemFont(10)
-            dTxt.textColor = info.ingreso > 0 && info.gasto === 0 ? new Color(COLORS.income) : new Color(COLORS.expense)
+            dTxt.textColor = info.ingreso >= info.gasto ? new Color(COLORS.income) : new Color(COLORS.expense)
 
             w.addSpacer(2)
         })
