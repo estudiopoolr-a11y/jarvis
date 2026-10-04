@@ -6,6 +6,14 @@
     },
     "rewrites": [
         {
+            "source": "/api/telegram/(.*)",
+            "destination": "app/main.py"
+        },
+        {
+            "source": "/api/(.*)",
+            "destination": "app/main.py"
+        },
+        {
             "source": "/(.*)",
             "destination": "app/main.py"
         }
