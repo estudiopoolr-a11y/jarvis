@@ -61,3 +61,11 @@
 - **2026-10-02:** Auditoría y estructuración de [[Índice Principal.md]]. Se añadieron enlaces wiki explícitos a [[FastAPI.md]], [[Vercel.md]] y [[Jarvis/telegram_bot_webhook.md]] en la sección de Integraciones y Arquitectura, se creó la nota [[FastAPI.md]] y se verificó la ausencia de enlaces rotos a recursos de Render.
 - **2026-10-02:** Documentación de monitoreo UptimeRobot: Creada nota [[Jarvis/monitoreo_uptimerobot.md]] con configuración de health check para prevenir Cold Starts en Vercel y actualizado [[Índice Principal.md]] con enlace al nuevo recurso.
 - **2026-10-02:** Corrección de enrutamiento serverless en Vercel: Modificado `app/routes/widgets.py` para usar APIRouter con prefijo correcto y actualizado `vercel.json` para incluir ruta `/api/(.*)`, resolviendo el error HTTP 404 en `/api/widget/dashboard`. Documentado en [[Jarvis/vercel_routing_fix.md]].
+- **2026-10-04:** Verificación E2E y optimización de despliegue en producción:
+  - Diagnóstico: endpoint `https://jarvis.vercel.app/api/widget/dashboard` retornaba 404 porque los cambios locales en [[app/routes/widgets.py]] y [[vercel.json]] no habían sido pusheados a GitHub.
+  - Optimización de [[vercel.json]]: migrado del formato legacy `builds` + `routes` (con warnings) al formato moderno `functions` + `rewrites` con runtime `python3.11`.
+  - Verificación del cliente Scriptable [[widgets/jarvis_widget.js]]: confirmado que llama correctamente a `/api/widget/dashboard?usuario_id=` y valida errores antes de renderizar.
+  - Webhook Telegram: confirmado apuntando a Render (incorrecto); pendiente actualización a `https://jarvis.vercel.app/api/telegram/webhook` via `/api/telegram/set-webhook` post-redeploy.
+  - Creada nota [[Jarvis/despliegue_produccion_vercel.md]] con arquitectura completa de routing, endpoints, troubleshooting y flujo de redeploy.
+  - Actualizado [[Jarvis/Índice Principal.md]] con enlace a la nueva nota.
+  - Ejecutado `git push` para triggerear redeploy automático en [[Vercel]].

@@ -17,6 +17,7 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/telegram_bot_webhook.md|Telegram Bot Webhook]] - Integración serverless con Telegram vía Vercel.
 - [[Jarvis/monitoreo_uptimerobot.md|Monitoreo UptimeRobot]] - Monitoreo de salud de la API y prevención de Cold Starts.
 - [[Jarvis/vercel_routing_fix.md|Fix de Routing Vercel]] - Corrección de enrutamiento serverless para resolver HTTP 404.
+- [[Jarvis/despliegue_produccion_vercel.md|Despliegue en Producción Vercel]] - Verificación E2E, arquitectura de routing, widget Scriptable y estado del webhook Telegram.
 
 ## Gestión del Royecto
 - [[estado_proyecto.md|Estado del Proyecto]] - Bitácora de avances, roadmap y logs diarios.

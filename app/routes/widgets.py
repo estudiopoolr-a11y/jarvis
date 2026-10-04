@@ -11,7 +11,7 @@ from app.api import USUARIO_PRINCIPAL, ComandoPayload, app
 from modules.ai import pensar_respuesta, pensar_respuesta_imagen, procesar_intencion_natural
 from modules.db import obtener_balance_financiero, obtener_resumen_presupuestos, obtener_tareas_pendientes
 
-router = APIRouter(prefix="/widget")
+router = APIRouter(prefix="/api/widget")
 
 # ============================================================
 # 🆕 WIDGET DASHBOARD — Endpoint único para el widget iPhone
