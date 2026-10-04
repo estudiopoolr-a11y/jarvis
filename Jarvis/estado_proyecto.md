@@ -76,10 +76,17 @@
   - Nota creada: [[Jarvis/vercel_runtime_syntax_fix.md]] con detalle del fix y enlaces wiki.
   - Commit ejecutado: `git add . && git commit -m "fix(vercel): corregir runtime en vercel.json a @vercel/python para resolver error de build" && git push`.
 - **2026-10-04 (final):** Confirmación de despliegue E2E y activación de webhook:
-  - Tras trigger de redeploy con commit vacío, se esperaron 45s para propagación en Vercel.
-  - Se ejecutó `curl -i https://jarvis.vercel.app/api/telegram/set-webhook` activando el webhook.
-  - Se verificó con `curl -i "https://api.telegram.org/bot8647134091:AAH486SQCMqA_MHB1uaSAbYTesIrYV_y8zk/getWebhookInfo"` que el webhook apunta correctamente a Vercel.
-  - Se verificó el endpoint del widget con `curl -i "https://jarvis.vercel.app/api/widget/dashboard"` retornando HTTP 200 con datos financieros.
-  - Creada nota [[Jarvis/confirmacion_despliegue_e2e.md]] con detalle completo del despliegue verificado.
-  - Actualizado [[Jarvis/Índice Principal.md]] con enlace a la nota de confirmación.
-  - Commit final: `git add . && git commit -m "docs(obsidian): registro de verificacion e2e y activacion del webhook de telegram" && git push`.
+    - Tras trigger de redeploy con commit vacío, se esperaron 45s para propagación en Vercel.
+    - Se ejecutó `curl -i https://jarvis.vercel.app/api/telegram/set-webhook` activando el webhook.
+    - Se verificó con `curl -i "https://api.telegram.org/bot8647134091:AAH486SQCMqA_MHB1uaSAbYTesIrYV_y8zk/getWebhookInfo"` que el webhook apunta correctamente a Vercel.
+    - Se verificó el endpoint del widget con `curl -i "https://jarvis.vercel.app/api/widget/dashboard"` retornando HTTP 200 con datos financieros.
+    - Creada nota [[Jarvis/confirmacion_despliegue_e2e.md]] con detalle completo del despliegue verificado.
+    - Actualizado [[Jarvis/Índice Principal.md]] con enlace a la nota de confirmación.
+    - Commit final: `git add . && git commit -m "docs(obsidian): registro de verificacion e2e y activacion del webhook de telegram" && git push`.
+
+- **2026-10-04 (actualización):** Resolución de conflicto en vercel.json entre propiedades `builds` y `functions`:
+    - Eliminado el bloque legacy `builds` para resolver el error "The 'functions' property cannot be used in conjunction with the 'builds' property".
+    - Actualizada configuración a sintaxis moderna con `functions` + `rewrites` usando runtime `@vercel/python`.
+    - Creada nota [[Jarvis/resolucion_conflicto_vercel_builds.md]] documentando el problema, causa raíz, solución aplicada y resultados E2E.
+    - Actualizado [[Jarvis/Índice Principal.md]] con enlace a la nueva nota en la sección de Arquitectura / Infraestructura.
+    - Commit ejecutado: `git add . && git commit -m "fix(vercel): eliminar bloque legacy builds para resolver conflicto con functions y actualizar obsidian" && git push origin main`.
