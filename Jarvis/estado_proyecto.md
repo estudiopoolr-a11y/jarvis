@@ -69,3 +69,9 @@
   - Creada nota [[Jarvis/despliegue_produccion_vercel.md]] con arquitectura completa de routing, endpoints, troubleshooting y flujo de redeploy.
   - Actualizado [[Jarvis/Índice Principal.md]] con enlace a la nueva nota.
   - Ejecutado `git push` para triggerear redeploy automático en [[Vercel]].
+- **2026-10-04 (continuación):** Corrección de runtime en vercel.json:
+  - Error detectado: `Function Runtimes must have a valid version` en el panel de Vercel.
+  - Causa: uso de `"runtime": "python3.11"` dentro de `functions` (formato no soportado).
+  - Solución: migrado a `"runtime": "@vercel/python"` manteniendo `builds` con `"use": "@vercel/python"`.
+  - Nota creada: [[Jarvis/vercel_runtime_syntax_fix.md]] con detalle del fix y enlaces wiki.
+  - Commit ejecutado: `git add . && git commit -m "fix(vercel): corregir runtime en vercel.json a @vercel/python para resolver error de build" && git push`.
