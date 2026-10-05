@@ -48,7 +48,7 @@ def cron_reminders():
 
 @app.get("/api/cron/daily-summary")
 def cron_daily_summary():
-    """Endpoint para Render Cron Job - envía resumen diario al canal de Discord."""
+    """Endpoint para Vercel Cron Job - envía resumen diario al canal de Discord."""
     try:
         from app.services.daily_summary import main as daily_main
         daily_main()
@@ -59,7 +59,7 @@ def cron_daily_summary():
 
 @app.get("/api/cron/weekly-summary")
 def cron_weekly_summary():
-    """Endpoint para Render Cron Job - envía resumen semanal al canal de Discord."""
+    """Endpoint para Vercel Cron Job - envía resumen semanal al canal de Discord."""
     try:
         from modules.alertas import enviar_resumen_semanal_discord
         exito = enviar_resumen_semanal_discord()
@@ -73,7 +73,7 @@ def cron_weekly_summary():
 
 @app.get("/api/cron/alertas")
 def cron_alertas():
-    """Endpoint para Render Cron Job - verifica y envía alertas proactivas."""
+    """Endpoint para Vercel Cron Job - verifica y envía alertas proactivas."""
     try:
         from modules.alertas import verificar_y_enviar_alertas
         resultado = verificar_y_enviar_alertas()

@@ -28,6 +28,7 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[estado_proyecto.md|Estado del Proyecto]] - Bitácora de avances, roadmap y logs diarios.
 - [[Jarvis/confirmacion_migracion_telegram_vercel.md|Confirmación Final Migración Telegram a Vercel]] - Validación E2E y re-registro de webhook tras migración a Vercel.
 - [[Jarvis/migracion_oficial_webhook_telegram.md|Migración Oficial Webhook Telegram]] - Documentación detallada de la migración definitiva de webhook de Telegram desde Render a Vercel.
+- [[Jarvis/migracion_render_a_vercel.md|Migración Render a Vercel]] - Guía completa de la migración de infraestructura desde Render.com a Vercel.
 - [[Mapa del Sistema.md|Mapa del Sistema]] - Nodo de navegación alternativo (Legado).
 
 ## Protocolos Auxiliares

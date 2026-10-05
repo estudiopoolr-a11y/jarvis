@@ -25,15 +25,15 @@ jobs:
         run: |
           pip install firebase-admin requests python-dotenv
 
-      - name: Despertar Render
+      - name: Despertar Vercel
         run: |
-          echo "Despertando Render..."
-          curl -s --max-time 90 https://jarvis-h20g.onrender.com/ || true
-          echo "Render despierto, esperando..."
+          echo "Despertando Vercel..."
+          curl -s --max-time 90 https://jarvis.vercel.app/ || true
+          echo "Vercel despierto, esperando..."
           sleep 5
 
       - name: Llamar endpoint de resumen semanal
         run: |
           echo "Ejecutando resumen semanal de JARVIS..."
-          response=$(curl -s --max-time 60 -w "\n%{http_code}" https://jarvis-h20g.onrender.com/api/cron/weekly-summary)
+          response=$(curl -s --max-time 60 -w "\n%{http_code}" https://jarvis.vercel.app/api/cron/weekly-summary)
           echo "Respuesta: $response"

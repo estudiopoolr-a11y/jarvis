@@ -12,3 +12,4 @@
 - [[Jarvis/estado_proyecto.md]]
 - [[Jarvis/Vercel.md]]
 - [[Jarvis/Índice Principal.md]]
+- [[Jarvis/migracion_render_a_vercel.md]] - Guía de migración de Render a Vercel.

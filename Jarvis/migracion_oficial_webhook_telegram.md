@@ -8,7 +8,7 @@ Antes de la migración, el webhook de Telegram estaba configurado para apuntar a
 {
   "ok": true,
   "result": {
-    "url": "https://jarvis-vy8k.onrender.com/webhook",
+    "url": "https://jarvis.vercel.app/api/telegram/webhook",
     "has_custom_certificate": false,
     "pending_update_count": 0,
     "last_error_date": 1790337425,

@@ -26,3 +26,4 @@ La API está diseñada para desplegarse en plataformas serverless como **Vercel*
 - [[Jarvis/telegram_bot_webhook.md]] - Detalles de la integración con Telegram.
 - [[Jarvis/Vercel.md]] - Información sobre el despliegue en Vercel.
 - [[Jarvis/Índice Principal.md]] - Nodo central de la red de conocimiento.
+- [[Jarvis/migracion_render_a_vercel.md]] - Guía de migración de Render a Vercel.

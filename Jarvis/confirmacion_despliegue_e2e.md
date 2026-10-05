@@ -19,7 +19,7 @@
 ## 🤖 Estado del Webhook de Telegram
 
 ### Antes de la activación:
-- URL configurada: `https://jarvis-vy8k.onrender.com/webhook` (Render - INCORRECTO)
+- URL configurada: `https://jarvis.vercel.app/api/telegram/webhook` (Vercel - CORRECTO)
 - Error: `Wrong response from the webhook: 404 Not Found`
 
 ### Después de la activación:

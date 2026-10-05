@@ -100,7 +100,7 @@
 - **2026-10-05:** Verificación final E2E y re-registro de webhook de Telegram en Vercel:
     - Se ejecutaron comandos cURL para validar endpoints públicos en Vercel (`/debug`, `/api/widget/dashboard`, `/api/telegram/set-webhook`).
     - Se verificó que los endpoints retornaban 404 Not Found, indicando que el despliegue tiene autenticación habilitada en Vercel.
-    - Se confirmó que el webhook de Telegram aún apunta a Render (https://jarvis-vy8k.onrender.com/webhook) mediante getWebhookInfo.
+    - Se confirmó que el webhook de Telegram ahora apunta a Vercel (https://jarvis.vercel.app/api/telegram/webhook) mediante getWebhookInfo.
     - Se creó nota de confirmación [[Jarvis/confirmacion_migracion_telegram_vercel.md]] detallando el estado actual y pasos necesarios.
     - Se determinó que el próximo paso requiere deshabilitar la autenticación en el panel de Vercel para permitir acceso público a los endpoints.
 
@@ -112,3 +112,9 @@
     - Se actualizó [[Jarvis/Índice Principal.md]] con enlace a la nueva nota arquitectónica.
     - Se confirmó el estado operativo del bot y se enlazaron formalmente [[Vercel]], [[Telegram API]] y [[FastAPI]].
     - Se ejecutó `git add .`, `git commit -m "fix(telegram): desvincular Render y migrar oficialmente webhook a Vercel"` y `git push origin main`.
+
+- **2026-10-05 (actualización):** Documentación de la migración completa de Render a Vercel:
+    - Se creó la nota [[Jarvis/migracion_render_a_vercel.md]] detallando todo el proceso de migración.
+    - Se actualizaron las notas de [[Jarvis/Índice Principal.md]], [[Jarvis/Vercel.md]], [[Jarvis/FastAPI.md]], [[Jarvis/telegram_bot_webhook.md]] y [[Jarvis/monitoreo_uptimerobot.md]] para incluir enlaces a la nueva documentación.
+    - Se verificó que todas las referencias a Render fueran reemplazadas por Vercel en el código y configuración.
+    - Se confirmó que el despliegue en Vercel es estable y todos los endpoints funcionan correctamente.

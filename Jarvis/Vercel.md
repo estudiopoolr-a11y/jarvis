@@ -23,3 +23,4 @@ Vercel es la plataforma elegida para el despliegue serverless de JARVIS, alojand
 - [[Jarvis/FastAPI.md]] - Detalles de la API principal.
 - [[Jarvis/telegram_bot_webhook.md]] - Integración específica de Telegram.
 - [[Jarvis/Índice Principal.md]] - Nodo central de la red de conocimiento.
+- [[Jarvis/migracion_render_a_vercel.md]] - Guía de migración de Render a Vercel.

@@ -4,7 +4,7 @@ Almacena los resúmenes diarios/semanales que generan los cron jobs y permite
 consultarlos por similitud semántica. Es de SOLO LECTURA respecto a Firestore:
 nunca crea ni modifica datos financieros.
 
-ChromaDB persiste en disco local (`data/chroma_db`). En Render el filesystem es
+ChromaDB persiste en disco local (`data/chroma_db`). En Vercel el filesystem es
 efímero, así que la memoria se reinicia con cada deploy salvo que se monte un
 disco persistente en esa ruta. Todas las funciones degradan a no-op si
 ChromaDB no está instalado o falla, para no tumbar el bot.

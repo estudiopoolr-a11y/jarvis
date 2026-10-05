@@ -194,11 +194,11 @@ JARVIS está optimizado para ejecutarse en el plan **Free Web Service** de Rende
 
 ## 🔄 Estrategia Keep-Alive 24/7 (UptimeRobot)
 
-Para evitar que Render suspenda la instancia por inactividad HTTP:
+Para evitar que Vercel suspenda la instancia por inactividad HTTP:
 
 1. Crea un monitor en [UptimeRobot](https://uptimerobot.com/).
 2. Configura:
    - **Monitor Type:** `HTTP(s)`
-   - **URL:** `https://tu-app-en-render.onrender.com/health`
+   - **URL:** `https://tu-app-en-vercel.vercel.app/health`
    - **Interval:** `Every 5 minutes`
 3. Responde HTTP 200 `{"status": "ok", "bot": "online"}` garantizando un tiempo de actividad continuo.

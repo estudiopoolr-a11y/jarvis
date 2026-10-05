@@ -21,3 +21,4 @@ El bot ya no "pregunta" a Telegram si hay mensajes nuevos. En su lugar, Telegram
 ## Enlaces Wiki
 - [[Jarvis/estado_proyecto.md]] - Registro de cambios y roadmap.
 - [[Jarvis/arquitectura_backend.md]] - Detalles de la estructura del servidor.
+- [[Jarvis/migracion_render_a_vercel.md]] - Guía de migración de Render a Vercel.

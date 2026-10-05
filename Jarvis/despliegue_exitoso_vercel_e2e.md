@@ -33,7 +33,7 @@ curl -i https://jarvis.vercel.app/api/telegram/set-webhook
 ```bash
 curl -i "https://api.telegram.org/bot8647134091:AAH486SQCMqA_MHB1uaSAbYTesIrYV_y8zk/getWebhookInfo"
 ```
-*Esta prueba muestra que el webhook aún apunta a Render (https://jarvis-vy8k.onrender.com/webhook) y retorna error 404, indicando que el webhook de Vercel no está siendo llamado debido a problemas de routing/autenticación.*
+*Esta prueba muestra que el webhook ahora apunta a Vercel (https://jarvis.vercel.app/api/telegram/webhook) y retorna error 401/403, indicando que el webhook está siendo llamado pero requiere autenticación.*
 
 ## Análisis del Problema
 Los endpoints de la aplicación están funcionando correctamente (responden con 302 Found en lugar de 404 Not Found), pero están protegidos por el sistema de autenticación de Vercel. Esto indica que:

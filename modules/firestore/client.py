@@ -35,7 +35,7 @@ def inicializar_firebase():
 
                 cred = credentials.Certificate(cred_path)
                 initialize_app(cred)
-                print("Firebase inicializado con éxito creando archivo de credenciales desde la variable de entorno de Render.")
+                print("Firebase inicializado con éxito creando archivo de credenciales desde la variable de entorno de Vercel.")
             except Exception as e:
                 print(f"Error crítico procesando credenciales desde la variable de entorno: {e}")
                 try:
@@ -55,7 +55,7 @@ def inicializar_firebase():
                 except Exception as e:
                     print(f"Error cargando archivo local '{cred_path}': {e}")
             else:
-                print("ADVERTENCIA CRÍTICA: No se encontró la variable de entorno FIREBASE_CREDENTIALS ni el archivo de credenciales en Render.")
+                print("ADVERTENCIA CRÍTICA: No se encontró la variable de entorno FIREBASE_CREDENTIALS ni el archivo de credenciales en Vercel.")
 
     if firebase_admin._apps:
         db = firestore.client()

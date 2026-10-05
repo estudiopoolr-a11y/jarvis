@@ -13,19 +13,19 @@ jobs:
     runs-on: ubuntu-latest
     name: Enviar resumen de JARVIS
     steps:
-      - name: Despertar Render
+      - name: Despertar Vercel
         run: |
-          echo "Despertando Render..."
-          curl -s --max-time 90 https://jarvis-h20g.onrender.com/ || true
-          echo "Render despierto, esperando..."
+          echo "Despertando Vercel..."
+          curl -s --max-time 90 https://jarvis.vercel.app/ || true
+          echo "Vercel despierto, esperando..."
           sleep 5
       - name: Llamar endpoint de resumen
         run: |
           echo "Ejecutando resumen de JARVIS..."
-          response=$(curl -s --max-time 60 -w "\n%{http_code}" https://jarvis-h20g.onrender.com/api/cron/daily-summary)
+          response=$(curl -s --max-time 60 -w "\n%{http_code}" https://jarvis.vercel.app/api/cron/daily-summary)
           echo "Respuesta: $response"
       - name: Verificar alertas proactivas
         run: |
           echo "Verificando alertas..."
-          response=$(curl -s --max-time 60 -w "\n%{http_code}" https://jarvis-h20g.onrender.com/api/cron/alertas)
+          response=$(curl -s --max-time 60 -w "\n%{http_code}" https://jarvis.vercel.app/api/cron/alertas)
           echo "Respuesta alertas: $response"
