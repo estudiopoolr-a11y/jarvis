@@ -9,34 +9,31 @@
 ## Pruebas de Conectividad Realizadas
 ### 1. Verificación de Diagnóstico y Salud (`/debug`)
 ```bash
-curl -i https://jarvis-pool11.vercel.app/debug
+curl -i https://jarvis.vercel.app/debug
 ```
-**Respuesta**: HTTP/1.1 302 Found
-- Redirección a: https://vercel.com/sso-api?url=https%3A%2F%2Fjarvis-pool11.vercel.app%2Fdebug&nonce=...
-- Indicador: Despliegue protegido por autenticación de Vercel
-- **Conclusión**: El despliegue existe pero requiere autenticación para acceso público
+**Respuesta**: HTTP/1.1 404 Not Found
+- Indicador: El despliegue existe pero las rutas no están configuradas correctamente o hay un problema de routing
+- **Conclusión**: El endpoint `/debug` no se encuentra, lo que sugiere que el catch-all en `app/main.py` no está funcionando como esperado o el despliegue no tiene el handler configurado correctamente
 
 ### 2. Verificación del Dashboard Widget (`/api/widget/dashboard`)
 ```bash
-curl -i https://jarvis-pool11.vercel.app/api/widget/dashboard
+curl -i https://jarvis.vercel.app/api/widget/dashboard
 ```
-**Respuesta**: HTTP/1.1 302 Found
-- Redirección a: https://vercel.com/sso-api?url=https%3A%2F%2Fjarvis-pool11.vercel.app%2Fapi%2Fwidget%2Fdashboard&nonce=...
-- **Conclusión**: Mismo comportamiento de autenticación que el endpoint `/debug`
+**Respuesta**: HTTP/1.1 404 Not Found
+- **Conclusión**: Mismo comportamiento que `/debug`, indicando un problema general de routing
 
 ### 3. Re-registro del Webhook de Telegram
 ```bash
-curl -i https://jarvis-pool11.vercel.app/api/telegram/set-webhook
+curl -i https://jarvis.vercel.app/api/telegram/set-webhook
 ```
-**Respuesta**: HTTP/1.1 302 Found
-- Redirección a: https://vercel.com/sso-api?url=https%3A%2F%2Fjarvis-pool11.vercel.app%2Fapi%2Ftelegram%2Fset-webhook&nonce=...
-- **Conclusión**: El endpoint existe pero está protegido por autenticación
+**Respuesta**: HTTP/1.1 404 Not Found
+- **Conclusión**: El endpoint de webhook también retorna 404, confirmando un problema de routing general
 
 ## Estado de Telegram (Webhook Info)
 ```bash
 curl -i "https://api.telegram.org/bot8647134091:AAH486SQCMqA_MHB1uaSAbYTesIrYV_y8zk/getWebhookInfo"
 ```
-*Esta prueba no se pudo completar debido a que el endpoint de Telegram en Vercel está protegido por autenticación, impidiendo el registro exitoso del webhook.*
+*Esta prueba muestra que el webhook aún apunta a Render (https://jarvis-vy8k.onrender.com/webhook) y retorna error 404, indicando que el webhook de Vercel no está siendo llamado debido a problemas de routing/autenticación.*
 
 ## Análisis del Problema
 Los endpoints de la aplicación están funcionando correctamente (responden con 302 Found en lugar de 404 Not Found), pero están protegidos por el sistema de autenticación de Vercel. Esto indica que:

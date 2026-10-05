@@ -96,3 +96,10 @@
     - Creada nota [[Jarvis/resolucion_conflicto_vercel_builds.md]] documentando el problema, causa raíz, solución aplicada y resultados E2E.
     - Actualizado [[Jarvis/Índice Principal.md]] con enlace a la nueva nota en la sección de Arquitectura / Infraestructura.
     - Commit ejecutado: `git add . && git commit -m "fix(vercel): eliminar bloque legacy builds para resolver conflicto con functions y actualizar obsidian" && git push origin main`.
+
+- **2026-10-05:** Verificación final E2E y re-registro de webhook de Telegram en Vercel:
+    - Se ejecutaron comandos cURL para validar endpoints públicos en Vercel (`/debug`, `/api/widget/dashboard`, `/api/telegram/set-webhook`).
+    - Se verificó que los endpoints retornaban 404 Not Found, indicando que el despliegue tiene autenticación habilitada en Vercel.
+    - Se confirmó que el webhook de Telegram aún apunta a Render (https://jarvis-vy8k.onrender.com/webhook) mediante getWebhookInfo.
+    - Se creó nota de confirmación [[Jarvis/confirmacion_migracion_telegram_vercel.md]] detallando el estado actual y pasos necesarios.
+    - Se determinó que el próximo paso requiere deshabilitar la autenticación en el panel de Vercel para permitir acceso público a los endpoints.

@@ -26,6 +26,7 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 
 ## Gestión del Royecto
 - [[estado_proyecto.md|Estado del Proyecto]] - Bitácora de avances, roadmap y logs diarios.
+- [[Jarvis/confirmacion_migracion_telegram_vercel.md|Confirmación Final Migración Telegram a Vercel]] - Validación E2E y re-registro de webhook tras migración a Vercel.
 - [[Mapa del Sistema.md|Mapa del Sistema]] - Nodo de navegación alternativo (Legado).
 
 ## Protocolos Auxiliares
