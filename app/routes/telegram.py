@@ -52,7 +52,14 @@ async def telegram_webhook(request: Request):
                 
         return Response(status_code=200) # Telegram exige un 200 OK rápido
     except Exception as e:
-        print(f"[Telegram Webhook] Error interno: {e}")
+        error_msg = f"❌ Error interno en el webhook: {str(e)}"
+        print(f"[Telegram Webhook] {error_msg}")
+        try:
+            if "message" in update and "chat" in update["message"]:
+                chat_id = update["message"]["chat"]["id"]
+                await enviar_mensaje(chat_id, f"⚠️ *Error de Sistema*:\n{error_msg}")
+        except:
+            pass
         return Response(status_code=200) # Siempre responder 200 para que TX ignore fallos temporales
 
 async def enviar_mensaje(chat_id: int, text: str):

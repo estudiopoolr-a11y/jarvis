@@ -6,6 +6,7 @@ la fijacion Procfile (uvicorn app.main:app) y server.py intactos
 para Render.
 """
 from app.routes import app
+from fastapi import Request
 
 # For Vercel, we need to export the handler
 handler = app
@@ -15,10 +16,10 @@ handler = app
 async def debug():
     return {"message": "debug"}
 
-# Add a catch-all route for debugging
-@app.get("/{path:path}")
-async def catch_all(path: str):
-    return {"message": f"Catch-all: {path}", "path": path}
+# Add a catch-all route for debugging that handles all HTTP methods
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
+async def catch_all(path: str, request: Request):
+    return {"message": f"Catch-all: {path}", "method": request.method, "path": path}
 
 __all__ = ["app", "handler"]
 
