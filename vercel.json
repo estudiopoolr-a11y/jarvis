@@ -1,14 +1,23 @@
 {
     "version": 2,
-    "functions": {
-        "app/main.py": {
-            "runtime": "@vercel/python"
-        }
-    },
-    "rewrites": [
+    "builds": [
         {
-            "source": "/(.*)",
-            "destination": "app/main.py"
+            "src": "app/main.py",
+            "use": "@vercel/python"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/api/telegram/(.*)",
+            "dest": "app/main.py"
+        },
+        {
+            "src": "/api/(.*)",
+            "dest": "app/main.py"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "app/main.py"
         }
     ]
 }
