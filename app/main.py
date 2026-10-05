@@ -15,6 +15,11 @@ handler = app
 async def debug():
     return {"message": "debug"}
 
+# Add a catch-all route for debugging
+@app.get("/{path:path}")
+async def catch_all(path: str):
+    return {"message": f"Catch-all: {path}", "path": path}
+
 __all__ = ["app", "handler"]
 
 if __name__ == "__main__":
