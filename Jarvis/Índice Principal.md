@@ -21,6 +21,7 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/vercel_runtime_syntax_fix.md|Fix de Runtime en vercel.json]] - Corrección del error "Function Runtimes must have a valid version" usando @vercel/python.
 - [[Jarvis/confirmacion_despliegue_e2e.md|Confirmación Despliegue E2E]] - Verificación final del webhook de Telegram y endpoint del widget tras redeploy.
 - [[Jarvis/resolucion_conflicto_vercel_builds.md|Resolución de Conflicto Builds vs Functions]] - Limpieza de vercel.json para resolver incompatibilidad de propiedades.
+- [[Jarvis/diagnostico_enrutamiento_vercel_404.md|Diagnóstico de Enrutamiento Vercel 404]] - Análisis detallado de los intentos de corrección de errores 404 en Vercel y configuración de serverless functions.
 
 ## Gestión del Royecto
 - [[estado_proyecto.md|Estado del Proyecto]] - Bitácora de avances, roadmap y logs diarios.
