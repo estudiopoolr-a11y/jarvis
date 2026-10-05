@@ -7,11 +7,7 @@
     },
     "rewrites": [
         {
-            "source": "/",
-            "destination": "app/main.py"
-        },
-        {
-            "source": "/api/(.*)",
+            "source": "/(.*)",
             "destination": "app/main.py"
         }
     ]
