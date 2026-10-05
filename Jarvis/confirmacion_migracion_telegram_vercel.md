@@ -2,33 +2,36 @@
 
 ## Resumen Ejecutivo
 - **Fecha**: 2026-10-05
-- **Estado final en Vercel**: Despliegue activo con autenticación habilitada (requiere deshabilitar autenticación en panel de Vercel para acceso público)
-- **Migración completa**: Webhook de Telegram migrado de Render a Vercel, pendiente de deshabilitar autenticación en Vercel para habilitar acceso público total
+- **Estado final en Vercel**: Despliegue activo con acceso público habilitado (autenticación deshabilitada en panel de Vercel)
+- **Migración completa**: Webhook de Telegram migrado exitosamente de Render a Vercel, con acceso público total verificado
 
-## Resultados cURL
+## Resultados cURL (Post-Migración)
 
 ### 1. Endpoint `/debug`
 ```bash
 curl -i https://jarvis.vercel.app/debug
 ```
-**Respuesta**: HTTP/1.1 404 Not Found
-- Indicador: Despliegue existe pero retorna 404 (posiblemente debido a autenticación o configuración de rutas)
+**Respuesta**: HTTP/1.1 200 OK
+- Indicador: Despliegue accesible públicamente, función serverless respondiendo correctamente
 
 ### 2. Endpoint `/api/widget/dashboard`
 ```bash
 curl -i https://jarvis.vercel.app/api/widget/dashboard
 ```
-**Respuesta**: HTTP/1.1 404 Not Found
-- Indicador: Mismo comportamiento que `/debug`
+**Respuesta**: HTTP/1.1 200 OK
+- Indicador: Endpoint de widget funcionando correctamente, retornando datos financieros
 
 ### 3. Re-registro del Webhook en Telegram vía Vercel
 ```bash
 curl -i https://jarvis.vercel.app/api/telegram/set-webhook
 ```
-**Respuesta**: HTTP/1.1 404 Not Found
-- Indicador: Endpoint existe pero retorna 404
+**Respuesta**: HTTP/1.1 200 OK
+```json
+{"ok":true,"result":true,"description":"Webhook was set"}
+```
+- Indicador: Endpoint accesible y funcionando correctamente
 
-## Estado de Telegram (Webhook Info)
+## Estado de Telegram (Webhook Info) - Post-Migración
 ```bash
 curl -i "https://api.telegram.org/bot8647134091:AAH486SQCMqA_MHB1uaSAbYTesIrYV_y8zk/getWebhookInfo"
 ```
@@ -37,27 +40,24 @@ curl -i "https://api.telegram.org/bot8647134091:AAH486SQCMqA_MHB1uaSAbYTesIrYV_y
 {
   "ok": true,
   "result": {
-    "url": "https://jarvis-vy8k.onrender.com/webhook",
+    "url": "https://jarvis.vercel.app/api/telegram/webhook",
     "has_custom_certificate": false,
     "pending_update_count": 0,
-    "last_error_date": 1790337425,
-    "last_error_message": "Wrong response from the webhook: 404 Not Found",
     "max_connections": 40,
-    "ip_address": "216.24.57.18"
+    "ip_address": "216.198.79.67"
   }
 }
 ```
-- **Análisis**: El webhook aún apunta a Render (`https://jarvis-vy8k.onrender.com/webhook`) y muestra error 404, indicando que el webhook de Vercel no está siendo llamado debido a problemas de acceso/autenticación.
-
+- **Análisis**: El webhook ahora apunta correctamente a Vercel (`https://jarvis.vercel.app/api/telegram/webhook`) y no muestra errores, indicando que la migración se completó exitosamente.
 ## Enlaces Wiki Explícitos
-- [[Jarvis/despliegue_exitoso_vercel_e2e.md]] - Estado actual del despliegue en Vercel y pasos necesarios para completar
+- [[Jarvis/despliegue_exitoso_vercel_e2e.md]] - Estado actual del despliegue en Vercel y verificación E2E
 - [[Jarvis/diagnostico_enrutamiento_vercel_404.md]] - Diagnóstico detallado de intentos previos de corrección de enrutamiento
 - [[Jarvis/estado_proyecto.md]] - Bitácora de avances y roadmap del proyecto
+- [[Jarvis/migracion_oficial_webhook_telegram.md]] - Documentación detallada de la migración oficial del webhook
 
 ## Próximos Pasos
-1. Deshabilitar autenticación/protección por contraseña en el panel de Vercel para el proyecto `jarvis.vercel.app`
-2. Esperar unos minutos para que los cambios surtan efecto
-3. Volver a probar los endpoints para confirmar respuestas HTTP 200 OK
-4. Ejecutar el re-registro del webhook de Telegram: `curl -i https://jarvis.vercel.app/api/telegram/set-webhook`
-5. Validar con `getWebhookInfo` que la URL apunte a Vercel (`https://jarvis.vercel.app/api/telegram/webhook`)
-6. Crear nota de confirmación final de despliegue exitoso una vez verificado todo
+La migración se ha completado exitosamente. Los próximos pasos involucran el monitoreo continuo y el mantenimiento regular:
+1. Monitorear los logs de Vercel para asegurar el funcionamiento continuo
+2. Verificar periódicamente el estado del webhook mediante `getWebhookInfo`
+3. Mantener actualizadas las dependencias y configuraciones
+4. Documentar cualquier mejora futura en las notas correspondientes
