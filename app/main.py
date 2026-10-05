@@ -10,6 +10,11 @@ from app.routes import app
 # For Vercel, we need to export the handler
 handler = app
 
+# Debug route to test if the function is being called
+@app.get("/debug")
+async def debug():
+    return {"message": "debug"}
+
 __all__ = ["app", "handler"]
 
 if __name__ == "__main__":
