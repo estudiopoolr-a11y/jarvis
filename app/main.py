@@ -7,7 +7,10 @@ para Render.
 """
 from app.routes import app
 
-__all__ = ["app"]
+# For Vercel, we need to export the handler
+handler = app
+
+__all__ = ["app", "handler"]
 
 if __name__ == "__main__":
     import os
