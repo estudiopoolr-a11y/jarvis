@@ -17,6 +17,7 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/telegram_bot_webhook.md|Telegram Bot Webhook]] - Integración serverless con Telegram vía Vercel.
 - [[Jarvis/monitoreo_uptimerobot.md|Monitoreo UptimeRobot]] - Monitoreo de salud de la API y prevención de Cold Starts.
 - [[Jarvis/vercel_routing_fix.md|Fix de Routing Vercel]] - Corrección de enrutamiento serverless para resolver HTTP 404.
+- [[Jarvis/configuracion_paso_a_paso_telegram_vercel.md|Guía de Configuración Telegram Webhook en Vercel]] - Procedimiento paso a paso para activar y verificar el webhook de Telegram en Vercel.
 - [[Jarvis/despliegue_produccion_vercel.md|Despliegue en Producción Vercel]] - Verificación E2E, arquitectura de routing, widget Scriptable y estado del webhook Telegram.
 - [[Jarvis/vercel_runtime_syntax_fix.md|Fix de Runtime en vercel.json]] - Corrección del error "Function Runtimes must have a valid version" usando @vercel/python.
 - [[Jarvis/confirmacion_despliegue_e2e.md|Confirmación Despliegue E2E]] - Verificación final del webhook de Telegram y endpoint del widget tras redeploy.
@@ -30,6 +31,8 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/migracion_oficial_webhook_telegram.md|Migración Oficial Webhook Telegram]] - Documentación detallada de la migración definitiva de webhook de Telegram desde Render a Vercel.
 - [[Jarvis/migracion_render_a_vercel.md|Migración Render a Vercel]] - Guía completa de la migración de infraestructura desde Render.com a Vercel.
 - [[Mapa del Sistema.md|Mapa del Sistema]] - Nodo de navegación alternativo (Legado).
+- [[Jarvis/diagnostico_error_500_webhook_telegram.md|Diagnóstico Error 500 Webhook Telegram]] - Diagnóstico y solución de excepciones HTTP 500 en endpoint de Telegram en Vercel.
+
 
 ## Protocolos Auxiliares
 - [[Protocolo_Obsidian_Agentes.md|Protocolo Obsidian]] - Refiere al documento principal de reglas de actualización (si existe) y se rige por las directrices del proyecto.

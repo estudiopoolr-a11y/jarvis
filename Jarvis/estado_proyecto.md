@@ -107,6 +107,7 @@
 - **2026-10-05 (continuación):** Migración oficial y definitiva del webhook de Telegram desde Render a Vercel:
     - Se verificó que tras deshabilitar la autenticación en Vercel, los endpoints públicos retornaban HTTP 200 OK.
     - Se ejecutó el re-registro oficial del webhook mediante `curl -i -X POST "https://api.telegram.org/bot8647134091:AAH486SQCMqA_MHB1uaSAbYTesIrYV_y8zk/setWebhook?url=https://jarvis.vercel.app/api/telegram/webhook"`.
+- **2026-10-06:** Webhook de Telegram activado y verificado en Vercel. Endpoint responde 200 OK a pruebas POST. Variables de entorno confirmadas. Guía de configuración paso a paso creada. Enlazado [[Vercel]], [[FastAPI]], [[Telegram API]], [[PowerShell]].
     - Se verificó con `getWebhookInfo` que el webhook apuntaba correctamente a Vercel y no mostraba errores.
     - Se creó nota detallada [[Jarvis/migracion_oficial_webhook_telegram.md]] documentando el diagnóstico inicial, procedimiento de corrección y prueba de verificación.
     - Se actualizó [[Jarvis/Índice Principal.md]] con enlace a la nueva nota arquitectónica.

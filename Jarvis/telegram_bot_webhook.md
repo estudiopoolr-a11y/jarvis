@@ -1,3 +1,6 @@
+## Procedimiento de Activación del Webhook
+- SetWebhook: `https://api.telegram.org/bot{TOKEN}/setWebhook?url={URL_WEBHOOK}`
+- Verificación: `https://api.telegram.org/bot{TOKEN}/getWebhookInfo`
 # Telegram Bot Serverless (Vercel Webhook)
 
 ## Descripción
@@ -22,3 +25,7 @@ El bot ya no "pregunta" a Telegram si hay mensajes nuevos. En su lugar, Telegram
 - [[Jarvis/estado_proyecto.md]] - Registro de cambios y roadmap.
 - [[Jarvis/arquitectura_backend.md]] - Detalles de la estructura del servidor.
 - [[Jarvis/migracion_render_a_vercel.md]] - Guía de migración de Render a Vercel.
+- [[Jarvis/diagnostico_error_500_webhook_telegram.md]] - Diagnóstico del error 500 en PowerShell y blindaje del webhook.
+
+## Fecha
+2026-10-06

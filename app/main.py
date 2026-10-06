@@ -1,30 +1,30 @@
-"""
-app/main.py - Entrypoint FastAPI para JARVIS.
+import os
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
-Las rutas viven en app/routes.py. Este wrapper mantiene
-la fijacion Procfile (uvicorn app.main:app) y server.py intactos
-para Render.
-"""
-from app.routes import app
-from fastapi import Request
+app = FastAPI(title="JARVIS API", version="1.0.0")
 
-# For Vercel, we need to export the handler
+@app.get("/")
+@app.get("/debug")
+@app.get("/api/debug")
+async def debug_root():
+    return {
+        "status": "online",
+        "environment": os.getenv("VERCEL_ENV", "development"),
+        "has_telegram_token": bool(os.getenv("TELEGRAM_BOT_TOKEN")),
+        "has_gemini_key": bool(os.getenv("GEMINI_API_KEY")),
+    }
+
+try:
+    from app.routes import app as routes_app
+    app.mount("", routes_app)
+except Exception as e:
+    @app.post("/api/telegram/webhook")
+    async def fallback_webhook():
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Module initialization failed", "details": str(e)}
+        )
+
 handler = app
 
-# Debug route to test if the function is being called
-@app.get("/debug")
-async def debug():
-    return {"message": "debug"}
-
-# Add a catch-all route for debugging that handles all HTTP methods
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
-async def catch_all(path: str, request: Request):
-    return {"message": f"Catch-all: {path}", "method": request.method, "path": path}
-
-__all__ = ["app", "handler"]
-
-if __name__ == "__main__":
-    import os
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))

@@ -20,3 +20,5 @@ PyWhatKit_DB.txt
 # Bases de datos locales (si la carpeta 'database' tiene archivos .sqlite o similares)
 database/*.sqlite3
 .aider*
+.vercel
+.env*
