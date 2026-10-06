@@ -31,36 +31,40 @@ async def set_webhook():
 
 @router.post("/webhook")
 async def telegram_webhook(request: Request):
-    """Recibe y procesa los eventos desde Telegram."""
+    """Recibe y procesa los eventos desde Telegram. Blindaje: siempre retorna HTTP 200 OK."""
+    TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not TELEGRAM_TOKEN:
+        print("[Telegram Error] TELEGRAM_BOT_TOKEN no está configurado.")
+        return Response(status_code=200, content="TOKEN_NOT_CONFIGURED")
+
     try:
         update = await request.json()
         print(f"[Telegram Webhook] Evento recibido: {update}")
-        
-        # Procesamiento ultra-básico (se puede mejorar/conectar con python-telegram-bot más adelante)
+
         if "message" in update and "text" in update["message"]:
             text = update["message"]["text"]
             chat_id = update["message"]["chat"]["id"]
             user_id = str(update["message"]["from"]["id"])
-            
-            # TODO: Conectar con la lógica central de Jarvis (Hermes Agent / AI module)
-            respuesta = procesar_intencion_natural(text, user_id)
-            if not respuesta:
-                respuesta = pensar_respuesta(text)
-                
+
+            # Importación perezosa (evita fallas en hot reload y entornos serverless)
+            from modules.ai import procesar_intencion_natural, pensar_respuesta
+
+            try:
+                respuesta = procesar_intencion_natural(text, user_id)
+                if not respuesta:
+                    respuesta = pensar_respuesta(text)
+            except Exception as ai_err:
+                print(f"[AI Error] Fallo al procesar mensaje: {ai_err}")
+                respuesta = "🤖 Tuve un inconveniente consultando los servicios de IA. Intenta de nuevo en unos momentos."
+
             if respuesta:
                 await enviar_mensaje(chat_id, respuesta)
-                
-        return Response(status_code=200) # Telegram exige un 200 OK rápido
+
+        return Response(status_code=200, content="OK")
     except Exception as e:
-        error_msg = f"❌ Error interno en el webhook: {str(e)}"
-        print(f"[Telegram Webhook] {error_msg}")
-        try:
-            if "message" in update and "chat" in update["message"]:
-                chat_id = update["message"]["chat"]["id"]
-                await enviar_mensaje(chat_id, f"⚠️ *Error de Sistema*:\n{error_msg}")
-        except:
-            pass
-        return Response(status_code=200) # Siempre responder 200 para que TX ignore fallos temporales
+        print(f"[Telegram Webhook Exception] {e}")
+        # Retornar 200 OK siempre para evitar bloqueos por parte de Telegram
+        return Response(status_code=200, content="HANDLED_ERROR")
 
 async def enviar_mensaje(chat_id: int, text: str):
     """Envía un mensaje de texto plano a Telegram."""
