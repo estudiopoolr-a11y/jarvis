@@ -19,12 +19,12 @@ try:
     from app.routes import app as routes_app
     app.mount("", routes_app)
 except Exception as e:
+    print(f"[Startup] No se pudieron montar las rutas: {e}")
+
     @app.post("/api/telegram/webhook")
     async def fallback_webhook():
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Module initialization failed", "details": str(e)}
-        )
+        # Telegram reintenta (y acaba desactivando el webhook) ante cualquier código distinto de 200.
+        return JSONResponse(status_code=200, content={"status": "ok", "degraded": True})
 
 handler = app
 

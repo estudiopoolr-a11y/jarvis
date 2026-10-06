@@ -17,24 +17,39 @@ logger = logging.getLogger("JARVIS")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Maneja el ciclo de vida de FastAPI y arranca el Bot de Discord en paralelo."""
+    """Ciclo de vida de FastAPI.
+
+    En entorno serverless (Vercel) NO se puede mantener un proceso de Discord
+    persistente, por lo que el arranque del bot es opcional y está blindado: si
+    el paquete ``bot`` no existe, el lifespan arranca igual para no tumbar la
+    función con FUNCTION_INVOCATION_FAILED.
+    """
     logger.info("🚀 Iniciando JARVIS Web Service...")
-    from bot import TOKEN, bot, register_handlers
 
     discord_task = None
-    if TOKEN:
-        register_handlers()
-        logger.info("🤖 TOKEN detectado. Creando tarea de Discord en el event loop...")
-        discord_task = asyncio.create_task(bot.start(TOKEN))
-    else:
-        logger.warning("⚠️ DISCORD_TOKEN no configurado. El bot de Discord no se iniciará.")
+    bot = None
+    try:
+        from bot import TOKEN, bot, register_handlers
+
+        if TOKEN:
+            register_handlers()
+            logger.info("🤖 TOKEN detectado. Creando tarea de Discord en el event loop...")
+            discord_task = asyncio.create_task(bot.start(TOKEN))
+        else:
+            logger.warning("⚠️ DISCORD_TOKEN no configurado. El bot de Discord no se iniciará.")
+    except Exception as exc:
+        # El bot de Discord es opcional en serverless; su ausencia no debe romper el arranque.
+        logger.warning("ℹ️ Bot de Discord no disponible (%s). Continuando sin él.", exc)
 
     yield
 
     logger.info("🛑 Apagando JARVIS Web Service...")
-    if discord_task and not discord_task.done():
+    if discord_task and not discord_task.done() and bot is not None:
         logger.info("🛑 Cerrando sesión del bot de Discord...")
-        await bot.close()
+        try:
+            await bot.close()
+        except Exception:
+            pass
         discord_task.cancel()
         try:
             await discord_task

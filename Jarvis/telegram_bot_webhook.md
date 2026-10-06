@@ -17,6 +17,11 @@ El bot ya no "pregunta" a Telegram si hay mensajes nuevos. En su lugar, Telegram
    - **Hermes Agent**: Razonamiento ReAct vía LLM (Gemini/Nvidia).
 4. La respuesta se envía mediante una petición asíncrona a `sendMessage` de la API de Telegram.
 
+## Manejo Defensivo en Entornos Serverless
+Para prevenir el infame error `FUNCTION_INVOCATION_FAILED` en los despliegues perezosos de Vercel:
+- **Importaciones Diferidas (Lazy loading):** Todo componente pesado o ajeno que no deba romper el levantamiento de `FastAPI()` (como los motores de NLP o Gemini en `modules.ai`) se importará exclusivamente dentro de la propia función POST del webhook, y no en la parte superior del archivo.
+- **Respuesta Resiliente (Fallback HTTP 200 OK):** Dado que Telegram bloquea automáticamente el webhook al detectar secuencias de estado 500, cualquier rama de excepción del manejo de red se atrapa e informa ignorando el estado, respondiendo artificialmente un `Response(status_code=200, content="OK")`.
+
 ## Endpoints
 - `POST /api/telegram/webhook`: Punto de entrada para los eventos de Telegram.
 - `GET /api/telegram/set-webhook`: Helper para registrar la URL del webhook en los servidores de Telegram.
