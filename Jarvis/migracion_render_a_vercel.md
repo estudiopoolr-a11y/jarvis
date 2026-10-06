@@ -12,12 +12,12 @@ Migrar el despliegue de JARVIS desde Render.com a Vercel para aprovechar la infr
   - `/api/(.*)` para rutas de API
   - `/widget/(.*)` para el widget de iOS
   - `/telegram/(.*)` para webhooks de Telegram
-  - `/(.* )` para rutas de frontend
+  - `/(.*)` para rutas de frontend
 
 ### 2. Eliminación de Configuración de Render
 - Borrado de `Procfile` (configuración específica de Render)
-- Eliminación de referencias a variables de entorno específicas de Render
-- Limpieza de comentarios y documentación que mencionaban Render
+- Eliminación de referencias a variables de entorno específicas de Render en `README.md` y código.
+- Limpieza de comentarios y documentación que mencionaban Render.
 
 ### 3. Actualización de Documentación
 - Creación de notas específicas para Vercel:
@@ -26,6 +26,7 @@ Migrar el despliegue de JARVIS desde Render.com a Vercel para aprovechar la infr
   - [[Jarvis/vercel_routing_fix.md]]
   - [[Jarvis/vercel_runtime_syntax_fix.md]]
   - [[Jarvis/resolucion_conflicto_vercel_builds.md]]
+  - [[Jarvis/integracion_widget_scriptable_vercel.md]]
 - Actualización de [[Jarvis/telegram_bot_webhook.md]] para reflejar el nuevo endpoint en Vercel
 - Actualización de [[Jarvis/monitoreo_uptimerobot.md]] para health checks en Vercel
 
@@ -81,13 +82,14 @@ Migrar el despliegue de JARVIS desde Render.com a Vercel para aprovechar la infr
 - [[resolucion_conflicto_vercel_builds.md]] - Resolución de conflictos en vercel.json
 - [[telegram_bot_webhook.md]] - Configuración del webhook de Telegram
 - [[monitoreo_uptimerobot.md]] - Monitoreo de health checks
+- [[Jarvis/integracion_widget_scriptable_vercel.md]] - Integración con Scriptable
 
 ## ✅ Estado Actual
 - [x] Migración completada y verificada
+- [x] Desmantelamiento total de Render (eliminación de referencias y archivos obsoletos)
 - [x] Todos los endpoints funcionando correctamente en Vercel
 - [x] Webhook de Telegram apuntando a Vercel
-- [x] Widget de iOS obteniendo datos correctamente
-- [x] Sistema de memoria episódica funcionando (con limitaciones debido a filesystem efímero)
+- [x] Widget de iOS (Scriptable) reconectado exitosamente a Vercel (`/api/widget/dashboard`)
 - [x] Despliegues automáticos mediante Git push a Vercel
 
 ## 📝 Próximos Pasos
@@ -97,5 +99,5 @@ Migrar el despliegue de JARVIS desde Render.com a Vercel para aprovechar la infr
 - [ ] Configurar monitoreo avanzado con Vercel Analytics
 - [ ] Documentar procedimientos de rollback y recuperación de desastres
 
-> *Última actualización: 2026-10-05*
-> *Migración completada exitosamente de Render a Vercel*
+> *Última actualización: 2026-10-06*
+> *Desmantelamiento de Render y estabilización de Scriptable Widget completados.*

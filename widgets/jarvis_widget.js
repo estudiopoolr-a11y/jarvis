@@ -3,7 +3,7 @@
 // ==========================================
 // Endpoint actualizado para colecciones raíz de Firestore
 
-const BASE_URL = "https://jarvis.vercel.app"
+const BASE_URL = "https://jarvis-two-pi-13.vercel.app"
 
 // ID de usuario opcional (por si tu backend requiere filtrar en /accounts)
 const USER_ID = "default_user"
@@ -44,7 +44,7 @@ function formatMoney(amount) {
     let formatted
     if (abs >= 1000000) {
         formatted = "$" + (abs / 1000000).toFixed(1) + "M"
-    } else if (abs >= 100000) {
+    } else if (abs >= 10000) {
         formatted = "$" + (abs / 1000).toFixed(0) + "K"
     } else {
         formatted = "$" + abs.toLocaleString('es-CO')

@@ -115,8 +115,9 @@
     - Se confirmó el estado operativo del bot y se enlazaron formalmente [[Vercel]], [[Telegram API]] y [[FastAPI]].
     - Se ejecutó `git add .`, `git commit -m "fix(telegram): desvincular Render y migrar oficialmente webhook a Vercel"` y `git push origin main`.
 
-- **2026-10-05 (actualización):** Documentación de la migración completa de Render a Vercel:
-    - Se creó la nota [[Jarvis/migracion_render_a_vercel.md]] detallando todo el proceso de migración.
-    - Se actualizaron las notas de [[Jarvis/Índice Principal.md]], [[Jarvis/Vercel.md]], [[Jarvis/FastAPI.md]], [[Jarvis/telegram_bot_webhook.md]] y [[Jarvis/monitoreo_uptimerobot.md]] para incluir enlaces a la nueva documentación.
-    - Se verificó que todas las referencias a Render fueran reemplazadas por Vercel en el código y configuración.
-    - Se confirmó que el despliegue en Vercel es estable y todos los endpoints funcionan correctamente.
+- **2026-10-06 (tarde):** Erradicación total de Render y reconexión del Scriptable Widget a Vercel:
+    - Se eliminaron todos los vestigios y referencias a Render en la documentación principal (`README.md`, `docs/architecture.md`).
+    - Se verificó y confirmó la configuración del script de iOS `widgets/jarvis_widget.js` apuntando a Vercel (`https://jarvis.vercel.app/api/widget/dashboard`).
+    - Se creó la nota técnica [[Jarvis/integracion_widget_scriptable_vercel.md]] detallando el payload JSON, endpoint consumido y estructura del widget.
+    - Se actualizó [[Jarvis/Índice Principal.md]] incorporando el enlace a la nueva nota de integración.
+    - Tecnologías y módulos enlazados: [[Vercel]], [[FastAPI]], [[Scriptable]], [[JavaScript]], [[Python]].
