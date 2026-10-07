@@ -1,6 +1,6 @@
-# 🤖 JARVIS: Asistente Personal de Discord, Centro Financiero & Agente Autónomo (Hermes)
+# 🤖 JARVIS: Asistente Personal de Telegram, Centro Financiero & Agente Autónomo (Hermes)
 
-JARVIS es un asistente inteligente híbrido desplegado en un único proceso asíncrono en **Render.com**. Integra un **Bot de Discord** interactivo, **FastAPI** para servir un Dashboard Web en tiempo real, integración para Widgets de iOS y el motor **Hermes Agent** para capacidades de auto-mejora, memoria persistente a largo plazo y ciclo de aprendizaje autónomo.
+JARVIS es un asistente inteligente híbrido desplegado en infraestructura serverless en **Vercel**. Integra un **Bot de Telegram** interactivo, **FastAPI** para servir un Dashboard Web en tiempo real, integración para Widgets de iOS y el motor **Hermes Agent** para capacidades de auto-mejora, memoria persistente a largo plazo y ciclo de aprendizaje autónomo.
 
 ---
 
@@ -18,7 +18,7 @@ JARVIS opera 24/7 combinando tres capas operativas:
 - **Hermes Agent Learning Loop:**
   - **Auto-mejora & Skills (`SKILL.md`):** Identifica patrones repetitivos o soluciones complejas y genera habilidades ejecutables de forma autónoma.
   - **Memoria Persistente FTS5:** Almacena reglas de usuario, preferencias y proyectos en `~/.hermes/` para recordar contexto entre sesiones sin depender del *context window* del LLM.
-- **Bot de Discord Interactivo:** Comandos slash/prefijo, atención a notas de voz (TTS/STT con inferencia de miles), procesamiento de adjuntos e imágenes.
+- **Bot de Telegram Interactivo:** Comandos, atención a notas de voz (TTS/STT con inferencia de miles), procesamiento de adjuntos e imágenes.
 - **Dashboard Web & API para Widgets:** Interfaz visual interactiva y endpoints JSON optimizados (`/api/widget/dashboard`) para el widget de iPhone/Scriptable.
 - **Proceso Único Asíncrono:** Servidor HTTP FastAPI y Bot de Discord conviven en el mismo ciclo de eventos (`asyncio`) para ejecutarse de forma continua en Render.
 
@@ -55,34 +55,85 @@ JARVIS opera 24/7 combinando tres capas operativas:
 
 ## 📁 Estructura del Proyecto
 
-```text
-jarvis/
-├── app/                         # Aplicación FastAPI (Servidor Web & API)
-│   ├── app/api.py               # Instancia principal de FastAPI, ciclo de vida lifespan y /health
-│   ├── app/main.py              # Entrypoint de FastAPI para Uvicorn
-│   ├── app/routes/              # Módulos de rutas (dashboard, widgets, kebo, admin)
-│   └── app/templates/           # Plantillas HTML del Dashboard
-├── bot/                         # Bot de Discord (events, handlers, services)
-│   ├── bot/__init__.py          # Instancia de discord.Client / commands.Bot e intents
-│   ├── bot/events.py            # Eventos on_ready y on_message
-│   ├── bot/events/              # Lógica de mensajes, adjuntos, contextos y TTS
-│   └── bot/handlers/            # Manejadores de comandos por categoría
-├── modules/                     # Módulos de lógica de negocio y conectores
-│   ├── modules/ai.py            # Enrutador de IA (determinístico + Hermes + Gemini)
-│   ├── modules/db.py            # Interacción central con Firestore y contexto
-│   ├── modules/finance/         # Servicios financieros Kebo
-│   └── modules/gemini/          # Integración con Google Gemini API
-├── skills/                      # Habilidades (.md / .py) auto-generadas por Hermes Agent
-├── tests/                       # Suite de pruebas unitarias automatizadas (unittest/pytest)[cite: 3]
-│   └── test_parsers.py          # Cobertura de parsers determinísticos y regex[cite: 3]
-├── widgets/                     # Scripts para Widgets (iOS Scriptable / JS)
-├── server.py                    # Entrypoint unificado de producción
-├── Procfile                     # Configuración de despliegue para Render
-├── requirements.txt             # Dependencias de Python
-└── AGENTS.md                    # Reglas y guías operativas del agente
-```
-
----
+```plaintext
+├── .github/
+│   └── workflows/
+│       ├── daily-summary.yml
+│       ├── test.yml
+│       └── weekly-summary.yml
+├── app/
+│   ├── router/
+│   │   └── __init__.py
+│   ├── routes/
+│   │   ├── kebo/
+│   │   │   ├── __init__.py
+│   │   │   ├── accounts.py
+│   │   │   ├── budgets.py
+│   │   │   ├── export.py
+│   │   │   ├── reports.py
+│   │   │   ├── seed.py
+│   │   │   └── transactions.py
+│   │   ├── __init__.py
+│   │   ├── admin.py
+│   │   ├── comando.py
+│   │   ├── cron.py
+│   │   ├── dashboard.py
+│   │   ├── memory.py
+│   │   ├── prestamos.py
+│   │   ├── telegram.py
+│   │   └── widgets.py
+│   ├── services/
+│   │   ├── daily_summary/
+│   │   │   ├── __main__.py
+│   │   │   ├── builder.py
+│   │   │   ├── collector.py
+│   │   │   ├── firebase_init.py
+│   │   │   └── sender.py
+│   │   ├── __init__.py
+│   │   ├── daily_summary.py
+│   │   ├── monthly_report.py
+│   │   └── reminders.py
+│   ├── templates/
+│   │   └── dashboard.html
+│   ├── __init__.py
+│   ├── api.py
+│   └── main.py
+├── dataconnect/
+│   ├── connector/
+│   │   ├── connector.yaml
+│   │   └── queries.gql
+│   ├── schema/
+│   │   ├── schema.gql
+│   │   └── schema.sql
+│   └── dataconnect.yaml
+├── docs/
+│   ├── api-endpoints.md
+│   ├── architecture.md
+│   └── database-schema.md
+├── Jarvis/
+│   ├── .obsidian/
+│   │   ├── app.json
+│   │   ├── appearance.json
+│   │   └── workspace.json
+│   ├── configuracion_paso_a_paso_telegram_vercel.md
+│   ├── confirmacion_migracion_telegram_vercel.md
+│   ├── telegram_bot_webhook.md
+├── modules/
+│   ├── finance/
+│   │   ├── transactions/
+│   │   │   ├── recent.py
+│   ├── sql/
+│   └── ai.py
+├── scripts/
+│   ├── check_cuenta_principal.py
+│   ├── setup_three_accounts.py
+├── tests/
+│   ├── __init__.py
+├── widgets/
+│   └── jarvis_widget.js
+├── .env
+├── README.md
+```---
 
 ## 🔑 Variables de Entorno Necesarias
 
@@ -90,11 +141,12 @@ Configura un archivo `.env` en la raíz del proyecto para desarrollo local, o de
 
 | Variable | Descripción | Requerido | Default |
 |---|---|---|---|
-| `DISCORD_TOKEN` | Token del Bot de Discord obtenido en el Discord Developer Portal | **Sí** | - |
+| `TELEGRAM_BOT_TOKEN` | Token del Bot de Telegram obtenido en @BotFather | **Sí** | - |
 | `GEMINI_API_KEY` | Clave API de Google Gemini (o `GEMINI_API_KEYS` separadas por coma) | **Sí** | - |
 | `FIREBASE_CREDENTIALS` | JSON stringified de la cuenta de servicio de Firebase | **Sí** | - |
 | `HERMES_STORAGE_PATH` | Ruta para persistencia de base de datos sqlite y skills | No | `~/.hermes` |
-| `PORT` | Puerto HTTP donde escuchará Uvicorn en Render | No | `8080` |
+| `PORT` | Puerto HTTP donde escuchará Uvicorn en desarrollo local | No | `8080` |
+| `VERCEL_URL` | URL de producción en Vercel (ej. jarvis-two-pi-13.vercel.app) | No | - |
 | `DISCORD_WEBHOOK_URL` | Webhook para alertas y reportes automáticos | No | - |
 
 ---
@@ -118,10 +170,11 @@ pip install -r requirements.txt
 ### 2. Configurar variables de entorno
 Crea un archivo `.env` en la raíz:
 ```env
-DISCORD_TOKEN=tu_token_de_discord
+TELEGRAM_BOT_TOKEN=tu_token_de_telegram
 GEMINI_API_KEY=tu_gemini_api_key
 FIREBASE_CREDENTIALS={"type": "service_account", ...}
 PORT=8080
+VERCEL_URL=jarvis-two-pi-13.vercel.app
 ```
 
 ### 3. Ejecutar la suite de pruebas unitarias[cite: 3]
@@ -174,21 +227,22 @@ Hermes Agent le otorga a JARVIS un flujo de aprendizaje autónomo:
 
 ---
 
-## ☁️ Despliegue en Render (Paso a Paso)
+## 🚀 Despliegue en Vercel (Serverless)
 
-JARVIS está optimizado para ejecutarse en el plan **Free Web Service** de Render utilizando 1 sola instancia.
+JARVIS está configurado para desplegarse en **Vercel** mediante **Serverless Functions**.
 
-1. **Crear nuevo Web Service en Render:**
-   - Conecta tu repositorio GitHub en Render.
-   - Nombre: `jarvis-bot`.
-   - Entorno: **Python 3**.
+1. **Crear proyecto en Vercel:**
+   - Conecta tu repositorio GitHub.
+   - Framework: **Other** (funciones serverless).
 
-2. **Comandos de Configuración:**
-   - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `uvicorn server:app --host 0.0.0.0 --port $PORT`
+2. **Comandos de construcción:**
+   - `pip install -r requirements.txt`
 
-3. **Variables de Entorno en Render:**
-   - Configura `DISCORD_TOKEN`, `GEMINI_API_KEY`, y `FIREBASE_CREDENTIALS`.
+3. **Variables de entorno en Vercel:**
+   - `DISCORD_TOKEN`, `GEMINI_API_KEY`, `FIREBASE_CREDENTIALS`.
+
+4. **Endpoint base para el Widget:**
+   - `https://jarvis-two-pi-13.vercel.app/api/widget/dashboard`
 
 ---
 

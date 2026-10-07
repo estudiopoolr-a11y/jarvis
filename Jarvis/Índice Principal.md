@@ -26,6 +26,7 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/despliegue_exitoso_vercel_e2e.md|Despliegue Exitoso Vercel y Verificación E2E]] - Documentación del despliegue exitoso en Vercel y validación de endpoints tras resolver autenticación.
 - [[Jarvis/resolucion_function_invocation_failed_vercel.md|Resolución FUNCTION_INVOCATION_FAILED en Vercel]] - Diagnóstico y corrección del colapso durante Cold Start en Vercel.
 - [[Jarvis/integracion_widget_scriptable_vercel.md|Integración Widget Scriptable Vercel]] - Conexión del widget de iOS al endpoint de dashboard en Vercel.
+- [[Jarvis/guia_uso_telegram_y_widget_datos.md|Guía de Uso Telegram y Widget]] - Manual de comandos y funcionamiento de datos reales.
 
 ## Gestión del Royecto
 - [[estado_proyecto.md|Estado del Proyecto]] - Bitácora de avances, roadmap y logs diarios.

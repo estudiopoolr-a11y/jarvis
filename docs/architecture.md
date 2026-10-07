@@ -10,13 +10,13 @@ JARVIS es un asistente financiero ejecutivo que funciona 24/7 en modo híbrido:
 
 | Componente | Tecnología | Ubicación |
 |---|---|---|
-| **Bot de Discord** | discord.py, Python 3.10+ | `jarvis_discord.py` (Render background worker) |
-| **API Web** | FastAPI | `server.py` (Render web service) |
+| **Bot de Discord** | discord.py, Python 3.10+ | `jarvis_discord.py` (Vercel Serverless / Background) |
+| **API Web** | FastAPI | `server.py` (Vercel Serverless Function) |
 | **Base de Datos** | Firebase Firestore | Kebo-style schema (users/{userId}/...) |
 | **Audio/Transcripción** | Google Gemini Audio API | Soporta notas de voz en Discord |
 | **LLM Fallback** | Google Gemini 2.5 Flash Lite | Rotación de API keys (`GEMINI_API_KEYS`) |
 | **Dashboard** | HTML5 + Vanilla JS | `app/routes.py` -> `/api/dashboard` |
-| **Hosting** | Render.com | 2 servicios: Background Worker + Web Service |
+| **Hosting** | Vercel | Serverless Functions |
 | **Keepalive** | UptimeRobot | Ping periódico a `GET /` y `HEAD /` |
 
 ## Flujo de Arquitectura

@@ -43,20 +43,46 @@ async def telegram_webhook(request: Request):
             chat_id = update["message"]["chat"]["id"]
             user_id = str(update["message"].get("from", {}).get("id", chat_id))
 
-            respuesta = None
-            try:
-                # Importacion perezosa: un fallo de IA no debe tumbar el arranque serverless.
-                from modules.ai import procesar_intencion_natural, pensar_respuesta
-
-                respuesta = procesar_intencion_natural(text, user_id)
-                if not respuesta:
-                    respuesta = pensar_respuesta(text)
-            except Exception as ai_err:
-                print(f"[Telegram Webhook AI Error] Fallo al procesar IA: {ai_err}")
+            # Manejo de comandos determinísticos rápidos antes de pasar a la IA
+            if text.startswith("/start") or text.startswith("/ayuda"):
                 respuesta = (
-                    "Hola, recibi tu mensaje pero mis servicios de IA estan en mantenimiento. "
-                    "Intenta nuevamente en un momento."
+                    "🤖 *¡Hola! Soy JARVIS, tu asistente financiero inteligente.*\n\n"
+                    "Aquí tienes los comandos disponibles:\n"
+                    "🔹 `/balance` o `/resumen` - Consulta tu saldo actual y resumen financiero.\n"
+                    "🔹 `/gasto <monto> <categoría>` - Registra un gasto rápidamente (ej: `/gasto 50 comida`).\n"
+                    "🔹 `/ayuda` - Muestra este menú.\n\n"
+                    "También puedes escribirme cualquier duda en lenguaje natural y usaré mi motor de IA para ayudarte."
                 )
+            elif text.startswith("/balance") or text.startswith("/resumen"):
+                try:
+                    from modules.db import obtener_balance_financiero
+                    resumen = obtener_balance_financiero(user_id)
+                    respuesta = f"🏦 *Resumen Financiero*\n\n{resumen}"
+                except Exception as e:
+                    respuesta = f"❌ Error al obtener el balance: {str(e)}"
+            elif text.startswith("/gasto"):
+                try:
+                    from modules.ai import procesar_intencion_natural
+                    # Enviamos el texto tal cual para que el NLP procese la intención de registro
+                    respuesta = procesar_intencion_natural(text, user_id)
+                except Exception as e:
+                    respuesta = f"❌ Error al registrar el gasto: {str(e)}"
+            else:
+                # Enrutamos al motor de IA para texto libre
+                respuesta = None
+                try:
+                    # Importacion perezosa: un fallo de IA no debe tumbar el arranque serverless.
+                    from modules.ai import procesar_intencion_natural, pensar_respuesta
+
+                    respuesta = procesar_intencion_natural(text, user_id)
+                    if not respuesta:
+                        respuesta = pensar_respuesta(text)
+                except Exception as ai_err:
+                    print(f"[Telegram Webhook AI Error] Fallo al procesar IA: {ai_err}")
+                    respuesta = (
+                        "Hola, recibi tu mensaje pero mis servicios de IA estan en mantenimiento. "
+                        "Intenta nuevamente en un momento."
+                    )
 
             if respuesta:
                 await enviar_mensaje(chat_id, respuesta)

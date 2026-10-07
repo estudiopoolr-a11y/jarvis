@@ -121,3 +121,5 @@
     - Se creó la nota técnica [[Jarvis/integracion_widget_scriptable_vercel.md]] detallando el payload JSON, endpoint consumido y estructura del widget.
     - Se actualizó [[Jarvis/Índice Principal.md]] incorporando el enlace a la nueva nota de integración.
     - Tecnologías y módulos enlazados: [[Vercel]], [[FastAPI]], [[Scriptable]], [[JavaScript]], [[Python]].
+
+- **2026-10-07:** Habilitación de datos reales y comparativas en el Widget iOS y verificación operativa del Bot de Telegram en producción Vercel. Se conectó `app/routes/widgets.py` con la lógica de transacciones y presupuestos reales, implementando el cálculo de porcentaje de presupuesto consumido y semáforo de alertas. Se rediseñó `widgets/jarvis_widget.js` para soportar el nuevo payload dinámico y modo offline con caché. Se fortaleció `app/routes/telegram.py` con comandos determinísticos (`/balance`, `/gasto`, `/ayuda`) y enrutamiento inteligente al motor de IA. Se registró y verificó el Webhook de Telegram. Enlaces: [[Vercel]], [[FastAPI]], [[Telegram]], [[Scriptable]], [[Python]], [[Firebase]].

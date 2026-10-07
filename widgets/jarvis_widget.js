@@ -3,10 +3,10 @@
 // ==========================================
 // Endpoint actualizado para colecciones raíz de Firestore
 
-const BASE_URL = "https://jarvis-two-pi-13.vercel.app"
-
-// ID de usuario opcional (por si tu backend requiere filtrar en /accounts)
-const USER_ID = "default_user"
+const BASE_URL = "https://jarvis-two-pi-13.vercel.app";
+const WIDGET_ENDPOINT = `${BASE_URL}/api/widgets/resumen`;
+const USER_ID = "default_user";
+const CACHE_KEY = "jarvis_widget_data";
 
 // Colores tema oscuro
 const COLORS = {
@@ -19,7 +19,8 @@ const COLORS = {
     expense: "#ef4444",
     accent: "#6366f1",
     danger: "#ef4444",
-    border: "#2a2a3e"
+    border: "#2a2a3e",
+    warning: "#f59e0b"
 }
 
 async function fetchJSON(url) {
@@ -31,9 +32,25 @@ async function fetchJSON(url) {
             "Accept": "application/json"
         }
         const response = await req.loadJSON()
+        // Guardar en caché si la petición es exitosa
+        if (response && response.status === "ok") {
+            Cache.set(CACHE_KEY, JSON.stringify(response))
+        }
         return response
     } catch (e) {
         console.error("Error conectando a JARVIS: " + url + " -> " + e)
+        // Intentar obtener datos de caché
+        const cached = Cache.get(CACHE_KEY)
+        if (cached) {
+            try {
+                const cachedData = JSON.parse(cached)
+                // Añadir indicador de modo offline
+                cachedData.offline = true
+                return cachedData
+            } catch (parseError) {
+                console.error("Error parseando caché:", parseError)
+            }
+        }
         return null
     }
 }
@@ -59,9 +76,8 @@ async function buildWidget() {
 
     const widgetFamily = config.widgetFamily || "medium"
 
-    // Consulta al endpoint adaptado de la colección raíz
-    const url = `${BASE_URL}/api/widget/dashboard?usuario_id=${USER_ID}`
-    const data = await fetchJSON(url)
+    const url = `${WIDGET_ENDPOINT}?usuario_id=${USER_ID}`;
+    const data = await fetchJSON(url);
 
     if (!data || data.error) {
         const errStack = w.addStack()
