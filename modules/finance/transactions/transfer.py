@@ -58,3 +58,38 @@ def registrar_transferencia(usuario_id, cuenta_origen, cuenta_destino, monto, de
         return tx_ref.id, f"Transferencia de ${float(monto):,.0f} de {cuenta_origen} → {cuenta_destino} completada"
     except Exception as e:
         return None, f"Error: {e}"
+
+def transferir_fondos(usuario_id, cuenta_origen_id, cuenta_destino_id, monto, nota=""):
+    """Versión simplificada que usa IDs directos para la API de Kebo."""
+    try:
+        # Reutilizamos registrar_transferencia pero necesitamos resolver IDs a nombres
+        # o modificar la lógica. Para simplicidad y consistencia con la API,
+        # implementamos la versión directa aquí.
+        _, user_ref = _get_user_ref(usuario_id)
+        if not user_ref: return False
+        
+        # Validar cuentas
+        orig = user_ref.collection("accounts").document(cuenta_origen_id).get()
+        dest = user_ref.collection("accounts").document(cuenta_destino_id).get()
+        if not orig.exists or not dest.exists: return False
+        
+        # Balances
+        user_ref.collection("accounts").document(cuenta_origen_id).update({"balance": firestore.Increment(-float(monto))})
+        user_ref.collection("accounts").document(cuenta_destino_id).update({"balance": firestore.Increment(float(monto))})
+        
+        # Registro
+        ahora = datetime.now()
+        tx_ref = user_ref.collection("transactions").document(f"{ahora.year}-{ahora.month:02d}").collection("items").document()
+        tx_ref.set({
+            "type": "transfer",
+            "amount": float(monto),
+            "account_id": cuenta_origen_id,
+            "to_account_id": cuenta_destino_id,
+            "description": nota or "Transferencia entre cuentas",
+            "date": ahora.strftime("%Y-%m-%d"),
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+        return True
+    except Exception as e:
+        print(f"Error en transferir_fondos: {e}")
+        return False

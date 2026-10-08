@@ -4,7 +4,7 @@ Reexporta las funciones públicas de los submódulos para mantener compatibilida
 """
 
 from modules.finance.transactions.create import registrar_transaccion_v2
-from modules.finance.transactions.transfer import registrar_transferencia
+from modules.finance.transactions.transfer import registrar_transferencia, transferir_fondos
 from modules.finance.transactions.future import (
     registrar_transaccion_futura,
     ejecutar_transacciones_futuras,
@@ -21,6 +21,7 @@ from modules.finance.transactions.split import registrar_split
 __all__ = [
     "registrar_transaccion_v2",
     "registrar_transferencia",
+    "transferir_fondos",
     "registrar_transaccion_futura",
     "ejecutar_transacciones_futuras",
     "listar_transacciones_futuras",

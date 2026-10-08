@@ -1,42 +1,82 @@
-"""Kebo HTTP routes: accounts."""
+from fastapi import HTTPException
+from pydantic import BaseModel, Field
+from typing import Optional, List
 from app.api import app
+from modules.db import (
+    listar_cuentas, 
+    crear_cuenta, 
+    actualizar_cuenta, 
+    obtener_balance_financiero
+)
 
-@app.get("/api/kebo/cuentas")
-def api_kebo_cuentas(usuario_id: str = "default"):
-    """API para widget iPhone: lista de cuentas con balances (NUEVA ESTRUCTURA KEBO)."""
-    import traceback
+# ==================== ESQUEMAS PYDANTIC ====================
+
+class AccountBase(BaseModel):
+    nombre: str = Field(..., example="Nu")
+    tipo: str = Field(..., example="bank") # bank, wallet, cash, savings
+    saldo_inicial: float = Field(0.0, example=1000.0)
+
+class AccountUpdate(BaseModel):
+    nombre: Optional[str] = None
+    tipo: Optional[str] = None
+    saldo: Optional[float] = None
+
+class AccountResponse(BaseModel):
+    id: str
+    nombre: str
+    tipo: str
+    saldo: float
+
+# ==================== ENDPOINTS DE CUENTAS ====================
+
+@app.get("/api/kebo/accounts", response_model=List[AccountResponse])
+def api_list_accounts(usuario_id: str = "default"):
+    """Lista todas las cuentas financieras."""
     try:
-        from modules.db import listar_cuentas
         cuentas = listar_cuentas(usuario_id)
-        return {
-            "cuentas": cuentas,
-            "total_balance": sum(c.get("balance", 0) for c in cuentas)
-        }
+        # Asegurar formato AccountResponse
+        return [
+            {"id": c.get("id"), "nombre": c.get("nombre"), "tipo": c.get("tipo"), "saldo": c.get("saldo", 0.0)} 
+            for c in cuentas
+        ]
     except Exception as e:
-        return {"error": True, "message": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.get("/api/kebo/tasas")
-def api_kebo_tasas(usuario_id: str = "default"):
-    """Lista tasas de cambio guardadas."""
+@app.post("/api/kebo/accounts", response_model=AccountResponse)
+def api_create_account(payload: AccountBase, usuario_id: str = "default"):
+    """Crea una nueva cuenta financiera."""
     try:
-        from modules.db import obtener_tasas_cambio, TASAS_DEFAULT
-        tasas = obtener_tasas_cambio(usuario_id)
-        # Combinar con defaults
-        for m, rate in TASAS_DEFAULT.items():
-            if m not in tasas:
-                tasas[m] = {"rate": rate}
-        return {"tasas": tasas}
+        # Adaptar payload para modules.db.crear_cuenta
+        account_id = crear_cuenta(
+            usuario_id, 
+            payload.nombre, 
+            payload.tipo, 
+            payload.saldo_inicial
+        )
+        if not account_id:
+            raise HTTPException(status_code=400, detail="No se pudo crear la cuenta")
+        
+        return {"id": account_id, "nombre": payload.nombre, "tipo": payload.tipo, "saldo": payload.saldo_inicial}
     except Exception as e:
-        return {"error": True, "message": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.get("/api/kebo/balance-multimoneda")
-def api_kebo_balance_multimoneda(usuario_id: str = "default", moneda: str = "COP"):
-    """Balance total convertido a una moneda específica."""
+@app.put("/api/kebo/accounts/{account_id}")
+def api_update_account(account_id: str, payload: AccountUpdate, usuario_id: str = "default"):
+    """Actualiza los datos de una cuenta."""
     try:
-        from modules.db import obtener_balance_total_multimoneda
-        total = obtener_balance_total_multimoneda(usuario_id, moneda)
-        return {"moneda": moneda, "total": total}
+        update_data = payload.dict(exclude_unset=True)
+        ok = actualizar_cuenta(usuario_id, account_id, update_data)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+        return {"status": "ok", "message": "Cuenta actualizada"}
     except Exception as e:
-        return {"error": True, "message": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/kebo/accounts/balance")
+def api_get_total_balance(usuario_id: str = "default"):
+    """Obtiene el balance consolidado de todas las cuentas."""
+    try:
+        balance = obtener_balance_financiero(usuario_id)
+        return {"status": "ok", "balance_total": balance}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

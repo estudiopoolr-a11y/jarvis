@@ -136,3 +136,26 @@ def renombrar_cuenta(usuario_id, cuenta_id_o_nombre, nuevo_nombre):
         print(f"Error renombrando cuenta: {e}")
         return False, f"Error al renombrar cuenta: {e}"
 
+def actualizar_cuenta(usuario_id, cuenta_id, data):
+    """Actualiza campos generales de una cuenta."""
+    db = get_db()
+    if not db:
+        return False
+    try:
+        # Mapeo de nombres internos a campos Kebo
+        mapeo = {
+            "nombre": "nombre",
+            "tipo": "type",
+            "saldo": "balance"
+        }
+        update_payload = {mapeo[k]: v for k, v in data.items() if k in mapeo}
+        
+        if not update_payload:
+            return False
+
+        db.collection("accounts").document(cuenta_id).update(update_payload)
+        return True
+    except Exception as e:
+        print(f"Error actualizando cuenta: {e}")
+        return False
+

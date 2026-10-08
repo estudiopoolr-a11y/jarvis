@@ -122,4 +122,8 @@
     - Se actualizó [[Jarvis/Índice Principal.md]] incorporando el enlace a la nueva nota de integración.
     - Tecnologías y módulos enlazados: [[Vercel]], [[FastAPI]], [[Scriptable]], [[JavaScript]], [[Python]].
 
-- **2026-10-07:** Habilitación de datos reales y comparativas en el Widget iOS y verificación operativa del Bot de Telegram en producción Vercel. Se conectó `app/routes/widgets.py` con la lógica de transacciones y presupuestos reales, implementando el cálculo de porcentaje de presupuesto consumido y semáforo de alertas. Se rediseñó `widgets/jarvis_widget.js` para soportar el nuevo payload dinámico y modo offline con caché. Se fortaleció `app/routes/telegram.py` con comandos determinísticos (`/balance`, `/gasto`, `/ayuda`) y enrutamiento inteligente al motor de IA. Se registró y verificó el Webhook de Telegram. Enlaces: [[Vercel]], [[FastAPI]], [[Telegram]], [[Scriptable]], [[Python]], [[Firebase]].
+- **2026-10-08:** Implementación secuencial de tres pilares:
+  - Ampliación del [[Módulo de Finanzas]] (Módulo Kebo): Endpoints robustos para `accounts`, `budgets` y `transactions` con validación Pydantic y cálculo dinámico de consumos.
+  - Automatización de Resúmenes: Validación de sintaxis y configuración de workflows `.github/workflows/daily-summary.yml` y `weekly-summary.yml`.
+  - Creación del [[modulo_prestamos_y_recordatorios.md]]: Implementación de rutas de préstamos (`/api/v1/prestamos`) y servicio de verificación de vencimientos en `modules/reminders/service.py`.
+  - Integración de routers en la API y actualización de la red de conocimiento en Obsidian.

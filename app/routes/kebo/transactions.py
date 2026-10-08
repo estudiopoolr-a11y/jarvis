@@ -1,86 +1,99 @@
-"""Kebo HTTP routes: transactions."""
+from fastapi import HTTPException
+from pydantic import BaseModel, Field
+from typing import Optional, List
 from app.api import app
+from datetime import datetime
+from modules.db import (
+    registrar_transaccion, 
+    listar_transacciones_recientes,
+    transferir_fondos
+)
 
-@app.get("/api/kebo/transacciones")
-def api_kebo_transacciones(usuario_id: str = "default", limite: int = 20):
-    """API para widget: últimas transacciones."""
-    try:
-        from modules.db import listar_transacciones_recientes
-        transacciones = listar_transacciones_recientes(usuario_id, limite)
-        return {"transacciones": transacciones}
-    except Exception as e:
-        return {"error": True, "message": str(e)}
+# ==================== ESQUEMAS PYDANTIC ====================
 
-@app.get("/api/kebo/buscar")
-def api_kebo_buscar(usuario_id: str = "default", texto: str = "", categoria: str = "",
-                    cuenta: str = "", status: str = "", fecha_desde: str = "",
-                    fecha_hasta: str = "", tipo: str = ""):
-    """Búsqueda avanzada de transacciones."""
+class TransactionCreate(BaseModel):
+    monto: float = Field(..., example=50.0)
+    categoria: str = Field(..., example="Comida")
+    cuenta_id: str = Field(..., example="nu_account_id")
+    descripcion: Optional[str] = Field("", example="Almuerzo en oficina")
+    fecha: Optional[str] = Field(None, example="2026-10-08") # YYYY-MM-DD
+    etiqueta: Optional[str] = Field(None, example="trabajo")
+
+class TransferCreate(BaseModel):
+    monto: float = Field(..., gt=0)
+    cuenta_origen_id: str
+    cuenta_destino_id: str
+    nota: Optional[str] = ""
+
+class TransactionResponse(BaseModel):
+    id: str
+    monto: float
+    categoria: str
+    cuenta_id: str
+    descripcion: str
+    fecha: str
+
+# ==================== ENDPOINTS DE TRANSACCIONES ====================
+
+@app.post("/api/kebo/transactions", response_model=TransactionResponse)
+def api_create_transaction(payload: TransactionCreate, usuario_id: str = "default"):
+    """Registra una transacción etiquetada por cuenta y categoría."""
     try:
-        from modules.db import buscar_transacciones
-        resultados = buscar_transacciones(
-            usuario_id,
-            texto=texto, categoria=categoria, cuenta=cuenta,
-            status=status, fecha_desde=fecha_desde,
-            fecha_hasta=fecha_hasta, tipo=tipo
+        fecha = payload.fecha or datetime.now().strftime("%Y-%m-%d")
+        tx_id = registrar_transaccion(
+            usuario_id, 
+            payload.monto, 
+            payload.categoria, 
+            payload.cuenta_id, 
+            payload.descripcion, 
+            fecha, 
+            payload.etiqueta
         )
-        return {"total": len(resultados), "transacciones": resultados}
-    except Exception as e:
-        return {"error": True, "message": str(e)}
-
-
-@app.get("/api/kebo/futuras")
-def api_kebo_futuras(usuario_id: str = "default"):
-    """Lista transacciones programadas (futuras)."""
-    try:
-        from modules.db import listar_transacciones_futuras, ejecutar_transacciones_futuras
-        # Ejecutar las que ya tocaron
-        ejecutadas = ejecutar_transacciones_futuras(usuario_id)
-        futuras = listar_transacciones_futuras(usuario_id)
-        return {"ejecutadas": ejecutadas, "pendientes": futuras}
-    except Exception as e:
-        return {"error": True, "message": str(e)}
-
-
-@app.get("/api/kebo/sugerencias")
-def api_kebo_sugerencias(usuario_id: str = "default", prefijo: str = ""):
-    """Sugerencias de payee y categoría basadas en historial."""
-    try:
-        from modules.db import obtener_sugerencias_payee, obtener_sugerencias_categoria
+        if not tx_id:
+            raise HTTPException(status_code=400, detail="No se pudo registrar la transacción")
+        
         return {
-            "payees": obtener_sugerencias_payee(usuario_id, prefijo) if prefijo else [],
-            "categorias": obtener_sugerencias_categoria(usuario_id, prefijo) if prefijo else []
+            "id": tx_id, 
+            "monto": payload.monto, 
+            "categoria": payload.categoria, 
+            "cuenta_id": payload.cuenta_id, 
+            "descripcion": payload.descripcion, 
+            "fecha": fecha
         }
     except Exception as e:
-        return {"error": True, "message": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-# Alias para compatibilidad
-
-
-@app.get("/api/finanzas/debug")
-def api_finanzas_debug(usuario_id: str = "default"):
-    """Endpoint debug: muestra 1 muestra de cada coleccion."""
+@app.post("/api/kebo/transactions/transfer")
+def api_transfer_funds(payload: TransferCreate, usuario_id: str = "default"):
+    """Realiza una transferencia entre cuentas."""
     try:
-        from modules.db import inicializar_firebase
-        from google.cloud.firestore_v1.base_query import FieldFilter
-        db = inicializar_firebase()
-        if not db:
-            return {"error": "DB no inicializada"}
-
-        # 1 presupuesto
-        docs_p = db.collection("presupuestos").where(filter=FieldFilter("usuario_id", "==", usuario_id)).limit(2).stream()
-        presupuesto_sample = [d.to_dict() for d in docs_p]
-
-        # 2 finanzas
-        docs_f = db.collection("finanzas").where(filter=FieldFilter("usuario_id", "==", usuario_id)).limit(3).stream()
-        finanzas_sample = [d.to_dict() for d in docs_f]
-
-        return {
-            "presupuesto_sample": presupuesto_sample,
-            "finanzas_sample": finanzas_sample,
-            "num_presupuestos": len(presupuesto_sample),
-            "num_finanzas": len(finanzas_sample)
-        }
+        ok = transferir_fondos(
+            usuario_id, 
+            payload.cuenta_origen_id, 
+            payload.cuenta_destino_id, 
+            payload.monto, 
+            payload.nota
+        )
+        if not ok:
+            raise HTTPException(status_code=400, detail="Error en la transferencia de fondos")
+        return {"status": "ok", "message": "Transferencia completada exitosamente"}
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/kebo/transactions/recent", response_model=List[TransactionResponse])
+def api_get_recent_transactions(usuario_id: str = "default", limit: int = 10):
+    """Obtiene las transacciones más recientes."""
+    try:
+        txs = listar_transacciones_recientes(usuario_id, limit=limit)
+        return [
+            {
+                "id": t.get("id"), 
+                "monto": t.get("monto"), 
+                "categoria": t.get("categoria"), 
+                "cuenta_id": t.get("cuenta_id"), 
+                "descripcion": t.get("descripcion", ""), 
+                "fecha": t.get("fecha", "")
+            } for t in txs
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -220,3 +220,25 @@ def ejecutar_recurrentes(usuario_id="default"):
         print(f"Error ejecutando recurrentes: {e}")
         return []
 
+def verificar_prestamos_vencidos(usuario_id="default"):
+    """
+    Verifica préstamos que han llegado a su fecha límite.
+    Retorna una lista de alertas para Telegram.
+    """
+    try:
+        from modules.db import listar_prestamos
+        prestamos = listar_prestamos(usuario_id, solo_pendientes=True)
+        alertas = []
+        hoy = datetime.now().strftime("%Y-%m-%d")
+        
+        for p in prestamos:
+            limite = p.get("fecha_limite")
+            if limite and limite <= hoy:
+                alertas.append(f"⚠️ PRÉSTAMO VENCIDO: {p.get('persona')} debe ${p.get('monto'):,.0f} (Límite: {limite})")
+        
+        return alertas
+    except Exception as e:
+        print(f"Error verificando préstamos: {e}")
+        return []
+
+

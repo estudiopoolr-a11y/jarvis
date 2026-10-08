@@ -6,6 +6,7 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 
 ## Entidades Core
 - [[Módulo de Finanzas.md|Módulo de Finanzas]] - Gestión de cuentas transacciones y presupuestos.
+- [[modulo_prestamos_y_recordatorios.md|Módulo de Préstamos y Recordatorios]] - Gestión de deudas y alertas de vencimiento.
 - [[Hermes Agent.md|Hermes Agent]] - Motor de orquestación (ReAct) e inteligencia conversacional.
 - [[Base de Datos Firestore.md|Firestore]] - Gestión de bases de datos y persistencia.
 
