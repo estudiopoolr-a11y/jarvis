@@ -1,5 +1,0 @@
-connectorId: jarvis
-generate:
-  javascriptSdk:
-    outputDir: ../../generated/dataconnect
-    package: "@jarvis/dataconnect"

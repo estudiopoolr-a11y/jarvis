@@ -45,7 +45,14 @@ El bot opera mediante un webhook configurado en `[[Jarvis/telegram_bot_webhook.m
 | `/gasto <monto> <cat>` | Registro | Registra una transacción rápidamente (Ej: `/gasto 15000 comida`). |
 
 ### 🧠 Interacción en Lenguaje Natural
-Cualquier mensaje que no sea un comando es enviado al motor de IA (`[[Hermes Agent]]`). Puedes preguntar cosas como:
+Cualquier mensaje que no sea un comando es enviado al motor de IA (`[[Hermes Agent]]`). Además, frases en lenguaje natural como las siguientes son procesadas directamente por el motor de clasificación de intenciones NLP:
+
+- **"Le presté 50k a Carlos"** → Registra un préstamo.
+- **"Gasté 20mil en almuerzo con efectivo"** → Registra un gasto en Kebo.
+- **"Ajustar saldo Nequi a 150mil"** → Actualiza el saldo de una cuenta.
+- **"¿Cuánto me deben?"** → Consulta el total de préstamos por cobrar.
+
+Puedes preguntar cosas como:
 - *"¿Cuánto he gastado en transporte este mes?"*
 - *"¿Me queda presupuesto para salir el fin de semana?"*
 - *"Analiza mis gastos de la última semana."*

@@ -1,13 +1,14 @@
-from fastapi import HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
-from app.api import app
 from datetime import datetime
 from modules.db import (
     registrar_transaccion, 
     listar_transacciones_recientes,
     transferir_fondos
 )
+
+router = APIRouter()
 
 # ==================== ESQUEMAS PYDANTIC ====================
 
@@ -35,7 +36,7 @@ class TransactionResponse(BaseModel):
 
 # ==================== ENDPOINTS DE TRANSACCIONES ====================
 
-@app.post("/api/kebo/transactions", response_model=TransactionResponse)
+@router.post("/api/kebo/transactions", response_model=TransactionResponse)
 def api_create_transaction(payload: TransactionCreate, usuario_id: str = "default"):
     """Registra una transacción etiquetada por cuenta y categoría."""
     try:
@@ -63,7 +64,7 @@ def api_create_transaction(payload: TransactionCreate, usuario_id: str = "defaul
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/kebo/transactions/transfer")
+@router.post("/api/kebo/transactions/transfer")
 def api_transfer_funds(payload: TransferCreate, usuario_id: str = "default"):
     """Realiza una transferencia entre cuentas."""
     try:
@@ -80,19 +81,19 @@ def api_transfer_funds(payload: TransferCreate, usuario_id: str = "default"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/kebo/transactions/recent", response_model=List[TransactionResponse])
+@router.get("/api/kebo/transactions/recent", response_model=List[TransactionResponse])
 def api_get_recent_transactions(usuario_id: str = "default", limit: int = 10):
     """Obtiene las transacciones más recientes."""
     try:
         txs = listar_transacciones_recientes(usuario_id, limit=limit)
         return [
             {
-                "id": t.get("id"), 
-                "monto": t.get("monto"), 
-                "categoria": t.get("categoria"), 
-                "cuenta_id": t.get("cuenta_id"), 
-                "descripcion": t.get("descripcion", ""), 
-                "fecha": t.get("fecha", "")
+                "id": t.get("_id") or t.get("id"), 
+                "monto": t.get("amount") or t.get("monto"), 
+                "categoria": t.get("category") or t.get("categoria"), 
+                "cuenta_id": t.get("account_id"), 
+                "descripcion": t.get("description") or t.get("descripcion", ""), 
+                "fecha": t.get("date") or t.get("fecha", "")
             } for t in txs
         ]
     except Exception as e:

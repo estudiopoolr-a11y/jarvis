@@ -139,3 +139,10 @@
   - Actualización de [[Jarvis/telegram_bot_webhook.md]] y [[Índice Principal.md]] con enlaces wiki.
   - Pruebas de verificación: Átomos, Moléculas y Organismos verificados exitosamente en consola.
   - Enlaces tecnológicos: [[Atomic Design]], [[FastAPI]], [[Python]], [[Telegram]].
+
+- **2026-10-09:** Purga masiva y consolidación de arquitectura simplificada:
+  - Eliminación de directorios legacy sin dependencias runtime: `dataconnect/` (Google Cloud Data Connect huérfano), `memory/` (docs markdown), `plans/` (docs markdown), `app/router/` (paquete vacío), `path/`, `temp_audios/`, `docs/`, `scripts/`.
+  - Verificación mediante auditoría de dependencias: 4 directorios eliminados con 0 referencias en código Python; `src/` y `app/services/` conservados por tener dependencias activas.
+  - Actualización de `README.md` con estructura de proyecto consolidada y documentada.
+  - Actualización de [[Jarvis/estado_proyecto.md]] y [[Índice Principal.md]].
+  - Enlace tecnológico: [[FastAPI]], [[Python]], [[Atomic Design]].

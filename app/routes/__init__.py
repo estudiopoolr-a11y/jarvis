@@ -37,4 +37,21 @@ widgets_router = _safe_import_router("app.routes.widgets")
 if widgets_router is not None:
     app.include_router(widgets_router)
 
+# Nuevos routers Kebo y Préstamos
+kebo_accounts = _safe_import_router("app.routes.kebo.accounts")
+if kebo_accounts is not None:
+    app.include_router(kebo_accounts)
+
+kebo_budgets = _safe_import_router("app.routes.kebo.budgets")
+if kebo_budgets is not None:
+    app.include_router(kebo_budgets)
+
+kebo_txs = _safe_import_router("app.routes.kebo.transactions")
+if kebo_txs is not None:
+    app.include_router(kebo_txs)
+
+prestamos_router = _safe_import_router("app.routes.prestamos")
+if prestamos_router is not None:
+    app.include_router(prestamos_router)
+
 __all__ = ["app"]

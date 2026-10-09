@@ -1,13 +1,14 @@
-from fastapi import HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
-from app.api import app
 from datetime import datetime
 from modules.db import (
     obtener_presupuestos_v2, 
     listar_subcategorias, 
     aplicar_rollover_presupuesto
 )
+
+router = APIRouter()
 
 # ==================== ESQUEMAS PYDANTIC ====================
 
@@ -29,7 +30,7 @@ class BudgetResponse(BaseModel):
 
 # ==================== ENDPOINTS de PRESUPUESTOS ====================
 
-@app.get("/api/kebo/presupuestos", response_model=List[BudgetResponse])
+@router.get("/api/kebo/presupuestos", response_model=List[BudgetResponse])
 def api_kebo_presupuestos(usuario_id: str = "default", mes: Optional[str] = None):
     """
     Obtiene presupuestos con cálculo dinámico de consumo.
@@ -61,12 +62,11 @@ def api_kebo_presupuestos(usuario_id: str = "default", mes: Optional[str] = None
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/kebo/presupuestos")
+@router.post("/api/kebo/presupuestos")
 def api_kebo_create_budget(payload: BudgetCreate, usuario_id: str = "default"):
     """Crea un presupuesto mensual para una categoría."""
     try:
         from modules.db import crear_presupuesto
-        # Nota: se asume que crear_presupuesto existe en modules.db
         ok = crear_presupuesto(usuario_id, payload.categoria, payload.monto_maximo, payload.mes)
         if not ok:
             raise HTTPException(status_code=400, detail="No se pudo crear el presupuesto")
@@ -74,7 +74,7 @@ def api_kebo_create_budget(payload: BudgetCreate, usuario_id: str = "default"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/kebo/subcategorias")
+@router.get("/api/kebo/subcategorias")
 def api_kebo_subcategorias(usuario_id: str = "default", categoria: str = ""):
     """Lista sub-categorías de una categoría padre."""
     try:
@@ -85,7 +85,7 @@ def api_kebo_subcategorias(usuario_id: str = "default", categoria: str = ""):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/kebo/rollover")
+@router.post("/api/kebo/rollover")
 def api_kebo_rollover(usuario_id: str = "default"):
     """Aplica rollover del presupuesto del mes anterior."""
     try:

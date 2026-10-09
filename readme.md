@@ -26,23 +26,30 @@ JARVIS opera 24/7 combinando tres capas operativas:
 
 ## 🏛️ Arquitectura del Sistema
 
+> **Atomic Design:** El bot JARVIS opera bajo un patrón de 5 capas jerárquicas en `app/core/`:
+> - **Atoms** (`app/core/atoms/formatters.py`): Formateadores puros (moneda, emoji).
+> - **Molecules** (`app/core/molecules/cards.py`): Componentes visuales ensamblados.
+> - **Organisms** (`app/core/organisms/finance_organism.py`): Lógica de negocio orquestada.
+> - **Templates** (`app/core/templates/telegram_templates.py`): Plantillas de respuesta reutilizables.
+> - **Routes** (`app/routes/telegram.py`): Puntos de entrada ASGI que consumen las capas superiores.
+
 ```text
-                               ┌────────────────────────────────────────┐
-                               │             DISCORD / AUDIO            │
-                               └──────────────────┬─────────────────────┘
-                                                  │
-                                                  ▼
-                                         bot/events.py
-                                                  │
-                ┌─────────────────────────────────┴─────────────────────────────────┐
-                │                                                                   │
-                ▼                                                                   ▼
-    [Parsers Determinísticos]                                            [Hermes Agent Loop]
-   (modules/ai.py & modules/db.py)                                 (Memoria FTS5 / Skills ~/.hermes)
-                │                                                                   │
-                ├─► Mutaciones Directas Firestore                                  ├─► Carga de Preferencias/Reglas
-                └─► Respuestas Instantáneas (<10ms)                                └─► Fallback/Modelado Generativo
-                                                                                    (Gemini API - Solo Lectura)
+                                ┌────────────────────────────────────────┐
+                                │             DISCORD / AUDIO            │
+                                └──────────────────┬─────────────────────┘
+                                                   │
+                                                   ▼
+                                          bot/events.py
+                                                   │
+                 ┌─────────────────────────────────┴─────────────────────────────────┐
+                 │                                                                   │
+                 ▼                                                                   ▼
+     [Parsers Determinísticos]                                            [Hermes Agent Loop]
+    (modules/ai.py & modules/db.py)                                 (Memoria FTS5 / Skills ~/.hermes)
+                 │                                                                   │
+                 ├─► Mutaciones Directas Firestore                                  ├─► Carga de Preferencias/Reglas
+                 └─► Respuestas Instantáneas (<10ms)                                └─► Fallback/Modelado Generativo
+                                                                                     (Gemini API - Solo Lectura)
 ```
 
 ### Métricas Financieras (Regla de No Mezclar)
@@ -53,7 +60,7 @@ JARVIS opera 24/7 combinando tres capas operativas:
 
 ---
 
-## 📁 Estructura del Proyecto
+## 📁 Estructura del Proyecto (Simplificada)
 
 ```plaintext
 ├── .github/
@@ -62,9 +69,21 @@ JARVIS opera 24/7 combinando tres capas operativas:
 │       ├── test.yml
 │       └── weekly-summary.yml
 ├── app/
-│   ├── router/
-│   │   └── __init__.py
-│   ├── routes/
+│   ├── core/                  # Atomic Design: lógica atómica reutilizable
+│   │   ├── __init__.py
+│   │   ├── atoms/
+│   │   │   ├── __init__.py
+│   │   │   └── formatters.py
+│   │   ├── molecules/
+│   │   │   ├── __init__.py
+│   │   │   └── cards.py
+│   │   ├── organisms/
+│   │   │   ├── __init__.py
+│   │   │   └── finance_organism.py
+│   │   └── templates/
+│   │       ├── __init__.py
+│   │       └── telegram_templates.py
+│   ├── routes/                # Endpoints FastAPI
 │   │   ├── kebo/
 │   │   │   ├── __init__.py
 │   │   │   ├── accounts.py
@@ -74,15 +93,12 @@ JARVIS opera 24/7 combinando tres capas operativas:
 │   │   │   ├── seed.py
 │   │   │   └── transactions.py
 │   │   ├── __init__.py
-│   │   ├── admin.py
-│   │   ├── comando.py
 │   │   ├── cron.py
-│   │   ├── dashboard.py
 │   │   ├── memory.py
 │   │   ├── prestamos.py
 │   │   ├── telegram.py
 │   │   └── widgets.py
-│   ├── services/
+│   ├── services/              # Servicios de cron/alertas (diarios, semanales, recordatorios)
 │   │   ├── daily_summary/
 │   │   │   ├── __main__.py
 │   │   │   ├── builder.py
@@ -93,46 +109,74 @@ JARVIS opera 24/7 combinando tres capas operativas:
 │   │   ├── daily_summary.py
 │   │   ├── monthly_report.py
 │   │   └── reminders.py
-│   ├── templates/
-│   │   └── dashboard.html
 │   ├── __init__.py
 │   ├── api.py
 │   └── main.py
-├── dataconnect/
-│   ├── connector/
-│   │   ├── connector.yaml
-│   │   └── queries.gql
-│   ├── schema/
-│   │   ├── schema.gql
-│   │   └── schema.sql
-│   └── dataconnect.yaml
-├── docs/
-│   ├── api-endpoints.md
-│   ├── architecture.md
-│   └── database-schema.md
-├── Jarvis/
-│   ├── .obsidian/
-│   │   ├── app.json
-│   │   ├── appearance.json
-│   │   └── workspace.json
-│   ├── configuracion_paso_a_paso_telegram_vercel.md
-│   ├── confirmacion_migracion_telegram_vercel.md
-│   ├── telegram_bot_webhook.md
-├── modules/
-│   ├── finance/
-│   │   ├── transactions/
-│   │   │   ├── recent.py
-│   ├── sql/
-│   └── ai.py
-├── scripts/
-│   ├── check_cuenta_principal.py
-│   ├── setup_three_accounts.py
+├── modules/                   # Integraciones externas
+│   ├── __init__.py
+│   ├── ai.py                  # Cliente Gemini API
+│   ├── db.py                  # Acceso a Firestore
+│   ├── intent_handler.py      # Clasificador NLP
+│   ├── reminders/             # Servicio de alertas/vencimientos
+│   │   ├── __init__.py
+│   │   └── service.py
+│   ├── finance/               # Modelo Kebo (cuentas, presupuestos, transacciones)
+│   │   ├── __init__.py
+│   │   ├── accounts.py
+│   │   ├── analysis.py
+│   │   ├── budgets/
+│   │   ├── categories.py
+│   │   ├── currency.py
+│   │   ├── legacy.py
+│   │   ├── loans.py
+│   │   ├── reports.py
+│   │   └── transactions/
+│   ├── firestore/             # Cliente Firestore
+│   │   ├── __init__.py
+│   │   ├── client.py
+│   │   └── users.py
+│   ├── gemini/                # Cliente Gemini (think, vision, transcribe, inversion)
+│   │   ├── __init__.py
+│   │   ├── client.py
+│   │   ├── errors.py
+│   │   ├── inversion.py
+│   │   ├── think.py
+│   │   ├── transcribe.py
+│   │   └── vision.py
+│   ├── goals/                 # Metas e inversión
+│   │   ├── __init__.py
+│   │   └── service.py
+│   ├── memory/                # Memoria episódica (RAG ligero)
+│   │   ├── __init__.py
+│   │   └── rag.py
+│   ├── nlp/                   # Parsers y router NLP
+│   │   ├── __init__.py
+│   │   ├── actions/
+│   │   ├── parsers/
+│   │   ├── confirmations.py
+│   │   ├── models.py
+│   │   └── router/
+│   └── alertas.py             # Alertas proactivas
+├── src/                       # Motor Hermes Agent (ReAct + Skills)
+│   ├── agent/
+│   │   ├── __init__.py
+│   │   ├── tools.py
+│   │   └── hermes_engine.py
+│   └── core/
+│       ├── __init__.py
+│       └── llm_provider.py
 ├── tests/
 │   ├── __init__.py
+│   ├── test_importador_txt.py
+│   ├── test_nlp_telegram.py
+│   ├── test_parser_mensual.py
+│   └── verify_all_blocks.py
 ├── widgets/
 │   └── jarvis_widget.js
 ├── .env
 ├── README.md
+├── requirements.txt
+└── vercel.json
 ```---
 
 ## 🔑 Variables de Entorno Necesarias

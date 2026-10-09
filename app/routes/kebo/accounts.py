@@ -1,13 +1,14 @@
-from fastapi import HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
-from app.api import app
 from modules.db import (
     listar_cuentas, 
     crear_cuenta, 
     actualizar_cuenta, 
     obtener_balance_financiero
 )
+
+router = APIRouter()
 
 # ==================== ESQUEMAS PYDANTIC ====================
 
@@ -29,24 +30,22 @@ class AccountResponse(BaseModel):
 
 # ==================== ENDPOINTS DE CUENTAS ====================
 
-@app.get("/api/kebo/accounts", response_model=List[AccountResponse])
+@router.get("/api/kebo/accounts", response_model=List[AccountResponse])
 def api_list_accounts(usuario_id: str = "default"):
     """Lista todas las cuentas financieras."""
     try:
         cuentas = listar_cuentas(usuario_id)
-        # Asegurar formato AccountResponse
         return [
-            {"id": c.get("id"), "nombre": c.get("nombre"), "tipo": c.get("tipo"), "saldo": c.get("saldo", 0.0)} 
+            {"id": c.get("_id"), "nombre": c.get("nombre"), "tipo": c.get("tipo"), "saldo": c.get("balance", 0.0)} 
             for c in cuentas
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/kebo/accounts", response_model=AccountResponse)
+@router.post("/api/kebo/accounts", response_model=AccountResponse)
 def api_create_account(payload: AccountBase, usuario_id: str = "default"):
     """Crea una nueva cuenta financiera."""
     try:
-        # Adaptar payload para modules.db.crear_cuenta
         account_id = crear_cuenta(
             usuario_id, 
             payload.nombre, 
@@ -60,7 +59,7 @@ def api_create_account(payload: AccountBase, usuario_id: str = "default"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/api/kebo/accounts/{account_id}")
+@router.put("/api/kebo/accounts/{account_id}")
 def api_update_account(account_id: str, payload: AccountUpdate, usuario_id: str = "default"):
     """Actualiza los datos de una cuenta."""
     try:
@@ -72,7 +71,7 @@ def api_update_account(account_id: str, payload: AccountUpdate, usuario_id: str 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/kebo/accounts/balance")
+@router.get("/api/kebo/accounts/balance")
 def api_get_total_balance(usuario_id: str = "default"):
     """Obtiene el balance consolidado de todas las cuentas."""
     try:
