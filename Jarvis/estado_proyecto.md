@@ -127,3 +127,15 @@
   - Automatización de Resúmenes: Validación de sintaxis y configuración de workflows `.github/workflows/daily-summary.yml` y `weekly-summary.yml`.
   - Creación del [[modulo_prestamos_y_recordatorios.md]]: Implementación de rutas de préstamos (`/api/v1/prestamos`) y servicio de verificación de vencimientos en `modules/reminders/service.py`.
   - Integración de routers en la API y actualización de la red de conocimiento en Obsidian.
+
+- **2026-10-08 (continuación):** Migración de la arquitectura del Bot JARVIS a patrón **Atomic Design**:
+  - Creación del paquete `app/core/` con 5 capas jerárquicas: Atoms, Molecules, Organisms, Templates, Routes.
+  - Átomos: `app/core/atoms/formatters.py` con `atomo_formatear_moneda()` y `atomo_obtener_emoji_estado()`.
+  - Moléculas: `app/core/molecules/cards.py` con `molecula_tarjeta_balance()` y `molecula_tarjeta_presupuesto()`.
+  - Organismos: `app/core/organisms/finance_organism.py` con `OrganismoFinanzas` (inyección de BD, métodos asíncronos).
+  - Plantillas: `app/core/templates/telegram_templates.py` con respuestas predefinidas para Telegram.
+  - Integración en `app/routes/telegram.py` consumiendo organismos y plantillas.
+  - Documentación: Creación de [[Jarvis/arquitectura_atomic_design_bot.md]] con diagrama de flujo y especificación de capas.
+  - Actualización de [[Jarvis/telegram_bot_webhook.md]] y [[Índice Principal.md]] con enlaces wiki.
+  - Pruebas de verificación: Átomos, Moléculas y Organismos verificados exitosamente en consola.
+  - Enlaces tecnológicos: [[Atomic Design]], [[FastAPI]], [[Python]], [[Telegram]].
