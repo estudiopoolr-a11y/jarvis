@@ -79,6 +79,8 @@ api_router.include_router(kebo_accounts_router, prefix="/kebo/accounts", tags=["
 api_router.include_router(kebo_budgets_router, prefix="/kebo/presupuestos", tags=["Kebo Presupuestos"])  # Registrar Presupuestos #
 api_router.include_router(kebo_transactions_router, prefix="/kebo/transacciones", tags=["Kebo Transacciones"])  # Registrar Transacciones #
 
+app.include_router(api_router)  # Registrar router principal en la aplicación FastAPI #
+
 
 @app.get("/")
 @app.head("/")
