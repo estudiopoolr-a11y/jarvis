@@ -10,6 +10,7 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Hermes Agent.md|Hermes Agent]] - Motor de orquestación (ReAct) e inteligencia conversacional.
 - [[Base de Datos Firestore.md|Firestore]] - Gestión de bases de datos y persistencia.
 - [[arquitectura_atomic_design_bot.md|Atomic Design Bot]] - Arquitectura de 5 capas (Atoms, Molecules, Organisms, Templates, Routes).
+- [[limpieza_y_estructura_simplificada.md|Limpieza y Estructura Simplificada]] - Purga de código legado y topología final.
 
 ## Integraciones y Arquitectura
 - [[Integración NVIDIA.md|NVIDIA NIM]] - Conectores hacia modelos LLM de NVIDIA.

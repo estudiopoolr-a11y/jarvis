@@ -1,4 +1,4 @@
-"""HTTP routes.
+"""HTTP routes — Enrutador principal consolidado bajo Atomic Design.
 
 Nota de robustez (Vercel serverless):
 - En cold start, si alguna ruta/import falla (por dependencias pesadas, keys
@@ -27,31 +27,30 @@ def _safe_import_router(module_path: str, router_attr: str = "router"):
         return None
 
 
-# Cargar routers de forma tolerante a fallos.
-# Telegram es crítico; widgets es secundario.
-telegram_router = _safe_import_router("app.routes.telegram")
+# Importación de los endpoints activos en la arquitectura simplificada #
+telegram_router = _safe_import_router("app.routes.telegram")  # Cargar router de Telegram #
 if telegram_router is not None:
-    app.include_router(telegram_router)
+    app.include_router(telegram_router)  # Registrar Webhook de Telegram (prefijo ya incluido) #
 
-widgets_router = _safe_import_router("app.routes.widgets")
+widgets_router = _safe_import_router("app.routes.widgets")  # Cargar router de Widgets iOS #
 if widgets_router is not None:
-    app.include_router(widgets_router)
+    app.include_router(widgets_router)  # Registrar Endpoint de Widgets (prefijo ya incluido) #
 
-# Nuevos routers Kebo y Préstamos
-kebo_accounts = _safe_import_router("app.routes.kebo.accounts")
+# Nuevos routers Kebo y Préstamos #
+kebo_accounts = _safe_import_router("app.routes.kebo.accounts")  # Cargar router de Cuentas Kebo #
 if kebo_accounts is not None:
-    app.include_router(kebo_accounts)
+    app.include_router(kebo_accounts)  # Registrar Cuentas Kebo #
 
-kebo_budgets = _safe_import_router("app.routes.kebo.budgets")
+kebo_budgets = _safe_import_router("app.routes.kebo.budgets")  # Cargar router de Presupuestos Kebo #
 if kebo_budgets is not None:
-    app.include_router(kebo_budgets)
+    app.include_router(kebo_budgets)  # Registrar Presupuestos Kebo #
 
-kebo_txs = _safe_import_router("app.routes.kebo.transactions")
+kebo_txs = _safe_import_router("app.routes.kebo.transactions")  # Cargar router de Transacciones Kebo #
 if kebo_txs is not None:
-    app.include_router(kebo_txs)
+    app.include_router(kebo_txs)  # Registrar Transacciones Kebo #
 
-prestamos_router = _safe_import_router("app.routes.prestamos")
+prestamos_router = _safe_import_router("app.routes.prestamos")  # Cargar router de Préstamos #
 if prestamos_router is not None:
-    app.include_router(prestamos_router)
+    app.include_router(prestamos_router)  # Registrar Módulo de Préstamos #
 
 __all__ = ["app"]

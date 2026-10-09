@@ -145,4 +145,4 @@
   - Verificación mediante auditoría de dependencias: 4 directorios eliminados con 0 referencias en código Python; `src/` y `app/services/` conservados por tener dependencias activas.
   - Actualización de `README.md` con estructura de proyecto consolidada y documentada.
   - Actualización de [[Jarvis/estado_proyecto.md]] y [[Índice Principal.md]].
-  - Enlace tecnológico: [[FastAPI]], [[Python]], [[Atomic Design]].
+  - Enlace tecnológico: [[Refactor]], [[Atomic Design]], [[FastAPI]], [[Python]].
