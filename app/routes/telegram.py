@@ -1,4 +1,4 @@
-import os  # Cargar módulo OS para acceder a variables de entorno #
+import os  # Cargar módulo OS para acceder a variables del entorno #
 import logging  # Cargar módulo logging para trazas estructuradas #
 import inspect  # Cargar módulo inspect para validación de funciones asíncronas #
 import httpx  # Cargar cliente HTTP asíncrono optimizado para serverless #
@@ -7,7 +7,7 @@ from app.core.templates.telegram_templates import plantilla_comando_balance  # C
 from modules.ai import analizar_intencion_mensaje  # Importar analizador NLP/Regex asíncrono #
 from modules.intent_handler import ejecutar_intencion_nlp  # Importar enrutador de intenciones asíncrono #
 
-router = APIRouter()  # Instanciar enrutador de FastAPI #
+router = APIRouter(prefix="/api/telegram")  # Instanciar enrutador de FastAPI con prefijo #
 logger = logging.getLogger("jarvis.telegram")  # Crear logger exclusivo para Telegram #
 
 
@@ -26,7 +26,7 @@ async def resolver_llamada_segura(func, *args, **kwargs):  # Helper universal pa
 
 async def despachar_respuesta_telegram(chat_id: int, texto: str) -> bool:  # Función asíncrona de envío directo #
     token = os.getenv("TELEGRAM_BOT_TOKEN")  # Obtener token del bot desde el entorno #
-    if not token:  # Validar existencia de la variable de entorno #
+    if not token:  # Validar presencia del token #
         print("💥 [VERCEL CRITICAL] TELEGRAM_BOT_TOKEN NO EXISTE EN VARIABLES DE ENTORNO DE VERCEL", flush=True)  # Log explícito visible en Vercel #
         logger.error("❌ TELEGRAM_BOT_TOKEN ausente")  # Registrar en logger del sistema #
         return False  # Retornar Falso por falta de token #
