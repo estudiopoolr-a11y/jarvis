@@ -18,6 +18,9 @@ firebase-admin
 python-dateutil
 yfinance>=0.2.38  # Librería para consulta de cotizaciones y datos financieros bursátiles
 
+# ── Procesamiento de imágenes (Gemini Vision) ─────────────────────────────────
+Pillow>=10.0.0  # Librería PIL para procesamiento de imágenes en el módulo Gemini Vision #
+
 # ── Templates ─────────────────────────────────────────────────────────────────
 jinja2
 

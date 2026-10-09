@@ -6,22 +6,28 @@ Gemini solo LEE la imagen y devuelve texto. Cualquier mutación de Firestore
 """
 import re
 
-from PIL import Image
+try:
+    from PIL import Image  # Importar clase Image para procesamiento de imágenes
+except ImportError:
+    Image = None  # Asignar valor nulo de respaldo para evitar caída del sistema
 
 from modules.gemini.client import MODEL_NAME, SYSTEM_INSTRUCTION, _gemini_call_with_fallback
 
 
 def procesar_imagen(ruta_imagen: str, prompt: str) -> str:
     """Envía una imagen a Gemini Vision y retorna la respuesta.
-    
+
     Args:
         ruta_imagen: Ruta local al archivo de imagen.
         prompt: Instrucción o pregunta sobre la imagen.
-        
+
     Returns:
         Respuesta de Gemini Vision como string.
     """
-    
+
+    if Image is None:  # Validar presencia de la librería Pillow en el runtime
+        return "⚠️ Módulo de imagen no disponible (Pillow ausente). Intenta de nuevo en modo texto."
+
     def _call(client):
         img = Image.open(ruta_imagen)
         response = client.models.generate_content(
