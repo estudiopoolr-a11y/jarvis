@@ -140,6 +140,9 @@
   - Pruebas de verificación: Átomos, Moléculas y Organismos verificados exitosamente en consola.
   - Enlaces tecnológicos: [[Atomic Design]], [[FastAPI]], [[Python]], [[Telegram]].
 
+- **2026-10-09:** Restablecida la comunicación bidireccional en Telegram Bot. Re-registrado el Webhook en Vercel e implementada la función `despachar_respuesta_telegram()` en `app/routes/telegram.py` para asegurar envíos activos vía Telegram API. Pruebas y despliegue Git completados.
+  - Enlazar etiquetas: [[Telegram]], [[FastAPI]], [[Vercel]] y [[Atomic Design]].
+
 - **2026-10-09:** Resuelto error de mensaje de mantenimiento en Telegram Bot. Implementado motor de respaldo local por Regex en modules/ai.py y desacoplada la dependencia estricta de Gemini API para respuestas de presupuestos y balance. Documentación dual y sincronización completadas.
   - Vincula las etiquetas `[[Gemini API]]`, `[[Telegram]]`, `[[FastAPI]]` y `[[NLP]]`.
 

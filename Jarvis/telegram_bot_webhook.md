@@ -60,6 +60,34 @@ Para prevenir el infame error `FUNCTION_INVOCATION_FAILED` en los despliegues pe
 - `POST /api/telegram/webhook`: Punto de entrada para los eventos de Telegram.
 - `GET /api/telegram/set-webhook`: Helper para registrar la URL del webhook en los servidores de Telegram.
 
+## Función `despachar_respuesta_telegram()`
+
+Nueva función en `app/routes/telegram.py` que encapsula el envío de respuestas a Telegram mediante `sendMessage`. Garantiza envío explícito vía HTTP POST con timeout de 8s y logging estructurado.
+
+```python
+def despachar_respuesta_telegram(chat_id: int, texto: str):
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token:
+        logger.error("❌ TELEGRAM_BOT_TOKEN ausente en la ejecución")
+        return
+    endpoint = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"}
+    try:
+        requests.post(endpoint, json=payload, timeout=8)
+    except Exception as e:
+        logger.error(f"❌ Error al enviar respuesta a Telegram: {e}")
+```
+
+## Script `register_telegram_webhook.py`
+
+Script autónomo en `scripts/register_telegram_webhook.py` para diagnóstico y re-registro del Webhook:
+
+```bash
+python scripts/register_telegram_webhook.py
+```
+
+Realiza `getWebhookInfo` y `setWebhook` hacia `https://jarvis-two-pi-13.vercel.app/api/telegram/webhook`.
+
 ## Enlaces Wiki
 - [[Jarvis/estado_proyecto.md]] - Registro de cambios y roadmap.
 - [[Jarvis/arquitectura_atomic_design_bot.md]] - Documentación detallada del patrón Atomic Design aplicado.

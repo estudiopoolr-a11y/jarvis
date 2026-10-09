@@ -39,6 +39,7 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/migracion_render_a_vercel.md|Migración Render a Vercel]] - Guía completa de la migración de infraestructura desde Render.com a Vercel.
 - [[Mapa del Sistema.md|Mapa del Sistema]] - Nodo de navegación alternativo (Legado).
 - [[Jarvis/diagnostico_error_500_webhook_telegram.md|Diagnóstico Error 500 Webhook Telegram]] - Diagnóstico y solución de excepciones HTTP 500 en endpoint de Telegram en Vercel.
+- [[Jarvis/recuperacion_webhook_telegram.md|Recuperación Webhook Telegram]] - Diagnóstico y solución de la desvinculación del Webhook el 2026-10-09.
 
 
 ## Protocolos Auxiliares
