@@ -1,13 +1,13 @@
-import os  # Cargar módulo OS para acceder a variables del sistema #
+import os  # Cargar módulo OS para acceder a variables de entorno #
 import logging  # Cargar módulo logging para trazas estructuradas #
-import inspect  # Cargar módulo inspect para análisis de corrutinas #
+import inspect  # Cargar módulo inspect para validación de funciones asíncronas #
 import httpx  # Cargar cliente HTTP asíncrono optimizado para serverless #
 from fastapi import APIRouter, Request  # Cargar clases principales de FastAPI #
 from app.core.templates.telegram_templates import plantilla_comando_balance  # Cargar plantilla atómica de inicio #
-from modules.ai import analizar_intencion_mensaje  # Importar extractor NLP/Regex #
-from modules.intent_handler import ejecutar_intencion_nlp  # Importar enrutador de intenciones #
+from modules.ai import analizar_intencion_mensaje  # Importar analizador NLP/Regex asíncrono #
+from modules.intent_handler import ejecutar_intencion_nlp  # Importar enrutador de intenciones asíncrono #
 
-router = APIRouter(prefix="/api/telegram")  # Instanciar enrutador de FastAPI con prefijo #
+router = APIRouter()  # Instanciar enrutador de FastAPI #
 logger = logging.getLogger("jarvis.telegram")  # Crear logger exclusivo para Telegram #
 
 
@@ -33,7 +33,7 @@ async def despachar_respuesta_telegram(chat_id: int, texto: str) -> bool:  # Fun
 
     endpoint = f"https://api.telegram.org/bot{token}/sendMessage"  # Construir URL oficial de Telegram API #
 
-    # Intento 1: Envío formateado con Markdown #
+    # Intento 1: Formato Markdown enriquecido #
     payload_markdown = {"chat_id": chat_id, "text": str(texto), "parse_mode": "Markdown"}  # Construir payload Markdown #
 
     async with httpx.AsyncClient(timeout=8.0) as client:  # Instanciar cliente HTTP asíncrono con tiempo límite #
@@ -46,20 +46,20 @@ async def despachar_respuesta_telegram(chat_id: int, texto: str) -> bool:  # Fun
             print(f"⚠️ [VERCEL OUTBOUND] Excepción en Intento 1: {e}")  # Registrar error explícito en Vercel #
 
         # Intento 2: Fallback defensivo en Texto Plano #
-        payload_plano = {"chat_id": chat_id, "text": str(texto)}  # Construir payload de respaldo en texto plano #
+        payload_plano = {"chat_id": chat_id, "text": str(texto)}  # Construir payload simple sin parse_mode #
         try:  # Iniciar bloque defensivo para el Intento 2 #
-            res_plano = await client.post(endpoint, json=payload_plano)  # Reintentar envío sin parse_mode #
+            res_plano = await client.post(endpoint, json=payload_plano)  # Enviar petición asíncrona en texto plano #
             print(f"📡 [VERCEL OUTBOUND] Intento 2 Texto Plano Status: {res_plano.status_code}")  # Log en Vercel #
-            return res_plano.status_code == 200  # Retornar resultado del intento en texto plano #
-        except Exception as e:  # Capturar falla final #
-            print(f"💥 [VERCEL OUTBOUND] Excepción en Intento 2: {e}")  # Registrar error fatal #
-            return False  # Retornar Falso //
+            return res_plano.status_code == 200  # Retornar Verdadero si la entrega en texto plano fue exitosa #
+        except Exception as e:  # Capturar excepción en el segundo intento #
+            print(f"💥 [VERCEL OUTBOUND] Excepción en Intento 2: {e}")  # Registrar error crítico en Vercel #
+            return False  # Retornar Falso en caso de fallo total #
 
 
 @router.post("/webhook")  # Declarar el endpoint POST del webhook #
 async def atender_telegram_webhook(request: Request):  # Controlador asíncrono del webhook #
-    chat_id = None  # Inicializar variable de chat_id para acceso en except #
-    try:  # Iniciar bloque defensivo principal #
+    chat_id = None  # Inicializar ID de chat para captura defensiva #
+    try:  # Iniciar bloque defensivo global #
         cuerpo = await request.json()  # Parsear el cuerpo de la petición JSON #
         print(f"📥 [VERCEL INBOUND] Webhook recibido: {cuerpo}")  # Log del payload completo #
 
@@ -71,28 +71,27 @@ async def atender_telegram_webhook(request: Request):  # Controlador asíncrono 
         if chat_id and mensaje_texto:  # Validar presencia de ID de chat y texto #
             print(f"🔍 [VERCEL PROCESSING] Chat ID: {chat_id} - Texto: '{mensaje_texto}'")  # Log de procesamiento #
 
-            if mensaje_texto == "/start":  # Manejar comando de inicio #
-                respuesta = plantilla_comando_balance()  # Generar bienvenida con plantilla atómica #
-            else:  # Procesar consultas en texto plano #
-                # Ejecución segura con wrapper universal (evita TypeError: object dict can't be used in 'await') #
-                intent_data = await resolver_llamada_segura(analizar_intencion_mensaje, mensaje_texto)  # Analizar intención de forma segura //
-                respuesta = await resolver_llamada_segura(ejecutar_intencion_nlp, intent_data)  # Ejecutar intención de forma segura //
+            # Ejecución segura con wrapper universal (evita TypeError: object dict can't be used in 'await') #
+            intent_data = await resolver_llamada_segura(analizar_intencion_mensaje, mensaje_texto)  # Analizar intención de forma segura //
+            respuesta = await resolver_llamada_segura(ejecutar_intencion_nlp, intent_data)  # Ejecutar intención de forma segura //
 
             # Garantizar que la respuesta sea siempre una cadena de texto //
-            if isinstance(respuesta, dict):  # Si la respuesta fue un diccionario //
+            if isinstance(respuesta, dict):  # Si la respuesta devuelta es un diccionario #
                 respuesta = respuesta.get("text") or respuesta.get("message") or str(respuesta)  # Extraer el texto interno //
             elif not isinstance(respuesta, str):  # Si la respuesta no es cadena de texto //
                 respuesta = str(respuesta)  # Convertir a cadena string //
 
             await despachar_respuesta_telegram(chat_id, respuesta)  # Despachar respuesta de forma asíncrona #
+        else:  # Si el payload no contenía un mensaje de texto válido #
+            print("⚠️ [VERCEL PROCESSING] Payload sin chat_id o texto válido")  # Notificar payload no procesable #
 
-        return {"status": "ok"}  # Confirmar siempre 200 OK a Telegram //
+        return {"status": "ok"}  # Confirmar siempre 200 OK a Telegram para validar recepción #
     except Exception as e:  # Capturar cualquier fallo inesperado #
         error_msg = f"💥 [VERCEL ERROR] Fallo crítico en webhook: {e}"  # Formatear traza de error //
         print(error_msg)  # Imprimir error en Vercel Logs //
         # Notificar el error en Telegram para evitar silencio absoluto del bot //
         if chat_id:  # Si logramos identificar el chat_id antes de la falla //
-            await despachar_respuesta_telegram(chat_id, f"⚠️ Ocurrió un error interno en el bot: {str(e)[:100]}")  # Notificar error en Telegram //
+            await despachar_respuesta_telegram(chat_id, f"⚠️ Ocurrió un error interno en el bot: {str(e)[:120]}")  # Notificar error en Telegram #
         return {"status": "error_handled"}  # Retornar confirmación controlada #
 
 
@@ -118,8 +117,8 @@ async def set_webhook():  # Controlador asíncrono del webhook #
             resp = await client.post(endpoint, json=payload)  # Enviar petición asíncrona POST #
             print(f"📡 [VERCEL OUTBOUND] SetWebhook Status: {resp.status_code} - Body: {resp.text}")  # Log en Vercel #
             return resp.json()  # Retornar respuesta JSON #
-        except Exception as e:  # Capturar excepción //
-            print(f"💥 [VERCEL OUTBOUND] Excepción en SetWebhook: {e}")  # Registrar error crítico //
+        except Exception as e:  # Capturar excepción #
+            print(f"💥 [VERCEL OUTBOUND] Excepción en SetWebhook: {e}")  # Registrar error crítico #
             return {"error": str(e)}  # Retornar error como diccionario #
 
 
@@ -141,7 +140,7 @@ async def verificar_salud_telegram():  # Controlador asíncrono para validar var
             detalles_bot = f"Excepción de red: {str(e)}"  # Guardar mensaje de error #
 
     return {  # Retornar estructura JSON con el diagnóstico del servidor #
-        "status": "ok" if estado_token else "token_missing",  # Estado general del diagnóstico //
+        "status": "ok" if estado_token else "token_missing",  # Estado general del diagnóstico #
         "telegram_bot_token_present": estado_token,  # Confirmación booleana de presencia de token #
         "gemini_api_key_present": estado_gemini,  # Confirmación booleana de presencia de clave Gemini #
         "telegram_api_response": detalles_bot  # Resultado de la consulta getMe con Telegram API #
