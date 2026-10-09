@@ -1,27 +1,10 @@
 import os  # Cargar módulo OS para acceder a variables del sistema #
 import logging  # Cargar módulo logging para trazas estructuradas #
-import inspect  # Cargar módulo inspect para validación de funciones asíncronas #
 import httpx  # Cargar cliente HTTP asíncrono optimizado para serverless #
 from fastapi import APIRouter, Request  # Cargar clases principales de FastAPI #
-from app.core.templates.telegram_templates import plantilla_comando_balance  # Cargar plantilla atómica de bienvenida #
-from modules.ai import analizar_intencion_mensaje  # Cargar analizador NLP/Regex #
-from modules.intent_handler import ejecutar_intencion_nlp  # Cargar enrutador de intenciones #
 
 router = APIRouter(prefix="/api/telegram")  # Instanciar enrutador de rutas FastAPI con prefijo #
 logger = logging.getLogger("jarvis.telegram")  # Crear logger exclusivo para Telegram #
-
-
-async def resolver_llamada_segura(func, *args, **kwargs):  # Helper universal para ejecutar funciones sync o async sin errores de await #
-    """Ejecuta una función de forma segura, inspeccionando si es corrutina o síncrona."""
-    if inspect.iscoroutinefunction(func):  # Evaluar si la función fue declarada con async def #
-        res = await func(*args, **kwargs)  # Invocación asíncrona segura con await #
-    else:  # Si la función es síncrona estándar #
-        res = func(*args, **kwargs)  # Invocación síncrona directa #
-
-    if inspect.isawaitable(res):  # Evaluar si el valor devuelto es un objeto corrutina o awaitable #
-        res = await res  # Resolver corrutina de manera defensiva #
-
-    return res  # Retornar el valor final procesado #
 
 
 async def despachar_respuesta_telegram(chat_id: int, texto: str) -> bool:  # Función asíncrona de envío directo #
@@ -34,22 +17,22 @@ async def despachar_respuesta_telegram(chat_id: int, texto: str) -> bool:  # Fun
     endpoint = f"https://api.telegram.org/bot{token}/sendMessage"  # Construir endpoint oficial de Telegram API #
 
     # Intento 1: Formato Markdown enriquecido #
-    payload_markdown = {"chat_id": chat_id, "text": str(texto), "parse_mode": "Markdown"}  # Construir payload Markdown #
+    payload_markdown = {"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"}  # Construir payload Markdown #
 
-    async with httpx.AsyncClient(timeout=8.0) as client:  # Instanciar cliente HTTP asíncrono con tiempo límite #
+    async with httpx.AsyncClient(timeout=10.0) as client:  # Instanciar cliente HTTP asíncrono con tiempo límite #
         try:  # Iniciar bloque defensivo para el Intento 1 #
             res = await client.post(endpoint, json=payload_markdown)  # Enviar petición asíncrona POST #
-            print(f"📡 [VERCEL OUTBOUND] Intento 1 Markdown Status: {res.status_code}")  # Log explícito en Vercel #
+            print(f"📡 [VERCEL OUTBOUND] Intento 1 Markdown Status: {res.status_code} - Body: {res.text}")  # Log explícito en Vercel #
             if res.status_code == 200:  # Si Telegram aceptó el formato Markdown #
                 return True  # Confirmar entrega exitosa #
         except Exception as e:  # Capturar excepción de red en el primer intento #
             print(f"⚠️ [VERCEL OUTBOUND] Excepción en Intento 1: {e}")  # Registrar error explícito en Vercel #
 
         # Intento 2: Fallback en Texto Plano si falla el Markdown #
-        payload_plano = {"chat_id": chat_id, "text": str(texto)}  # Construir payload simple sin parse_mode #
+        payload_plano = {"chat_id": chat_id, "text": texto}  # Construir payload simple sin parse_mode #
         try:  # Iniciar bloque defensivo para el Intento 2 #
             res_plano = await client.post(endpoint, json=payload_plano)  # Enviar petición asíncrona en texto plano #
-            print(f"📡 [VERCEL OUTBOUND] Intento 2 Texto Plano Status: {res_plano.status_code}")  # Log en Vercel #
+            print(f"📡 [VERCEL OUTBOUND] Intento 2 Texto Plano Status: {res_plano.status_code} - Body: {res_plano.text}")  # Log en Vercel #
             return res_plano.status_code == 200  # Retornar Verdadero si la entrega en texto plano fue exitosa #
         except Exception as e:  # Capturar excepción en el segundo intento #
             print(f"💥 [VERCEL OUTBOUND] Excepción en Intento 2: {e}")  # Registrar error crítico en Vercel #
@@ -58,7 +41,11 @@ async def despachar_respuesta_telegram(chat_id: int, texto: str) -> bool:  # Fun
 
 @router.post("/webhook")  # Declarar el endpoint POST del webhook #
 async def atender_telegram_webhook(request: Request):  # Controlador asíncrono del webhook #
-    chat_id = None  # Inicializar variable de chat_id para acceso en except #
+    # Importaciones diferidas (lazy loading) para evitar FUNCTION_INVOCATION_FAILED en Vercel
+    from app.core.templates.telegram_templates import plantilla_comando_balance  # Cargar plantilla atómica de bienvenida #
+    from modules.ai import analizar_intencion_mensaje  # Cargar analizador NLP/Regex #
+    from modules.intent_handler import ejecutar_intencion_nlp  # Cargar enrutador de intenciones #
+
     try:  # Iniciar bloque defensivo principal #
         cuerpo = await request.json()  # Parsear el cuerpo de la petición JSON #
         print(f"📥 [VERCEL INBOUND] Webhook recibido: {cuerpo}")  # Log explícito del payload recibido #
@@ -73,14 +60,8 @@ async def atender_telegram_webhook(request: Request):  # Controlador asíncrono 
             if mensaje_texto == "/start":  # Manejar comando de inicio #
                 respuesta = plantilla_comando_balance()  # Generar bienvenida con plantilla atómica #
             else:  # Manejar consultas en texto plano #
-                # Ejecución segura con wrapper universal (evita TypeError: object dict can't be used in 'await') #
-                intent_data = await resolver_llamada_segura(analizar_intencion_mensaje, mensaje_texto)  # Analizar intención de forma segura //
-                respuesta = await resolver_llamada_segura(ejecutar_intencion_nlp, intent_data)  # Ejecutar intención de forma segura //
-
-            if isinstance(respuesta, dict):  # Si la respuesta devuelta es un diccionario //
-                respuesta = respuesta.get("text") or respuesta.get("message") or str(respuesta)  # Extraer el texto interno //
-            elif not isinstance(respuesta, str):  # Si la respuesta no es cadena de texto //
-                respuesta = str(respuesta)  # Convertir a string //
+                intent_data = await analizar_intencion_mensaje(mensaje_texto)  # Analizar intención por Gemini/Regex #
+                respuesta = await ejecutar_intencion_nlp(intent_data)  # Generar respuesta con la capa atómica #
 
             await despachar_respuesta_telegram(chat_id, respuesta)  # Invocación asíncrona del despacho de respuesta #
         else:  # Si el payload no contenía un mensaje de texto válido #
@@ -88,11 +69,7 @@ async def atender_telegram_webhook(request: Request):  # Controlador asíncrono 
 
         return {"status": "ok"}  # Confirmar siempre 200 OK a Telegram para validar recepción #
     except Exception as e:  # Capturar fallos no previstos #
-        error_msg = f"💥 [VERCEL ERROR] Fallo crítico en webhook: {e}"  # Formatear traza de error //
-        print(error_msg)  # Imprimir error en Vercel Logs //
-        # Notificar el error en Telegram para evitar silencio absoluto del bot //
-        if chat_id:  # Si logramos identificar el chat_id antes de la falla //
-            await despachar_respuesta_telegram(chat_id, f"⚠️ Ocurrió un error interno en el bot: {str(e)[:100]}")  # Notificar error en Telegram //
+        print(f"💥 [VERCEL ERROR] Fallo crítico en webhook: {e}")  # Log del error en consola Vercel #
         return {"status": "error_handled"}  # Retornar confirmación controlada #
 
 

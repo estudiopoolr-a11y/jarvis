@@ -1,4 +1,4 @@
-﻿import os
+import os
 import logging
 import httpx
 from fastapi import FastAPI, Request
@@ -29,13 +29,12 @@ async def atender_telegram_webhook(request: Request):
         from modules.ai import analizar_intencion_mensaje
         from modules.intent_handler import ejecutar_intencion_nlp
     except ImportError as e:
-        print(f"WARNING [VERCEL] Import error: {e}")
+        print(f"⚠️ [VERCEL] Import error: {e}")
         return JSONResponse(status_code=200, content={"status": "ok", "degraded": True})
 
-    chat_id = None
     try:
         cuerpo = await request.json()
-        print(f"[VERCEL INBOUND] Webhook recibido: {cuerpo}")
+        print(f"📥 [VERCEL INBOUND] Webhook recibido: {cuerpo}")
 
         mensaje = cuerpo.get("message") or cuerpo.get("edited_message") or {}
         chat = mensaje.get("chat", {})
@@ -43,27 +42,12 @@ async def atender_telegram_webhook(request: Request):
         mensaje_texto = mensaje.get("text", "").strip()
 
         if chat_id and mensaje_texto:
-            print(f"[VERCEL PROCESSING] Chat ID: {chat_id} - Texto: '{mensaje_texto}'")
+            print(f"🔍 [VERCEL PROCESSING] Chat ID: {chat_id} - Texto: '{mensaje_texto}'")
             if mensaje_texto == "/start":
                 respuesta = plantilla_comando_balance()
             else:
-                # Uso de resolver_llamada_segura para evitar TypeError con await
-                import inspect
-                if inspect.iscoroutinefunction(analizar_intencion_mensaje):
-                    intent_data = await analizar_intencion_mensaje(mensaje_texto)
-                else:
-                    intent_data = analizar_intencion_mensaje(mensaje_texto)
-
-                if inspect.iscoroutinefunction(ejecutar_intencion_nlp):
-                    respuesta = await ejecutar_intencion_nlp(intent_data)
-                else:
-                    respuesta = ejecutar_intencion_nlp(intent_data)
-
-                # Normalizar respuesta a string
-                if isinstance(respuesta, dict):
-                    respuesta = respuesta.get("text") or respuesta.get("message") or str(respuesta)
-                elif not isinstance(respuesta, str):
-                    respuesta = str(respuesta)
+                intent_data = await analizar_intencion_mensaje(mensaje_texto)
+                respuesta = await ejecutar_intencion_nlp(intent_data)
 
             # Despachar respuesta
             token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -73,33 +57,21 @@ async def atender_telegram_webhook(request: Request):
                 try:
                     async with httpx.AsyncClient(timeout=10.0) as client:
                         res = await client.post(endpoint, json=payload)
-                        print(f"[VERCEL OUTBOUND] Status: {res.status_code} - Body: {res.text}")
+                        print(f"📡 [VERCEL OUTBOUND] Status: {res.status_code} - Body: {res.text}")
                 except Exception as e:
-                    print(f"[VERCEL OUTBOUND] Error: {e}")
+                    print(f"💥 [VERCEL OUTBOUND] Error: {e}")
         else:
-            print("[VERCEL PROCESSING] Payload sin chat_id o texto valido")
+            print("⚠️ [VERCEL PROCESSING] Payload sin chat_id o texto válido")
 
         return {"status": "ok"}
     except Exception as e:
-        print(f"[VERCEL ERROR] Fallo critico en webhook: {e}")
-        # Notificar error al usuario si tenemos chat_id
-        if chat_id:
-            token = os.getenv("TELEGRAM_BOT_TOKEN")
-            if token:
-                try:
-                    async with httpx.AsyncClient(timeout=8.0) as client:
-                        await client.post(
-                            f"https://api.telegram.org/bot{token}/sendMessage",
-                            json={"chat_id": chat_id, "text": f"Error interno: {str(e)[:100]}"}
-                        )
-                except Exception:
-                    pass
+        print(f"💥 [VERCEL ERROR] Fallo crítico en webhook: {e}")
         return {"status": "error_handled"}
 
 
 @app.get("/api/telegram/health")
 async def verificar_salud_telegram():
-    """Endpoint de diagnostico de variables de entorno."""
+    """Endpoint de diagnóstico de variables de entorno."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     gemini_key = os.getenv("GEMINI_API_KEY")
 
@@ -113,7 +85,7 @@ async def verificar_salud_telegram():
                 resp = await client.get(f"https://api.telegram.org/bot{token}/getMe")
                 detalles_bot = resp.json() if resp.status_code == 200 else f"Error HTTP {resp.status_code}"
         except Exception as e:
-            detalles_bot = f"Exception de red: {str(e)}"
+            detalles_bot = f"Excepción de red: {str(e)}"
 
     return {
         "status": "ok" if estado_token else "token_missing",
@@ -128,7 +100,7 @@ async def set_webhook():
     """Helper para registrar el webhook en Telegram API."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        print("[VERCEL CRITICAL] TELEGRAM_BOT_TOKEN NO CONFIGURADO")
+        print("💥 [VERCEL CRITICAL] TELEGRAM_BOT_TOKEN NO CONFIGURADO")
         return {"error": "TELEGRAM_BOT_TOKEN no configurado"}
 
     base_url = os.getenv("VERCEL_URL", "https://jarvis-two-pi-13.vercel.app")
@@ -138,15 +110,15 @@ async def set_webhook():
     webhook_url = f"{base_url}/api/telegram/webhook"
     endpoint = f"https://api.telegram.org/bot{token}/setWebhook"
 
-    print(f"[VERCEL OUTBOUND] SetWebhook: {webhook_url}")
+    print(f"📡 [VERCEL OUTBOUND] SetWebhook: {webhook_url}")
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(endpoint, json={"url": webhook_url})
-            print(f"[VERCEL OUTBOUND] SetWebhook Status: {resp.status_code}")
+            print(f"📡 [VERCEL OUTBOUND] SetWebhook Status: {resp.status_code}")
             return resp.json()
     except Exception as e:
-        print(f"[VERCEL OUTBOUND] Error SetWebhook: {e}")
+        print(f"💥 [VERCEL OUTBOUND] Error SetWebhook: {e}")
         return {"error": str(e)}
 
 
