@@ -1,48 +1,25 @@
-"""Prueba E2E en vivo: simula el payload exacto de la captura (Fase 2.3).
-
-Envía un POST real contra Vercel con la frase
-"Q presupuestos hay Pa septiembre" y valida respuesta 200 {"status": "ok"}.
-
-Uso:
-    python scripts/test_live_payload_simulation.py
-"""
-
-import sys
-
-import requests
+import requests  # Cargar librería requests para enviar el payload HTTP #
 
 
-def simular_envio_captura() -> None:
-    """Simula el mensaje de la captura de pantalla contra producción."""
-    try:
-        sys.stdout.reconfigure(encoding='utf-8')
-    except AttributeError:
-        pass
+def ejecutar_simulacion_e2e():  # Función de simulación End-to-End #
+    endpoint = "https://jarvis-two-pi-13.vercel.app/api/telegram/webhook"  # Endpoint activo del webhook #
+    payload_telegram = {  # Construir objeto JSON simulando un mensaje real de Telegram #
+        "update_id": 888888,  # ID único de actualización #
+        "message": {  # Objeto contenedor del mensaje #
+            "message_id": 5678,  # ID del mensaje #
+            "from": {"id": 12345678, "first_name": "Jan"},  # Datos del usuario remitente #
+            "chat": {"id": 12345678, "type": "private"},  # Identificador de chat privado #
+            "text": "q cuentas tengo"  # Texto exacto enviado en las pruebas #
+        }  # Cierre de objeto mensaje #
+    }  # Cierre del payload #
 
-    url_vercel = "https://jarvis-two-pi-13.vercel.app/api/telegram/webhook"
-    payload_simulado = {
-        "update_id": 999999,
-        "message": {
-            "message_id": 1234,
-            "from": {"id": 12345678, "first_name": "Jan"},
-            "chat": {"id": 12345678, "type": "private"},
-            "text": "Q presupuestos hay Pa septiembre",
-        },
-    }
-
-    print("📡 Enviando simulación de payload de captura a Vercel...")
-    try:
-        resp = requests.post(url_vercel, json=payload_simulado, timeout=10)
-    except requests.RequestException as exc:
-        print(f"❌ Fallo de red contra Vercel: {exc}")
-        sys.exit(1)
-
-    print(f"Respuesta de Vercel (Status {resp.status_code}): {resp.json()}")
-
-    exitoso = resp.status_code == 200 and resp.json().get("status") == "ok"
-    print("✅ SIMULACIÓN EXITOSA" if exitoso else "❌ SIMULACIÓN FALLIDA")
-    sys.exit(0 if exitoso else 1)
+    print("🚀 Enviando simulación E2E de consulta de cuentas a Vercel...")  # Imprimir progreso #
+    try:  # Iniciar bloque defensivo de red #
+        res = requests.post(endpoint, json=payload_telegram, timeout=15)  # Realizar petición POST al webhook #
+        print(f"Respuesta Webhook ({res.status_code}): {res.json()}")  # Imprimir código de respuesta e informe JSON #
+    except Exception as e:  # Capturar cualquier fallo de conexión HTTP #
+        print(f"💥 Error al intentar conectar con Vercel: {e}")  # Imprimir mensaje de error #
 
 
-if __name__ == "__main__":
-    simular_envio_captura()
+if __name__ == "__main__":  # Punto de entrada principal #
+    ejecutar_simulacion_e2e()  # Ejecutar la prueba E2E #

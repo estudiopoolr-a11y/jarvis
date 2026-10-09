@@ -78,6 +78,28 @@ curl https://jarvis-two-pi-13.vercel.app/api/telegram/health
 }
 ```
 
+### 4. Verificación Producción Confirmada (2026-10-09)
+Tras consolidar las rutas de Telegram en `app/main.py` para evitar errores de importación serverless:
+
+```bash
+python scripts/check_prod_health.py
+```
+
+Resultado verificado:
+```json
+{
+  "status": "ok",
+  "telegram_bot_token_present": true,
+  "gemini_api_key_present": true,
+  "telegram_api_response": {
+    "ok": true,
+    "result": {"id": 8647134091, "is_bot": true, "first_name": "Jarvis-Asistente", "username": "Pooles_Bot"}
+  }
+}
+```
+
+Estado actual: **Variables de entorno inyectadas y operativas en Vercel Serverless ✅**
+
 ## Enlaces Wiki
 - [[Jarvis/estado_proyecto.md]] - Bitácora de avances y registro de estado.
 - [[Índice Principal.md]] - Nodo central de navegación.
