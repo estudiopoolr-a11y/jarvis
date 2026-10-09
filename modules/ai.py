@@ -24,6 +24,18 @@ for _name in (
 __all__ = list(_EXPORTS) + ["analizar_intencion_mensaje"]
 
 
+def __getattr__(name: str):
+    """Lazy import resolver: dynamically imports names listed in _EXPORTS."""
+    if name in _EXPORTS:
+        module_path = _EXPORTS[name]
+        from importlib import import_module
+        module = import_module(module_path)
+        obj = getattr(module, name)
+        globals()[name] = obj
+        return obj
+    raise AttributeError(f"module 'modules.ai' has no attribute '{name}'")
+
+
 def pensar_respuesta(texto: str) -> str:
     """Interface for thinking/generating a natural response."""
     from modules.gemini.think import pensar_respuesta as _pensar
