@@ -1,10 +1,0 @@
-Variables de entorno en Vercel:**
-   - `TELEGRAM_BOT_TOKEN` (crítico para el despacho outbound del bot)
-   - `DISCORD_TOKEN`, `GEMINI_API_KEY`, `FIREBASE_CREDENTIALS`.
-
-4. **Endpoint base para el Widget:**
-   - `https://jarvis-two-pi-13.vercel.app/api/widget/dashboard`
-
----
- 
-## 🔄 E

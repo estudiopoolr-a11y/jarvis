@@ -97,3 +97,28 @@ async def set_webhook():  # Controlador asíncrono del webhook #
         except Exception as e:  # Capturar excepción #
             print(f"💥 [VERCEL OUTBOUND] Excepción en SetWebhook: {e}")  # Registrar error crítico #
             return {"error": str(e)}  # Retornar error como diccionario #
+
+
+@router.get("/health")  # Declarar el endpoint GET de diagnóstico de salud #
+async def verificar_salud_telegram():  # Controlador asíncrono para validar variables de entorno #
+    token = os.getenv("TELEGRAM_BOT_TOKEN")  # Extraer el token de Telegram del entorno #
+    gemini_key = os.getenv("GEMINI_API_KEY")  # Extraer la clave de Gemini del entorno #
+
+    estado_token = bool(token and len(token) > 10)  # Validar si el token existe y tiene longitud mínima #
+    estado_gemini = bool(gemini_key and len(gemini_key) > 10)  # Validar si la clave de Gemini existe #
+
+    detalles_bot = None  # Inicializar variable para guardar información del bot #
+    if estado_token:  # Si la variable del token está presente en el servidor #
+        try:  # Iniciar bloque seguro de verificación HTTP #
+            async with httpx.AsyncClient(timeout=5.0) as client:  # Instanciar cliente HTTP asíncrono #
+                resp = await client.get(f"https://api.telegram.org/bot{token}/getMe")  # Consultar getMe a Telegram #
+                detalles_bot = resp.json() if resp.status_code == 200 else f"Error HTTP {resp.status_code}"  # Guardar respuesta #
+        except Exception as e:  # Capturar excepciones de conectividad de red #
+            detalles_bot = f"Excepción de red: {str(e)}"  # Guardar mensaje de error #
+
+    return {  # Retornar estructura JSON con el diagnóstico del servidor #
+        "status": "ok" if estado_token else "token_missing",  # Estado general del diagnóstico #
+        "telegram_bot_token_present": estado_token,  # Confirmación booleana de presencia de token #
+        "gemini_api_key_present": estado_gemini,  # Confirmación booleana de presencia de clave Gemini #
+        "telegram_api_response": detalles_bot  # Resultado de la consulta getMe con Telegram API #
+    }  # Cierre de diccionario de respuesta de salud #

@@ -59,6 +59,7 @@ Para prevenir el infame error `FUNCTION_INVOCATION_FAILED` en los despliegues pe
 ## Endpoints
 - `POST /api/telegram/webhook`: Punto de entrada para los eventos de Telegram.
 - `GET /api/telegram/set-webhook`: Helper para registrar la URL del webhook en los servidores de Telegram.
+- `GET /api/telegram/health`: Diagnóstico de variables de entorno y conectividad con Telegram API (getMe).
 
 ## Función `despachar_respuesta_telegram()`
 
