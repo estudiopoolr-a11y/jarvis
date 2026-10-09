@@ -157,3 +157,6 @@
 
 - **2026-10-09:** Corregido error crítico de startup en Vercel (ModuleNotFoundError: yfinance). Añadida dependencia a requirements.txt y blindadas las importaciones en modules/gemini/inversion.py. Verificado montaje correcto de las rutas /api/telegram/webhook y /api/widgets/resumen. [[FastAPI]] [[Vercel]] [[Python]] [[Telegram]]
 
+
+- **2026-10-09:** Implementado doble fallback (Markdown -> Texto Plano) en despachar_respuesta_telegram() para resolver descartes silenciosos de Telegram API. Corregidos logs y verificado el flujo en app/routes/telegram.py. [[Telegram]] [[FastAPI]] [[Vercel]] [[Python]]
+

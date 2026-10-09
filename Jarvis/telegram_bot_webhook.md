@@ -115,3 +115,15 @@ Se creó scripts/test_live_payload_simulation.py para prueba E2E del payload real
 
 Nota técnica: [[Jarvis/diagnostico_y_blindaje_webhook.md]]
 Enlaces: [[Jarvis/estado_proyecto.md]] [[Índice Principal.md]]
+
+
+## 2026-10-09 - Doble Fallback de Envío
+
+despachar_respuesta_telegram implementa reintento automático:
+- Intento 1: Markdown con parse_mode.
+- Intento 2: Texto plano sin parse_mode si status_code != 200.
+
+Garantiza entrega incluso ante rechazos de formato de Telegram.
+
+Enlaces: [[FastAPI]] [[Vercel]] [[Atomic Design]]
+

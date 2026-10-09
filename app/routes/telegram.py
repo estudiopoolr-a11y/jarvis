@@ -12,21 +12,42 @@ logger = logging.getLogger("jarvis.telegram")
 
 
 def despachar_respuesta_telegram(chat_id: int, texto: str) -> bool:
-    """Envía la respuesta atómica a Telegram API. Devuelve True si fue 200 OK."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        logger.error("❌ TELEGRAM_BOT_TOKEN no configurado en entorno")
+        logger.error("❌ ERROR CRÍTICO: TELEGRAM_BOT_TOKEN no encontrado en el entorno de Vercel")
         return False
 
     endpoint = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"}
+
+    payload_markdown = {
+        "chat_id": chat_id,
+        "text": texto,
+        "parse_mode": "Markdown"
+    }
 
     try:
-        res = requests.post(endpoint, json=payload, timeout=8)
-        logger.info(f"📡 Respuesta de Telegram API ({res.status_code}): {res.text}")
-        return res.status_code == 200
+        res = requests.post(endpoint, json=payload_markdown, timeout=8)
+        if res.status_code == 200:
+            logger.info(f"✅ Mensaje enviado exitosamente en Markdown a {chat_id}")
+            return True
+        logger.warning(f"⚠️ Falló envío Markdown ({res.status_code}): {res.text}. Iniciando Intento 2 (Texto Plano)...")
     except Exception as e:
-        logger.error(f"❌ Excepción en despachar_respuesta_telegram: {e}")
+        logger.error(f"⚠️ Excepción en Intento 1 (Markdown): {e}. Reintentando en texto plano...")
+
+    payload_plano = {
+        "chat_id": chat_id,
+        "text": texto
+    }
+
+    try:
+        res_plano = requests.post(endpoint, json=payload_plano, timeout=8)
+        if res_plano.status_code == 200:
+            logger.info(f"✅ Mensaje enviado exitosamente en Texto Plano a {chat_id}")
+            return True
+        logger.error(f"❌ Error crítico en Telegram API ({res_plano.status_code}): {res_plano.text}")
+        return False
+    except Exception as e:
+        logger.error(f"💥 Excepción crítica en Intento 2 (Texto Plano): {e}")
         return False
 
 
