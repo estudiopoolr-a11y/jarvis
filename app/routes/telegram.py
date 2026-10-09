@@ -2,21 +2,38 @@ import os
 import httpx
 from fastapi import APIRouter, Request, Response
 
-# Importar organismo atómico de finanzas para consumo desde la capa de rutas #
+# Importar organismo atómico de finanzas para consumo desde la capa de rutas
 from app.core.organisms.finance_organism import OrganismoFinanzas
-# Importar plantillas estructurales de Telegram desde capa Templates #
+# Importar plantillas estructurales de Telegram desde capa Templates
 from app.core.templates.telegram_templates import plantilla_comando_balance, plantilla_respuesta_nlp
+# Importar funciones de análisis de intenciones e intent handler
+from modules.ai import analizar_intencion_mensaje
+from modules.intent_handler import ejecutar_intencion_nlp
 
-router = APIRouter(prefix="/api/telegram", tags=["telegram"])  # Definir router con prefijo y tag para FastAPI #
+router = APIRouter(prefix="/api/telegram", tags=["telegram"])  # Definir router con prefijo y tag para FastAPI
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")  # Obtener token de Telegram desde variables de entorno #
-# La URL de Vercel (la actual o la custom domain de Jarvis) #
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")  # Obtener token de Telegram desde variables de entorno
+# La URL de Vercel (la actual o la custom domain de Jarvis)
 BASE_URL = os.getenv("VERCEL_URL", "")
 if BASE_URL and not BASE_URL.startswith("http"):
     BASE_URL = f"https://{BASE_URL}"
-# Fallback si no hay env VERCEL_URL configurada #
+# Fallback si no hay env VERCEL_URL configurada
 if not BASE_URL:
     BASE_URL = "https://jarvis.vercel.app"
+
+async def procesar_texto_libre_telegram(chat_id: str, texto_mensaje: str) -> str:
+    """Procesa texto libre usando análisis de intenciones y ejecuta la respuesta."""
+    try:
+        intent_data = analizar_intencion_mensaje(texto_mensaje)
+        intent_data["texto"] = texto_mensaje
+        respuesta = await ejecutar_intencion_nlp(intent_data)
+        await enviar_mensaje(chat_id, respuesta)
+        return respuesta
+    except Exception as e:
+        print(f"[Telegram Procesar Error] {e}")
+        fallback_msg = "Recibí tu mensaje. Usa /balance o /ayuda para ver los comandos disponibles."
+        await enviar_mensaje(chat_id, fallback_msg)
+        return fallback_msg
 
 @router.get("/set-webhook")
 async def set_webhook():
@@ -67,41 +84,14 @@ async def telegram_webhook(request: Request):
                 except Exception as e:
                     respuesta = f"❌ Error al registrar el gasto: {str(e)}"
             else:
-                # NUEVO FLUJO: Análisis de intención con Gemini NLP
+                # NUEVO FLUJO: Análisis de intención con Regex/Gemini NLP
                 try:
-                    # Importación perezosa para evitar fallos en cold start
-                    from modules.ai import analizar_intencion_mensaje
-                    from modules.intent_handler import ejecutar_intencion_nlp
-                    
-                    # 1. Analizar intención con Gemini NLP
-                    intent_data = analizar_intencion_mensaje(text)
-                    # Aseguramos que tengamos el texto original para conversacion general
-                    intent_data["texto"] = text
-                    
-                    # 2. Ejecutar la acción correspondiente
-                    respuesta_telegram = await ejecutar_intencion_nlp(intent_data, user_id)
-                    
-                    # 3. Enviar respuesta al usuario en Telegram
-                    await enviar_mensaje(chat_id, respuesta_telegram)
-                    
+                    await procesar_texto_libre_telegram(chat_id, text)
                 except Exception as nlp_err:
                     # Fallback al comportamiento anterior si falla el NLP
                     print(f"[Telegram Webhook NLP Error] {nlp_err}")
-                    respuesta = plantilla_respuesta_nlp(fallback=True)  # Consumir plantilla de fallback #
-                    try:
-                        from modules.ai import procesar_intencion_natural, pensar_respuesta
-                        respuesta_texto = procesar_intencion_natural(text, user_id)
-                        if not respuesta_texto:
-                            respuesta_texto = pensar_respuesta(text)
-                        if respuesta_texto:
-                            await enviar_mensaje(chat_id, respuesta_texto)
-                    except Exception as ai_err:
-                        print(f"[Telegram Webhook AI Error] Fallo al procesar IA: {ai_err}")
-                        if not respuesta:
-                            respuesta = plantilla_respuesta_nlp(fallback=True)
-                    
-                    if respuesta:
-                        await enviar_mensaje(chat_id, respuesta)
+                    respuesta = "Recibí tu mensaje. Usa /balance o /ayuda para ver los comandos disponibles."
+                    await enviar_mensaje(chat_id, respuesta)
 
             if respuesta:
                 await enviar_mensaje(chat_id, respuesta)

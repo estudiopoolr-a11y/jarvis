@@ -140,6 +140,9 @@
   - Pruebas de verificación: Átomos, Moléculas y Organismos verificados exitosamente en consola.
   - Enlaces tecnológicos: [[Atomic Design]], [[FastAPI]], [[Python]], [[Telegram]].
 
+- **2026-10-09:** Resuelto error de mensaje de mantenimiento en Telegram Bot. Implementado motor de respaldo local por Regex en modules/ai.py y desacoplada la dependencia estricta de Gemini API para respuestas de presupuestos y balance. Documentación dual y sincronización completadas.
+  - Vincula las etiquetas `[[Gemini API]]`, `[[Telegram]]`, `[[FastAPI]]` y `[[NLP]]`.
+
 - **2026-10-09:** Purga masiva y consolidación de arquitectura simplificada:
   - Eliminación de directorios legacy sin dependencias runtime: `dataconnect/` (Google Cloud Data Connect huérfano), `memory/` (docs markdown), `plans/` (docs markdown), `app/router/` (paquete vacío), `path/`, `temp_audios/`, `docs/`, `scripts/`.
   - Verificación mediante auditoría de dependencias: 4 directorios eliminados con 0 referencias en código Python; `src/` y `app/services/` conservados por tener dependencias activas.
