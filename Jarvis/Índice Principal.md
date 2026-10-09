@@ -47,3 +47,6 @@ Desde aquÃ­ puedes navegar a todos los componentes principales, arquitecturas y 
 
 - [[Jarvis/diagnostico_y_blindaje_webhook.md|Diagnóstico y Blindaje Webhook 2026-10-09]] - Corrección ultradefensiva con .get() multinivel, scripts de diagnóstico y verificación E2E en Vercel.
 
+
+- [[Jarvis/resolucion_error_yfinance_startup.md|Resolución Error yfinance Startup 2026-10-09]] - Corrección ModuleNotFoundError y blindaje de importaciones para Vercel.
+

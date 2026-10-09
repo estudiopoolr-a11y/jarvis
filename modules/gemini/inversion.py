@@ -1,5 +1,9 @@
 """Investment intent + ticker analysis."""
-import yfinance as yf
+try:
+    import yfinance as yf
+except ImportError:
+    yf = None
+
 from google.genai import types
 from google.genai.errors import APIError
 
@@ -76,17 +80,22 @@ Si balance > $1.000.000, recomienda diversificar CDT + app."""
 def analizar_inversion(ticker: str) -> str:
     """Analiza un activo bursátil combinando datos en vivo de yfinance y búsqueda web."""
     try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="5d")
-
-        datos_mercado = ""
-        if not hist.empty:
-            precio_actual = hist['Close'].iloc[-1]
-            precio_anterior = hist['Close'].iloc[-2]
-            cambio_pct = ((precio_actual - precio_anterior) / precio_anterior) * 100
-            datos_mercado = f"Precio actual: ${precio_actual:,.2f} USD. Variación reciente: {cambio_pct:+.2f}%."
+        if yf is None:
+            datos_mercado = "yfinance no disponible en este entorno."
         else:
-            datos_mercado = f"No se obtuvieron datos directos de yfinance para `{ticker}`."
+            try:
+                stock = yf.Ticker(ticker)
+                hist = stock.history(period="5d")
+                datos_mercado = ""
+                if hist is not None and not hist.empty:
+                    precio_actual = hist['Close'].iloc[-1]
+                    precio_anterior = hist['Close'].iloc[-2]
+                    cambio_pct = ((precio_actual - precio_anterior) / precio_anterior) * 100
+                    datos_mercado = f"Precio actual: ${precio_actual:,.2f} USD. Variación reciente: {cambio_pct:+.2f}%."
+                else:
+                    datos_mercado = f"No se obtuvieron datos directos de yfinance para `{ticker}`."
+            except Exception:
+                datos_mercado = f"No se pudieron obtener datos de mercado para `{ticker}`."
 
         prompt_analisis = (
             f"{SYSTEM_INSTRUCTION}\n\n"

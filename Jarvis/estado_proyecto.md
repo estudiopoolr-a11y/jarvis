@@ -154,3 +154,6 @@
   - Enlace tecnolÃ³gico: [[Refactor]], [[Atomic Design]], [[FastAPI]], [[Python]].
 
 - **2026-10-09:** Aplicado blindaje ultradefensivo en pp/routes/telegram.py usando extracción .get() multinivel para evitar KeyError, re-registrado Webhook en Telegram API con drop_pending_updates=True y verificada respuesta de producción vía scripts/test_live_payload_simulation.py. Se crearon scripts/diagnostico_live_telegram.py y scripts/test_live_payload_simulation.py. Documentación dual actualizada en [[Jarvis/diagnostico_y_blindaje_webhook.md]] y [[Jarvis/telegram_bot_webhook.md]]. Enlaces: [[Telegram]], [[FastAPI]], [[Vercel]], [[Atomic Design]].
+
+- **2026-10-09:** Corregido error crítico de startup en Vercel (ModuleNotFoundError: yfinance). Añadida dependencia a requirements.txt y blindadas las importaciones en modules/gemini/inversion.py. Verificado montaje correcto de las rutas /api/telegram/webhook y /api/widgets/resumen. [[FastAPI]] [[Vercel]] [[Python]] [[Telegram]]
+

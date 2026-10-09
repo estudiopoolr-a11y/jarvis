@@ -16,6 +16,7 @@ firebase-admin
 
 # ── Datos y finanzas ──────────────────────────────────────────────────────────
 python-dateutil
+yfinance>=0.2.38  # Librería para consulta de cotizaciones y datos financieros bursátiles
 
 # ── Templates ─────────────────────────────────────────────────────────────────
 jinja2
