@@ -11,18 +11,23 @@ router = APIRouter(prefix="/api/telegram", tags=["telegram"])
 logger = logging.getLogger("jarvis.telegram")
 
 
-def despachar_respuesta_telegram(chat_id: int, texto: str):
-    """Función para enviar mensaje a Telegram API."""
+def despachar_respuesta_telegram(chat_id: int, texto: str) -> bool:
+    """Envía la respuesta atómica a Telegram API. Devuelve True si fue 200 OK."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        logger.error("❌ TELEGRAM_BOT_TOKEN ausente en la ejecución")
-        return
+        logger.error("❌ TELEGRAM_BOT_TOKEN no configurado en entorno")
+        return False
+
     endpoint = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"}
+
     try:
-        requests.post(endpoint, json=payload, timeout=8)
+        res = requests.post(endpoint, json=payload, timeout=8)
+        logger.info(f"📡 Respuesta de Telegram API ({res.status_code}): {res.text}")
+        return res.status_code == 200
     except Exception as e:
-        logger.error(f"❌ Error al enviar respuesta a Telegram: {e}")
+        logger.error(f"❌ Excepción en despachar_respuesta_telegram: {e}")
+        return False
 
 
 @router.get("/set-webhook")
@@ -53,21 +58,24 @@ async def atender_telegram_webhook(request: Request):
     """Recibe y procesa los eventos desde Telegram usando arquitectura atómica."""
     try:
         cuerpo = await request.json()
-        
-        if "message" in cuerpo and "text" in cuerpo["message"]:
-            chat_id = cuerpo["message"]["chat"]["id"]
-            mensaje_texto = cuerpo["message"]["text"]
-            user_id = str(cuerpo["message"].get("from", {}).get("id", chat_id))
-            
-            if mensaje_texto.strip() == "/start":
+        logger.info(f"📥 Payload recibido en Webhook: {cuerpo}")
+
+        # Extracción ultradefensiva con .get() multinivel para evitar KeyError
+        mensaje = cuerpo.get("message") or cuerpo.get("edited_message") or {}
+        chat = mensaje.get("chat", {})
+        chat_id = chat.get("id")
+        mensaje_texto = (mensaje.get("text") or "").strip()
+
+        if chat_id and mensaje_texto:
+            if mensaje_texto == "/start":
                 respuesta = plantilla_comando_balance()
             else:
                 intent_data = await analizar_intencion_mensaje(mensaje_texto)
                 respuesta = await ejecutar_intencion_nlp(intent_data)
-            
+
             despachar_respuesta_telegram(chat_id, respuesta)
-        
+
         return {"status": "ok"}
     except Exception as e:
-        logger.error(f"❌ Fallo crítico en atender_telegram_webhook: {e}")
+        logger.error(f"💥 Error crítico procesando Webhook: {e}")
         return {"status": "error_handled"}

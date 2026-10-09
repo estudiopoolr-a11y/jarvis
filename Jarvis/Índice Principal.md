@@ -44,3 +44,6 @@ Desde aquÃ­ puedes navegar a todos los componentes principales, arquitecturas y 
 
 ## Protocolos Auxiliares
 - [[Protocolo_Obsidian_Agentes.md|Protocolo Obsidian]] - Refiere al documento principal de reglas de actualizaciÃ³n (si existe) y se rige por las directrices del proyecto.
+
+- [[Jarvis/diagnostico_y_blindaje_webhook.md|Diagnóstico y Blindaje Webhook 2026-10-09]] - Corrección ultradefensiva con .get() multinivel, scripts de diagnóstico y verificación E2E en Vercel.
+

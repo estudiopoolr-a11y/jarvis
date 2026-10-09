@@ -99,3 +99,19 @@ Realiza `getWebhookInfo` y `setWebhook` hacia `https://jarvis-two-pi-13.vercel.a
 
 ## Fecha
 2026-10-08 (actualizado con arquitectura Atomic Design)
+
+## Actualización 2026-10-09 - Parser Ultradefensivo y Blindaje
+
+A partir de 2026-10-09, el endpoint POST /api/telegram/webhook usa extracción segura con .get() multinivel para evitar KeyError:
+
+`python
+mensaje = cuerpo.get('message') or cuerpo.get('edited_message') or {}
+chat = mensaje.get('chat', {})
+chat_id = chat.get('id')
+mensaje_texto = (mensaje.get('text') or '').strip()
+`"n
+Se creó scripts/diagnostico_live_telegram.py para getMe / getWebhookInfo / setWebhook con drop_pending_updates.
+Se creó scripts/test_live_payload_simulation.py para prueba E2E del payload real.
+
+Nota técnica: [[Jarvis/diagnostico_y_blindaje_webhook.md]]
+Enlaces: [[Jarvis/estado_proyecto.md]] [[Índice Principal.md]]

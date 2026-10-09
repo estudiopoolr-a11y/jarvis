@@ -5,6 +5,7 @@ python-dotenv
 pydantic
 python-multipart
 httpx
+requests
 
 # ── LLM Providers ─────────────────────────────────────────────────────────────
 google-genai

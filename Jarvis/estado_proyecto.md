@@ -152,3 +152,5 @@
   - Actualizaci√≥n de `README.md` con estructura de proyecto consolidada y documentada.
   - Actualizaci√≥n de [[Jarvis/estado_proyecto.md]] y [[√çndice Principal.md]].
   - Enlace tecnol√≥gico: [[Refactor]], [[Atomic Design]], [[FastAPI]], [[Python]].
+
+- **2026-10-09:** Aplicado blindaje ultradefensivo en pp/routes/telegram.py usando extracciÛn .get() multinivel para evitar KeyError, re-registrado Webhook en Telegram API con drop_pending_updates=True y verificada respuesta de producciÛn vÌa scripts/test_live_payload_simulation.py. Se crearon scripts/diagnostico_live_telegram.py y scripts/test_live_payload_simulation.py. DocumentaciÛn dual actualizada en [[Jarvis/diagnostico_y_blindaje_webhook.md]] y [[Jarvis/telegram_bot_webhook.md]]. Enlaces: [[Telegram]], [[FastAPI]], [[Vercel]], [[Atomic Design]].
