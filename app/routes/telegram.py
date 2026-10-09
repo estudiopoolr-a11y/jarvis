@@ -7,7 +7,7 @@ from app.core.templates.telegram_templates import plantilla_comando_balance  # C
 from modules.ai import analizar_intencion_mensaje  # Cargar analizador NLP/Regex #
 from modules.intent_handler import ejecutar_intencion_nlp  # Cargar enrutador de intenciones #
 
-router = APIRouter()  # Instanciar enrutador de rutas FastAPI #
+router = APIRouter(prefix="/api/telegram")  # Instanciar enrutador de rutas FastAPI con prefijo #
 logger = logging.getLogger("jarvis.telegram")  # Crear logger exclusivo para Telegram #
 
 
