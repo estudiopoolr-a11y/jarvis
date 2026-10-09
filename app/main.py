@@ -1,8 +1,12 @@
 import os
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from app.routes.telegram import router as telegram_router
 
 app = FastAPI(title="JARVIS API", version="1.0.0")
+
+# Registrar router de Telegram directamente en la app principal
+app.include_router(telegram_router)
 
 @app.get("/")
 @app.get("/debug")
@@ -15,16 +19,9 @@ async def debug_root():
         "has_gemini_key": bool(os.getenv("GEMINI_API_KEY")),
     }
 
-try:
-    from app.routes import app as routes_app
-    app.mount("", routes_app)
-except Exception as e:
-    print(f"[Startup] No se pudieron montar las rutas: {e}")
-
-    @app.post("/api/telegram/webhook")
-    async def fallback_webhook():
-        # Telegram reintenta (y acaba desactivando el webhook) ante cualquier código distinto de 200.
-        return JSONResponse(status_code=200, content={"status": "ok", "degraded": True})
+# Fallback webhook por si falla el router
+@app.post("/api/telegram/webhook")
+async def fallback_webhook():
+    return JSONResponse(status_code=200, content={"status": "ok", "degraded": True})
 
 handler = app
-
