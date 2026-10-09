@@ -2,10 +2,6 @@ import os  # Cargar módulo OS para acceder a variables del sistema #
 import logging  # Cargar módulo logging para trazas estructuradas #
 import httpx  # Cargar cliente HTTP asíncrono optimizado para serverless #
 from fastapi import APIRouter, Request  # Cargar clases principales de FastAPI #
-from app.core.organisms.finance_organism import OrganismoFinanzas  # Cargar organismo atómico de finanzas #
-from app.core.templates.telegram_templates import plantilla_comando_balance  # Cargar plantilla atómica de bienvenida #
-from modules.ai import analizar_intencion_mensaje  # Cargar analizador NLP/Regex #
-from modules.intent_handler import ejecutar_intencion_nlp  # Cargar enrutador de intenciones #
 
 router = APIRouter(prefix="/api/telegram")  # Instanciar enrutador de rutas FastAPI con prefijo #
 logger = logging.getLogger("jarvis.telegram")  # Crear logger exclusivo para Telegram #
@@ -45,6 +41,11 @@ async def despachar_respuesta_telegram(chat_id: int, texto: str) -> bool:  # Fun
 
 @router.post("/webhook")  # Declarar el endpoint POST del webhook #
 async def atender_telegram_webhook(request: Request):  # Controlador asíncrono del webhook #
+    # Importaciones diferidas (lazy loading) para evitar FUNCTION_INVOCATION_FAILED en Vercel
+    from app.core.templates.telegram_templates import plantilla_comando_balance  # Cargar plantilla atómica de bienvenida #
+    from modules.ai import analizar_intencion_mensaje  # Cargar analizador NLP/Regex #
+    from modules.intent_handler import ejecutar_intencion_nlp  # Cargar enrutador de intenciones #
+
     try:  # Iniciar bloque defensivo principal #
         cuerpo = await request.json()  # Parsear el cuerpo de la petición JSON #
         print(f"📥 [VERCEL INBOUND] Webhook recibido: {cuerpo}")  # Log explícito del payload recibido #
