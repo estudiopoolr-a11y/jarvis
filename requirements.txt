@@ -1,31 +1,6 @@
-# ── Core framework ────────────────────────────────────────────────────────────
-fastapi
-uvicorn
-python-dotenv
-pydantic
-python-multipart
-httpx
-requests
-
-# ── LLM Providers ─────────────────────────────────────────────────────────────
-google-genai
-openai>=1.0.0
-
-# ── Firebase / Firestore ──────────────────────────────────────────────────────
-firebase-admin
-
-# ── Datos y finanzas ──────────────────────────────────────────────────────────
-python-dateutil
-yfinance>=0.2.38  # Librería para consulta de cotizaciones y datos financieros bursátiles
-
-# ── Procesamiento de imágenes (Gemini Vision) ─────────────────────────────────
-Pillow>=10.0.0  # Librería PIL para procesamiento de imágenes en el módulo Gemini Vision #
-
-# ── Templates ─────────────────────────────────────────────────────────────────
-jinja2
-
-# ── Google APIs (Calendar, etc.) ──────────────────────────────────────────────
-google-api-python-client
-google-auth
-google-auth-httplib2
-google-auth-oauthlib
+fastapi==0.117.1
+uvicorn==0.30.6
+httpx==0.27.0
+google-generativeai==0.8.3
+Pillow>=11.0.0
+yfinance==0.2.43

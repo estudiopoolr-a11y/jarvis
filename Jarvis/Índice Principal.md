@@ -59,4 +59,5 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/resolucion_error_await_dict_y_vercel_builds.md|Resolución Error Await Dict y Zero-Config Vercel 2026-10-09]] - Corrección de await en dict y migración vercel.json a estructura rewrites.
 - [[Jarvis/resolucion_definitiva_webhook_y_resolver_llamada_segura.md|Resolución Definitiva Webhook y resolver_llamada_segura 2026-10-09]] - Wrapper universal async/sync y notificación de errores en Telegram.
 - [[Jarvis/resolucion_logging_unbuffered_y_despacho_telegram.md|Resolución Logging Forzado y Despacho Telegram 2026-10-09]] - flush=True y guarda contra texto vacío.
+- [[Jarvis/resolucion_duplicidad_webhook_y_vercel_config.md|Resolución de duplicidad en Webhook y limpieza de vercel.json]] - Eliminación de respuestas duplicadas y limpieza de configuración.
 - [[Jarvis/arquitectura_paridad_python_y_vercel.md|Arquitectura Paridad Python y Vercel]] - Auditoría de paridad Python 3.12, PYTHONUNBUFFERED y script audit_environment_parity.py.

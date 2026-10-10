@@ -21,7 +21,9 @@ python -m unittest discover -v tests
 
 ## Stack Tecnológico y Dependencias
 
-Stack principal: FastAPI>=0.110.0, Uvicorn>=0.28.0, python-dotenv, pydantic, python-multipart, httpx>=0.27.0, requests, google-genai, openai, firebase-admin, python-dateutil, yfinance>=0.2.38, Pillow>=10.0.0.
+Stack principal: FastAPI>=0.110.0, Uvicorn>=0.28.0, python-dotenv, pydantic, python-multipart, httpx>=0.27.0, requests, google-genai, openai, firebase-admin, python-dateutil, yfinance>=0.2.38, Pillow>=10.0.0.
+
+**Nota:** Se ha optimizado la configuración de Vercel a Zero‑Config eliminando bloques legacy `builds`. Ver `vercel.json` para los nuevos rewrites y la variable de entorno `PYTHONUNBUFFERED`.
 
 ### Módulo de Telegram
 Despacho resiliente con doble fallback:
@@ -304,7 +306,7 @@ Hermes Agent le otorga a JARVIS un flujo de aprendizaje autónomo:
 
 - **Python**: 3.12 fijado en `.python-version` para paridad entre desarrollo local y Vercel Serverless.
 - **Variables de entorno Vercel**: `PYTHONUNBUFFERED=1` inyectada en `vercel.json` para emisión inmediata de logs sin buffering en Serverless Functions.
-
+- **Configuración Vercel**: El archivo `vercel.json` ha sido limpiado eliminando los bloques legacy `builds` y manteniendo solo la sección de `rewrites`.
 ## 🚀 Despliegue en Vercel (Serverless)
 
 JARVIS está configurado para desplegarse en **Vercel** mediante **Serverless Functions**.

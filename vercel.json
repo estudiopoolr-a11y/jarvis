@@ -3,24 +3,10 @@
   "env": {
     "PYTHONUNBUFFERED": "1"
   },
-  "builds": [
+  "rewrites": [
     {
-      "src": "app/main.py",
-      "use": "@vercel/python"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/telegram/(.*)",
-      "dest": "app/main.py"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "app/main.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "app/main.py"
+      "source": "/(.*)",
+      "destination": "app/main.py"
     }
   ]
 }

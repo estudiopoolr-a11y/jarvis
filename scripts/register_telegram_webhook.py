@@ -1,31 +1,36 @@
-#!/usr/bin/env python3
-"""
-Script de diagnóstico y re-registro de Webhook en Telegram API.
-Vincula el endpoint de Vercel con el bot de Telegram.
-"""
-import os
-import sys
-import requests
+import os  # Importar módulo os para lectura de variables de entorno #
+import sys  # Importar módulo sys para control de salidas de error #
+import requests  # Importar librería requests para llamadas HTTP #
 
+def purgar_y_registrar_webhook():  # Función para resetear y registrar el webhook #
+  token = os.getenv(
+      "TELEGRAM_BOT_TOKEN"
+  )  # Extraer el token del bot desde el entorno local #
+  if not token:  # Validar existencia de la credencial #
+    print(
+        "❌ Error: TELEGRAM_BOT_TOKEN no definido en el entorno local."
+    )  # Mensaje de error #
+    sys.exit(1)  # Salir con código de error #
 
-def redefinir_webhook_telegram():
-    """Función principal para re-registrar el Webhook."""
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not token:
-        print("❌ Error: TELEGRAM_BOT_TOKEN no configurado en entorno")
-        sys.exit(1)
+  url_webhook = "https://jarvis-two-pi-13.vercel.app/api/telegram/webhook"  # URL oficial de producción en Vercel #
+  endpoint_set = f"https://api.telegram.org/bot{token}/setWebhook?url={url_webhook}&drop_pending_updates=true"  # Configurar Webhook y purgar eventos acumulados #
 
-    url_base = f"https://api.telegram.org/bot{token}"
-    target_webhook = "https://jarvis-two-pi-13.vercel.app/api/telegram/webhook"
+  print(
+      f"📡 Purgando colas pendientes y registrando Webhook en: {url_webhook}..."
+  )  # Imprimir progreso #
+  res = requests.get(endpoint_set).json()  # Enviar petición GET a Telegram API #
+  print(f"Respuesta de Telegram API: {res}", flush=True)  # Mostrar respuesta #
 
-    print("📡 Consultando estado actual del Webhook en Telegram...")
-    info_resp = requests.get(f"{url_base}/getWebhookInfo").json()
-    print(f"Estado actual: {info_resp}")
+  if res.get(
+      "ok"
+  ):  # Evaluar si la operación fue exitosa según la respuesta de Telegram #
+    print(
+        "✅ Webhook purgado, re-registrado y activo con ÉXITO en Telegram."
+    )  # Confirmación de éxito #
+  else:  # Si la API retorna un fallo #
+    print(
+        f"❌ Fallo al registrar Webhook: {res.get('description')}"
+    )  # Mostrar descripción del error #
 
-    print(f"🔗 Registrando nuevo Webhook hacia: {target_webhook}")
-    set_resp = requests.post(f"{url_base}/setWebhook", json={"url": target_webhook}).json()
-    print(f"Resultado del registro: {set_resp}")
-
-
-if __name__ == "__main__":
-    redefinir_webhook_telegram()
+if __name__ == "__main__":  # Punto de entrada principal del script #
+  purgar_y_registrar_webhook()  # Ejecutar rutina de purga y registro #
