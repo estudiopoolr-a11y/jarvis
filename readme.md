@@ -300,9 +300,14 @@ Hermes Agent le otorga a JARVIS un flujo de aprendizaje autónomo:
 
 ---
 
-## 🚀 Despliegue en Vercel (Serverless)
-
-JARVIS está configurado para desplegarse en **Vercel** mediante **Serverless Functions**.
+## 🛠️ Entorno de Ejecución
+
+- **Python**: 3.12 fijado en `.python-version` para paridad entre desarrollo local y Vercel Serverless.
+- **Variables de entorno Vercel**: `PYTHONUNBUFFERED=1` inyectada en `vercel.json` para emisión inmediata de logs sin buffering en Serverless Functions.
+
+## 🚀 Despliegue en Vercel (Serverless)
+
+JARVIS está configurado para desplegarse en **Vercel** mediante **Serverless Functions**.
 
 1. **Crear proyecto en Vercel:**
    - Conecta tu repositorio GitHub.
