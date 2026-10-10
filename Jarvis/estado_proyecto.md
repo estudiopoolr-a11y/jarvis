@@ -176,3 +176,5 @@
 - **2026-10-09:** Implementado logging forzado con `flush=True` en `app/routes/telegram.py` y guarda contra texto vacío en `despachar_respuesta_telegram()`. Creado `scripts/test_live_telegram_send.py` para verificación de salida directa. [[FastAPI]], [[Vercel]], [[Telegram]], [[Python]]
 
 - **2026-10-10:** Eliminada la configuración legacy 'builds' en vercel.json resolviendo las advertencias de Vercel y el conflicto con .python-version. Purgadas colas pendientes en Telegram con drop_pending_updates=true y asegurada la inclusión única del router. Corregido requirements.txt (eliminados comentarios inline que causaban error pip, actualizada Pillow a >=11.0.0 por compatibilidad con Python 3.14). Nota técnica creada: [[Jarvis/resolucion_duplicidad_webhook_y_vercel_config.md]]. [[FastAPI]] [[Vercel]] [[Telegram]] [[Python]]
+
+- **2026-10-10:** Corregido `ModuleNotFoundError: No module named 'firebase_admin'` en Vercel. Agregado `firebase-admin>=6.0.0` a requirements.txt y actualizado `httpx` de 0.27.0 a 0.28.1 (requerido por firebase-admin). Push completado. [[FastAPI]] [[Vercel]] [[Python]]

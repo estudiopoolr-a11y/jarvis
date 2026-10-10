@@ -40,6 +40,7 @@ Optional: `HERMES_STORAGE_PATH`, `PORT`, `VERCEL_URL`, `DISCORD_WEBHOOK_URL`
 ## Gotchas
 - **requirements.txt:** No inline comments. `//` or `#` after a package line breaks `pip install`. Use clean lines only.
 - **Pillow:** Pin `>=11.0.0` for Python 3.14 compatibility. `==10.4.0` will fail to build from source.
+- **firebase-admin:** Required by the finance module; depends on `httpx>=0.28.1`. Bumping httpx may shift transitive deps.
 - **Windows PowerShell:** Set `$env:PYTHONIOENCODING="utf-8"` before running scripts that print emojis (register_telegram_webhook.py, test scripts).
 - **Git lock files:** `.git/index.lock` may persist after crashes; remove it before committing: `Remove-Item .git/index.lock -Force`.
 - **LF→CRLF warnings:** Files with LF line endings trigger git warnings on Windows. This is expected; do not change core editor settings.
