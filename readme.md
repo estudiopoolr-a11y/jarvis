@@ -21,7 +21,7 @@ python -m unittest discover -v tests
 
 ## Stack Tecnológico y Dependencias
 
-Stack principal: FastAPI>=0.110.0, Uvicorn>=0.28.0, python-dotenv, pydantic, python-multipart, httpx>=0.27.0, requests, google-genai, openai, firebase-admin, python-dateutil, yfinance>=0.2.38, Pillow>=10.0.0.
+Stack principal: FastAPI>=0.110.0, Uvicorn>=0.28.0, python-dotenv==1.0.1, pydantic, python-multipart, httpx>=0.27.0, requests, google-genai, openai, firebase-admin, python-dateutil, yfinance>=0.2.38, Pillow>=11.0.0.
 
 **Nota:** Se ha optimizado la configuración de Vercel a Zero‑Config eliminando bloques legacy `builds`. Ver `vercel.json` para los nuevos rewrites y la variable de entorno `PYTHONUNBUFFERED`.
 

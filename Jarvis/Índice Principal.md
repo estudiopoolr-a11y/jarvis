@@ -55,7 +55,8 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 
 - [[Jarvis/diagnostico_despacho_outbound_telegram.md|Diagnóstico Despacho Outbound Telegram 2026-10-09]] - Refactorización asíncrona con httpx y logs de visibilidad para Vercel.
 - [[Jarvis/resolucion_variables_entorno_vercel.md|Resolución Variables Entorno Vercel 2026-10-09]] - Corrección Needs Attention y endpoint /api/telegram/health para auditoría de variables.
-- [[Jarvis/resolucion_error_pillow_vision.md|Resolución Error PIL Vision 2026-10-09]] - Blindaje importación Pillow y dependencia en requirements.txt.
+- [[Jarvis/resolucion_error_pillow_vision.md|Resolución Error PIL Vision 2026-10-09]] - Blindaje importación Pillow y dependencia en requirements.txt.
+- [[Jarvis/resolucion_error_dotenv_y_google_genai.md|Resolución Error dotenv y google.genai 2026-10-10]] - Blindaje importaciones defensivas en client.py y adición de python-dotenv a requirements.txt.
 - [[Jarvis/resolucion_error_await_dict_y_vercel_builds.md|Resolución Error Await Dict y Zero-Config Vercel 2026-10-09]] - Corrección de await en dict y migración vercel.json a estructura rewrites.
 - [[Jarvis/resolucion_definitiva_webhook_y_resolver_llamada_segura.md|Resolución Definitiva Webhook y resolver_llamada_segura 2026-10-09]] - Wrapper universal async/sync y notificación de errores en Telegram.
 - [[Jarvis/resolucion_logging_unbuffered_y_despacho_telegram.md|Resolución Logging Forzado y Despacho Telegram 2026-10-09]] - flush=True y guarda contra texto vacío.

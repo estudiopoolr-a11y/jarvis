@@ -1,11 +1,23 @@
 """Gemini client, API-key rotation and local RPM limiter."""
-import os
-import re
-import time
+import os  # Importar módulo os para manejo de rutas y variables de entorno
+import re  # Importar módulo re para expresiones regulares
+import time  # Importar módulo time para control de tasa y temporalización
+import logging  # Importar módulo logging para trazas de diagnóstico
 
-from dotenv import load_dotenv
-from google import genai
-from google.genai.errors import APIError
+logger = logging.getLogger("jarvis.gemini.client")  # Crear logger dedicado al cliente Gemini
+
+try:  # Bloque defensivo para carga de variables de entorno
+    from dotenv import load_dotenv  # Importar load_dotenv de python-dotenv
+    load_dotenv()  # Cargar variables del archivo .env si existe
+except ImportError:  # Capturar si python-dotenv no está presente en el runtime
+    logger.warning("python-dotenv no disponible; usando variables de entorno del sistema")
+
+try:  # Bloque defensivo para la importación del SDK de Gemini
+    from google import genai  # Importar el SDK de Google GenAI para modelos Gemini
+    from google.genai.errors import APIError  # Importar excepciones de API de Gemini
+except ImportError:  # Capturar excepción si el paquete no está instalado
+    genai = None  # Asignar None para manejo tolerante a fallos
+    APIError = Exception  # Fallback para evitar NameError en manejo de errores
 
 _clientes_cache = {}
 
