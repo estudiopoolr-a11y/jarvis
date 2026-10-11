@@ -4,7 +4,7 @@ import inspect  # Cargar módulo inspect para validación de funciones asíncron
 import httpx  # Cargar cliente HTTP asíncrono optimizado para serverless #
 from fastapi import APIRouter, Request  # Cargar clases principales de FastAPI #
 from app.core.templates.telegram_templates import plantilla_comando_balance  # Cargar plantilla atómica de inicio #
-from modules.ai import analizar_intencion_mensaje  # Importar analizador NLP/Regex asíncrono #
+from modules.ai import analizar_intencion_mensaje, procesar_intencion_natural  # Importar analizador NLP/Regex asíncrono //
 from modules.intent_handler import ejecutar_intencion_nlp  # Importar enrutador de intenciones asíncrono #
 
 router = APIRouter()  # Instanciar enrutador de FastAPI sin prefijo (el prefijo se aplica en main.py) #
@@ -76,8 +76,16 @@ async def atender_telegram_webhook(request: Request):  # Controlador asíncrono 
             print(f"🔍 [VERCEL PROCESSING] Chat ID: {chat_id} - Texto: '{mensaje_texto}'", flush=True)  # Log de procesamiento #
 
             # Ejecución segura con wrapper universal (evita TypeError: object dict can't be used in 'await') #
-            intent_data = await resolver_llamada_segura(analizar_intencion_mensaje, mensaje_texto)  # Analizar intención de forma segura //
-            respuesta = await resolver_llamada_segura(ejecutar_intencion_nlp, intent_data)  # Ejecutar intención de forma segura //
+            # Usar el router NLP completo (procesar_intencion_natural) que consulta Firebase directamente
+            # y reemplaza el antiguo pipeline de 2 pasos que devolvía datos mockeados
+            respuesta = await resolver_llamada_segura(
+                procesar_intencion_natural, mensaje_texto, "default"
+            )
+
+            # Si el router determinístico no reconoció la intención, caer en IA general
+            if not respuesta or not str(respuesta).strip():
+                intent_data = await resolver_llamada_segura(analizar_intencion_mensaje, mensaje_texto)
+                respuesta = await resolver_llamada_segura(ejecutar_intencion_nlp, intent_data)
 
             # Garantizar que la respuesta sea siempre una cadena de texto //
             if isinstance(respuesta, dict):  # Si la respuesta devuelta es un diccionario #

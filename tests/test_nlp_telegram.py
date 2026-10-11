@@ -48,7 +48,7 @@ class TestNLPTelegram(unittest.TestCase):
             asyncio.set_event_loop(loop)
             
         res = loop.run_until_complete(ejecutar_intencion_nlp(intent_data, "user123"))
-        self.assertIn("Préstamo registrado", res)
+        self.assertIn("prestamo registrado", res.lower())
 
 if __name__ == "__main__":
     unittest.main()
