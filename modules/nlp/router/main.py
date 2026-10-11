@@ -205,12 +205,14 @@ def procesar_intencion_natural(prompt_usuario: str, usuario_id: str, es_audio: b
         return handle_tareas_pendientes(texto_lc, usuario_id, es_audio)
 
     # 4) BALANCE / FINANZAS
+    # Incluir "q" (abreviatura de "qué") y "mi" ( posesivo) en las palabras clave interrogativas
+    # para que frases como "q cuenta tengo" y "mi balance" sean detectadas por el router determinista
     if any(
         k in texto_lc
         for k in ["balance", "finanzas", "ingresos", "gastos", "dinero", "plata", "fondos", "capital"]
     ) and any(
         k in texto_lc
-        for k in ["cual", "cuál", "cuanto", "cuánto", "ver", "mostrar", "consultar", "tengo", "disponible"]
+        for k in ["cual", "cuál", "cuanto", "cuánto", "q", "ver", "mostrar", "consultar", "tengo", "disponible", "mi"]
     ):
         return handle_balance_finanzas(texto_lc, usuario_id, es_audio)
 
