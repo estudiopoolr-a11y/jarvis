@@ -93,8 +93,8 @@ def handle_cuentas_kebo(texto_lc: str, usuario_id: str, es_audio: bool = False) 
 
     try:
         if any(k in texto_lc for k in ["cuenta", "cuentas"]):
-            # Listar cuentas: "mis cuentas", "lista mis cuentas", "ver cuentas"
-            if any(k in texto_lc for k in ["mis", "lista", "mostrar", "ver", "cuales", "cuáles"]):
+            # Listar cuentas: "mis cuentas", "lista mis cuentas", "ver cuentas", "q cuentas tengo", "cuantas cuentas tengo"
+            if any(k in texto_lc for k in ["mis", "lista", "mostrar", "ver", "cuales", "cuáles", "q cuentas", "qué cuentas", "cuantas cuentas", "cuántas cuentas", "que cuentas", "qué cuentas tengo", "que cuentas tengo"]):
                 cuentas = listar_cuentas(usuario_id)
                 if not cuentas:
                     return "💳 No tienes cuentas registradas. Di: 'crea cuenta [nombre]' para agregar una."

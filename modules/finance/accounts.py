@@ -22,7 +22,10 @@ def listar_cuentas(usuario_id="default"):
     if not db:
         return []
     try:
-        docs = db.collection("accounts").stream()
+        _, user_ref = _get_user_ref(usuario_id)
+        if not user_ref:
+            return []
+        docs = user_ref.collection("accounts").stream()
         cuentas = []
         for d in docs:
             data = d.to_dict()
@@ -70,7 +73,8 @@ def crear_cuenta(usuario_id, nombre, tipo="cash", balance=0, icono="💵", color
     if not db:
         return None
     try:
-        doc_ref = db.collection("accounts").document()
+        _, user_ref = _get_user_ref(usuario_id)
+        doc_ref = user_ref.collection("accounts").document()
         doc_ref.set({
             "nombre": nombre,
             "type": tipo,                          # Campo Kebo: 'type' en inglés
@@ -93,7 +97,8 @@ def actualizar_balance_cuenta(usuario_id, cuenta_id, delta):
     if not db:
         return
     try:
-        db.collection("accounts").document(cuenta_id).update({
+        _, user_ref = _get_user_ref(usuario_id)
+        user_ref.collection("accounts").document(cuenta_id).update({
             "balance": firestore.Increment(delta)
         })
     except Exception as e:
@@ -105,7 +110,8 @@ def renombrar_cuenta(usuario_id, cuenta_id_o_nombre, nuevo_nombre):
     if not db:
         return False, "No se pudo obtener la referencia de la base de datos."
     try:
-        accounts_ref = db.collection("accounts")
+        _, user_ref = _get_user_ref(usuario_id)
+        accounts_ref = user_ref.collection("accounts")
         # Primero intentamos buscar por ID directo
         doc_ref = accounts_ref.document(cuenta_id_o_nombre)
         doc = doc_ref.get()
@@ -149,11 +155,12 @@ def actualizar_cuenta(usuario_id, cuenta_id, data):
             "saldo": "balance"
         }
         update_payload = {mapeo[k]: v for k, v in data.items() if k in mapeo}
-        
+
         if not update_payload:
             return False
 
-        db.collection("accounts").document(cuenta_id).update(update_payload)
+        _, user_ref = _get_user_ref(usuario_id)
+        user_ref.collection("accounts").document(cuenta_id).update(update_payload)
         return True
     except Exception as e:
         print(f"Error actualizando cuenta: {e}")
