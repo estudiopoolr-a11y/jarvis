@@ -19,6 +19,7 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Vercel.md|Vercel]] - Infraestructura para serverless deployment.
 - [[Jarvis/telegram_bot_webhook.md|Telegram Bot Webhook]] - Integración serverless con Telegram vía Vercel (con arquitectura Atomic Design).
 - [[Jarvis/parser_nlp_telegram_intentions.md|Parser NLP Telegram]] - Clasificación de intenciones en lenguaje natural para Telegram.
+- [[Jarvis/suite_pruebas_nlp_y_firebase.md|Suite de Pruebas NLP y Firebase]] - Nueva batería de pruebas automatizadas para validar análisis NLP dinámico con Gemini y consultas en tiempo real hacia Firebase.
 - [[Jarvis/monitoreo_uptimerobot.md|Monitoreo UptimeRobot]] - Monitoreo de salud de la API y prevención de Cold Starts.
 - [[Jarvis/vercel_routing_fix.md|Fix de Routing Vercel]] - Corrección de enrutamiento serverless para resolver HTTP 404.
 - [[Jarvis/configuracion_paso_a_paso_telegram_vercel.md|Guía de Configuración Telegram Webhook en Vercel]] - Procedimiento paso a paso para activar y verificar el webhook de Telegram en Vercel.
