@@ -30,6 +30,12 @@ class TestNLPTelegram(unittest.TestCase):
         resultado = analizar_intencion_mensaje(texto)
         self.assertEqual(resultado["intent"], "CONVERSACION_GENERAL")
 
+    def test_analizar_consulta_cuentas(self):
+        texto = "q cuentas tengo"
+        resultado = analizar_intencion_mensaje(texto)
+        self.assertEqual(resultado["intent"], "CONSULTAR_BALANCE")
+        self.assertEqual(resultado["filtro"], "general")
+
     @patch('modules.intent_handler.registrar_prestamo')
     def test_ejecutar_prestamo(self, mock_reg):
         mock_reg.return_value = "loan_123"

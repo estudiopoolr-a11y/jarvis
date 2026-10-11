@@ -115,9 +115,17 @@ IMPORTANTE:
             # Validar estructura mínima
             if "intent" not in result:
                 return {"intent": "CONVERSACION_GENERAL"}
-            
-            # Establecer valores por defecto para campos comunes según la intención
+
+            # Si Gemini responde de forma demasiado genérica para consultas financieras,
+            # priorizar el parser por regex ya que es más estable en mensajes tipo
+            # "q cuentas tengo" / "cuantas cuentas tengo" / "balance".
             intent = result.get("intent")
+            if intent == "CONVERSACION_GENERAL":
+                fallback = _fallback_regex_parsing(texto)
+                if fallback.get("intent") != "CONVERSACION_GENERAL":
+                    return fallback
+
+            # Establecer valores por defecto para campos comunes según la intención
             if intent == "REGISTRAR_PRESTAMO":
                 result.setdefault("tipo", "prestado")
                 result.setdefault("persona", "desconocido")
@@ -234,7 +242,16 @@ def _fallback_regex_parsing(texto: str) -> dict:
     
     # Patrones para CONSULTAR_BALANCE
     consulta_patterns = [
-        (r'(?:balance|saldo)(?:\s+general)?', 
+        (r'(?:qu[eé]|q)\s*(?:cuantas?|cuántas?)\s+cuentas?\s+tengo',
+         lambda m, t: {"intent": "CONSULTAR_BALANCE", "filtro": "general"},
+         re.IGNORECASE),
+        (r'(?:cuantas?|cuántas?)\s+cuentas?\s+tengo',
+         lambda m, t: {"intent": "CONSULTAR_BALANCE", "filtro": "general"},
+         re.IGNORECASE),
+        (r'(?:qu[eé]|q)\s*(?:cuentas?|cuenta)\s+tengo',
+         lambda m, t: {"intent": "CONSULTAR_BALANCE", "filtro": "general"},
+         re.IGNORECASE),
+        (r'(?:balance|saldo)(?:\s+general)?(?:\s+de\s+(?:mis\s+)?cuentas?)?',
          lambda m, t: {"intent": "CONSULTAR_BALANCE", "filtro": "general"},
          re.IGNORECASE),
         (r'(?:gastos?|gaste[ds]?)\s+(?:este\s+)?mes', 
