@@ -168,7 +168,7 @@ def detectar_e_interactuar_finanzas(texto_usuario: str) -> str | None:
     consulta financiera; retorna None si no aplica (dejar que el LLM la
     responda).
     """
-    texto_lower = texto_usuario.lower()
+    texto_lower = _normalizar_texto(texto_usuario)
 
     # Verificar si es una consulta de categorías
     if _es_consulta_categorias(texto_usuario):
@@ -198,26 +198,41 @@ def detectar_e_interactuar_finanzas(texto_usuario: str) -> str | None:
         ingresos = resumen.get("total_ingresos", 0)
         porcentaje = resumen.get("porcentaje_uso", 0)
         libre = resumen.get("total_libre", 0)
+        datos_cat = resumen.get("datos_por_categoria", [])
 
-        # Si no hay presupuestos definidos, dar info básica
-        if total_limite == 0:
-            return (
-                f"📊 **Resumen Financiero ({mes_nombre})**\n"
-                f"🟢 Ingresos: ${ingresos:,.0f} COP\n"
-                f"📉 Gastos: ${gastos:,.0f} COP\n"
-                f"💰 Balance neto: ${ingresos - gastos:,.0f} COP\n"
-                f"ℹ️ No hay presupuestos configurados para este mes."
-            )
+        # Construir desglose detallado por categoría
+        lineas_cat = []
+        for item in sorted(datos_cat, key=lambda x: -x.get("gastado", 0)):
+            cat = item.get("categoria", "General")
+            gastado = item.get("gastado", 0)
+            limite = item.get("limite", 0)
+            excedido = item.get("excedido", False)
+            linea = f"{cat}: ${gastado:,.0f} COP"
+            if limite > 0:
+                linea += f" / ${limite:,.0f} COP"
+                if excedido:
+                    linea += " ⚠️"
+            lineas_cat.append(linea)
 
-        # Formato con uso de presupuesto
-        return (
-            f"📊 **Datos Financieros ({mes_nombre})**\n"
-            f"🟢 Ingresos: ${ingresos:,.0f} COP\n"
-            f"📉 Gastos: ${gastos:,.0f} COP\n"
-            f"🎯 Uso del presupuesto: {porcentaje:.1f}% "
-            f"(${gastos:,.0f} / ${total_limite:,.0f} COP)\n"
-            f"✅ Disponible: ${libre:,.0f} COP"
-        )
+        categorias_texto = "\n".join(f"  {linea}" for linea in lineas_cat)
+
+        respuesta = f"📊 **Desglose Financiero ({mes_nombre})**\n\n"
+        respuesta += f"💵 **Ingresos:** ${ingresos:,.0f} COP\n"
+        respuesta += f"📉 **Gastos Totales:** ${gastos:,.0f} COP\n"
+
+        if total_limite > 0:
+            respuesta += f"🎯 **Presupuesto:** ${total_limite:,.0f} COP\n"
+            respuesta += f"✅ **Disponible:** ${libre:,.0f} COP ({porcentaje:.1f}% usado)\n"
+
+        respuesta += "\n**Gastos por Categoría:**\n"
+        respuesta += categorias_texto if categorias_texto else "  (Sin transacciones este mes)"
+
+        if gastos == 0 and total_limite > 0:
+            respuesta += "\n\n⚠️ *Este mes aún no tiene transacciones registradas, pero sí tiene presupuesto asignado.*"
+        elif gastos == 0 and total_limite == 0:
+            respuesta += "\n\nℹ️ *No hay datos para este mes.*"
+
+        return respuesta
 
     except Exception as e:
         logger.error("Error en interceptor financiero: %s", e)
