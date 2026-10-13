@@ -13,6 +13,7 @@ from modules.ai import (  # Importar analizadores NLP y la respuesta conversacio
 from modules.nvidia.think import pensar_respuesta_nvidia  # Importar motor NVIDIA como fallback //
 from modules.intent_handler import ejecutar_intencion_nlp  # Importar enrutador de intenciones asíncrono #
 from modules.finance.interceptor import detectar_e_interactuar_finanzas  # Interceptar consultas financieras para evitar alucinaciones LLM //
+from modules.tasks.firebase_manager import agregar_tarea, listar_tareas_pendientes  # Importar gestor de tareas en Firestore //
 
 router = APIRouter()  # Instanciar enrutador de FastAPI sin prefijo (el prefijo se aplica en main.py) #
 logger = logging.getLogger("jarvis.telegram")  # Crear logger exclusivo para Telegram #
@@ -67,6 +68,65 @@ async def despachar_respuesta_telegram(chat_id: int, texto: str) -> bool:  # Fun
             return False  # Retornar Falso en caso de fallo total #
 
 
+def detectar_e_interactuar_tareas(texto_usuario: str, usuario_id: str) -> str:  # Interceptor de consultas de tareas en Firestore //
+    """Intercepta intenciones de tareas ANTES de cualquier LLM para evitar alucinaciones."""
+    texto_lower = texto_usuario.lower()  # Normalizar texto a minúsculas para coincidencia robusta //
+
+    try:  # Bloque de ejecución segura para operaciones de base de datos //
+        # Patrón 1: Listar tareas pendientes //
+        if any(frase in texto_lower for frase in ["qué tareas tengo", "tareas pendientes", "tareas para hoy", "mis tareas", "tengo tareas"]):
+            tareas = listar_tareas_pendientes(str(usuario_id))  # Consultar tareas pendientes en Firestore //
+            if not tareas:  # Validar si la lista está vacía //
+                return "🎉 ¡Excelente trabajo! No tienes tareas pendientes registradas en Firebase."  # Mensaje de celebración //
+            respuesta = "📋 **Tus Tareas Pendientes (Firebase):**\n"  # Encabezado visual //
+            for i, t in enumerate(tareas, 1):  # Numerar cada tarea de la lista //
+                titulo = t.get("titulo", "Sin título")  # Extraer título con fallback //
+                respuesta += f"{i}. {titulo}\n"  # Añadir tarea numerada //
+            return respuesta  # Retornar lista formateada //
+
+        # Patrón 2: Crear nueva tarea //
+        if any(frase in texto_lower for frase in ["anotar tarea", "nueva tarea", "agregar tarea", "crear tarea", "añadir tarea", "quiero una tarea"]):
+            # Extraer contenido después del comando //
+            comando_patrones = ["anotar tarea", "nueva tarea", "agregar tarea", "crear tarea", "añadir tarea", "quiero una tarea"]
+            titulo_tarea = texto_usuario.strip()
+            for cmd in comando_patrones:  # Buscar y extraer el contenido después del comando //
+                if cmd in titulo_tarea:  # Si el comando está presente //
+                    titulo_tarea = titulo_tarea.replace(cmd, "", 1).strip()  # Eliminar el comando del texto //
+                    break  # Salir tras encontrar el primer comando //
+            if not titulo_tarea:  # Validar si el título está vacío //
+                return "⚠️ Por favor especifica el contenido de la tarea que deseas registrar. Ejemplo: 'anotar tarea comprar leche'"  # Advertencia de validación //
+            agregar_tarea(str(usuario_id), titulo_tarea)  # Guardar la tarea en Firestore //
+            return f"✅ Tarea registrada exitosamente en Firebase: *{titulo_tarea}*"  # Confirmación de éxito //
+
+        # Patrón 3: Completar tarea //
+        if any(frase in texto_lower for frase in ["completar tarea", "tarea completada", "listo la tarea", "ya hice la tarea", "terminé la tarea"]):
+            return "ℹ️ Para completar una tarea, dime el número o nombre exacto. Ejemplo: 'completar tarea 1' o 'completar tarea comprar leche'"  # Instrucción //
+
+        # Patrón 4: Listar todas las tareas (incluidas completadas) //
+        if any(frase in texto_lower for frase in ["todas mis tareas", "historial de tareas", "ver todas las tareas"]):
+            from modules.tasks.firebase_manager import listar_todas_tareas  # Importar función para listar todas //
+            todas = listar_todas_tareas(str(usuario_id))  # Consultar todas las tareas en Firestore //
+            if not todas:  # Validar si la lista está vacía //
+                return "📭 No tienes tareas registradas en Firebase."  # Mensaje si no hay tareas //
+            respuesta = "📋 **Todas tus Tareas (Firebase):**\n"  # Encabezado visual //
+            for i, t in enumerate(todas, 1):  # Numerar cada tarea //
+                estado = "✅" if t.get("completada") else "⏳"  # Emoji según estado //
+                respuesta += f"{i}. {estado} {t.get('titulo', 'Sin título')}\n"  # Añadir tarea con emoji //
+            return respuesta  # Retornar lista formateada //
+
+        # Patrón 5: Eliminar tarea //
+        if any(frase in texto_lower for frase in ["eliminar tarea", "borrar tarea", "quitar tarea"]):
+            return "ℹ️ Para eliminar una tarea, dime el número exacto. Ejemplo: 'eliminar tarea 1'"  # Instrucción //
+
+        # No es una consulta de tareas — permitir que siga al router NLP //
+        return ""  # Retornar cadena vacía para no interceptar //
+    except Exception as e:  # Capturar errores de ejecución en la base de datos //
+        print(f"[tasks] Error en interceptor de tareas: {e}", flush=True)  # Log del error //
+        return f"⚠️ Ocurrió un error procesando tus tareas en Firebase: {str(e)}"  # Mensaje de error controlado //
+
+
+
+
 @router.post("/webhook")  # Declarar el endpoint POST del webhook #
 async def atender_telegram_webhook(request: Request):  # Controlador asíncrono del webhook #
     chat_id = None  # Inicializar ID de chat para captura defensiva #
@@ -88,6 +148,14 @@ async def atender_telegram_webhook(request: Request):  # Controlador asíncrono 
             if respuesta_financiera:
                 print(f"🛡️ [INTERCEPTOR] Consulta financiera detectada, usando datos reales de Firestore", flush=True)
                 await despachar_respuesta_telegram(chat_id, respuesta_financiera)
+                return {"status": "ok"}
+
+            # PASO 0.5: Interceptar consultas de tareas ANTES de cualquier LLM //
+            # Las tareas no deben pasar por Gemini/NVIDIA para evitar alucinaciones de IDs o estados //
+            respuesta_tareas = detectar_e_interactuar_tareas(mensaje_texto, str(chat_id))
+            if respuesta_tareas:
+                print(f"📋 [INTERCEPTOR] Consulta de tareas detectada, usando Firestore directo", flush=True)
+                await despachar_respuesta_telegram(chat_id, respuesta_tareas)
                 return {"status": "ok"}
 
             # Ejecución segura con wrapper universal (evita TypeError: object dict can't be used in 'await') #
