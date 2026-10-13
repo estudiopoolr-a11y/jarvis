@@ -104,15 +104,17 @@ async def atender_telegram_webhook(request: Request):  # Controlador asíncrono 
                     intent_data = await resolver_llamada_segura(
                         analizar_intencion_mensaje, mensaje_texto
                     )
-                    respuesta = await resolver_llamada_segura(
-                        ejecutar_intencion_nlp, intent_data
-                    )
-                elif intencion == "GESTIONAR_TAREAS":
-                    respuesta = (
-                        "No pude identificar una acción de tareas compatible. "
-                        "Reformula la solicitud con más detalles."
-                    )
-                else:
+                    intencion_detallada = intent_data.get("intent")
+                    if intencion_detallada in {
+                        "REGISTRAR_PRESTAMO",
+                        "REGISTRAR_GASTO",
+                        "ACTUALIZAR_CUENTA_KEBO",
+                    }:
+                        respuesta = await resolver_llamada_segura(
+                            ejecutar_intencion_nlp, intent_data
+                        )
+
+                if not respuesta or not str(respuesta).strip():
                     respuesta = await resolver_llamada_segura(
                         pensar_respuesta, mensaje_texto
                     )

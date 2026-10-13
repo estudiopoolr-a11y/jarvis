@@ -65,5 +65,5 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/arquitectura_paridad_python_y_vercel.md|Arquitectura Paridad Python y Vercel]] - Auditoría de paridad Python 3.12, PYTHONUNBUFFERED y script audit_environment_parity.py.
 - [[Jarvis/consolidacion_vercel_serverless.md|Consolidación Vercel Serverless]] - Reforzamiento de FastAPI, configuración Zero-Config y análisis de intenciones con Gemini.
 - [[Jarvis/integracion_analizador_consciente.md|Integración del Analizador Consciente]] - Enrutamiento de fallback Gemini del webhook Telegram en Vercel.
-- [[Jarvis/integracion_analizador_consciente.md|Integración del Analizador Consciente]] - Enrutamiento de fallback Gemini del webhook Telegram en Vercel.
+- [[Jarvis/correccion_logica_respuestas_telegram.md|Corrección de respuestas de Telegram]] - Derivación de consultas no resueltas al generador conversacional de Gemini.
 - [[Jarvis/purga_hermes_agent_y_persistencia.md|Purga del agente legado y persistencia]] - Retirada del runtime legado y uso de Firebase/Firestore en Vercel.

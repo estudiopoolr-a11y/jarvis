@@ -31,10 +31,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 
 El webhook prioriza el router determinístico y, cuando este no reconoce el
 mensaje, usa `analizar_solicitud_consciente` en `modules/ai.py` para clasificar
-la intención con Gemini. Las consultas financieras continúan por el parser
-detallado existente; las consultas generales reciben una respuesta generativa.
-Las solicitudes de tareas no reconocidas se indican explícitamente y no se
-presentan como ejecutadas.
+la intención con Gemini. Ejecuta una acción financiera solo si el parser
+detallado devuelve una intención admitida; las consultas generales, las tareas
+no reconocidas y las clasificaciones financieras no concluyentes pasan al
+generador conversacional `pensar_respuesta`. El bot no convierte esas consultas
+en mensajes estáticos de inicialización.
 
 ## Despliegue
 
