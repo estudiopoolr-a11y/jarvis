@@ -1,8 +1,13 @@
 """Backward-compatible, lazy public surface for NLP and Gemini."""
 from __future__ import annotations
+import asyncio
 from importlib import import_module
 import json
+import logging
 import re
+from typing import Any
+
+logger = logging.getLogger("jarvis.ai")
 
 _EXPORTS = {
     "MODEL_NAME": "modules.gemini.client", "SYSTEM_INSTRUCTION": "modules.gemini.client",
@@ -21,7 +26,10 @@ for _name in (
 ):
     _EXPORTS[_name] = "modules.nlp.parsers"
 
-__all__ = list(_EXPORTS) + ["analizar_intencion_mensaje"]
+__all__ = list(_EXPORTS) + [
+    "analizar_intencion_mensaje",
+    "analizar_solicitud_consciente",
+]
 
 
 def __getattr__(name: str):
@@ -291,3 +299,76 @@ def _parse_monto(monto_str: str) -> float:
             return float(monto_str)
         except ValueError:
             return 0.0
+
+
+async def analizar_solicitud_consciente(
+    texto: str, historial: list[str] | None = None
+) -> dict[str, Any]:
+    """Clasifica una solicitud con Gemini sin ejecutar operaciones."""
+    consulta = texto.strip()
+    if not consulta:
+        return {"intencion": "DESCONOCIDO", "parametros": {}}
+
+    from google.genai import types
+    from modules.gemini.client import (
+        MODEL_NAME,
+        _gemini_call_with_fallback,
+        genai,
+    )
+
+    if genai is None:
+        raise RuntimeError("El SDK de Google GenAI no está disponible.")
+
+    prompt_sistema = (
+        "Eres el clasificador de solicitudes de JARVIS. Clasifica la consulta "
+        "en exactamente una intención: CONSULTAR_FINANZAS, GESTIONAR_TAREAS o "
+        "CONSULTA_GENERAL. No inventes datos ni ejecutes acciones. Extrae de "
+        "forma concisa los parámetros explícitos y pertinentes, como mes, "
+        "categoría y query. Devuelve únicamente un objeto JSON con esta forma: "
+        '{"intencion":"CONSULTAR_FINANZAS|GESTIONAR_TAREAS|CONSULTA_GENERAL",'
+        '"parametros":{}}.'
+    )
+    contenido_usuario = json.dumps(
+        {"consulta": consulta, "historial": historial or []},
+        ensure_ascii=False,
+    )
+
+    def generar_respuesta(cliente: Any) -> str:
+        respuesta = cliente.models.generate_content(
+            model=MODEL_NAME,
+            contents=[prompt_sistema, contenido_usuario],
+            config=types.GenerateContentConfig(
+                max_output_tokens=500,
+                response_mime_type="application/json",
+                temperature=0.1,
+            ),
+        )
+        if not respuesta.text:
+            raise ValueError("Gemini devolvió una respuesta vacía.")
+        return respuesta.text
+
+    texto_respuesta = await asyncio.to_thread(
+        _gemini_call_with_fallback, generar_respuesta
+    )
+    texto_json = texto_respuesta.strip()
+    if texto_json.startswith("```"):
+        texto_json = re.sub(r"^```(?:json)?\s*|\s*```$", "", texto_json).strip()
+
+    try:
+        resultado = json.loads(texto_json)
+    except json.JSONDecodeError as error:
+        logger.error("Gemini devolvió JSON inválido al analizar una solicitud.")
+        raise ValueError("Gemini devolvió JSON inválido.") from error
+
+    intencion = resultado.get("intencion") if isinstance(resultado, dict) else None
+    parametros = resultado.get("parametros") if isinstance(resultado, dict) else None
+    intenciones_validas = {
+        "CONSULTAR_FINANZAS",
+        "GESTIONAR_TAREAS",
+        "CONSULTA_GENERAL",
+    }
+    if intencion not in intenciones_validas or not isinstance(parametros, dict):
+        logger.error("Gemini devolvió una estructura de intención no válida.")
+        raise ValueError("Gemini devolvió una estructura de intención no válida.")
+
+    return {"intencion": intencion, "parametros": parametros}

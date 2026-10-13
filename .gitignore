@@ -1,12 +1,19 @@
 # Entornos virtuales
+venv/
 .venv/
+
+# Python cache files
 __pycache__/
+*.py[cod]
 
 # Variables de entorno y credenciales
 .env
+.env.*
+!.env.example
 serviceAccountKey.json
 serviceAccountKey.json.json
 google_credentials.json
+*.json_credentials.json
 
 # Sesiones
 whatsapp_session/
@@ -16,9 +23,12 @@ audio_cache/
 temp_audios/
 PyWhatKit_DB.txt
 *.png
+*.log
 
 # Bases de datos locales (si la carpeta 'database' tiene archivos .sqlite o similares)
 database/*.sqlite3
 .aider*
+
+# Configuración local de VS Code y Vercel
+.vscode/
 .vercel
-.env*

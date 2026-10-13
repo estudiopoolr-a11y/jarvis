@@ -64,4 +64,4 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/resolucion_logging_unbuffered_y_despacho_telegram.md|Resolución Logging Forzado y Despacho Telegram 2026-10-09]] - flush=True y guarda contra texto vacío.
 - [[Jarvis/resolucion_duplicidad_webhook_y_vercel_config.md|Resolución de duplicidad en Webhook y limpieza de vercel.json]] - Eliminación de respuestas duplicadas y limpieza de configuración.
 - [[Jarvis/arquitectura_paridad_python_y_vercel.md|Arquitectura Paridad Python y Vercel]] - Auditoría de paridad Python 3.12, PYTHONUNBUFFERED y script audit_environment_parity.py.
-- [[Jarvis/despliegue_koyeb_openclaw_engine.md|Despliegue de OpenClaw en Koyeb]] - Gateway con Dockerfile, Gemini, Telegram y configuración de despliegue continuo.
+- [[Jarvis/consolidacion_vercel_serverless.md|Consolidación Vercel Serverless]] - Reforzamiento de FastAPI, configuración Zero-Config y análisis de intenciones con Gemini.
