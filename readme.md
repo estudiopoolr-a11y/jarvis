@@ -1,81 +1,60 @@
 # JARVIS
 
-JARVIS está migrando su motor conversacional persistente al Gateway de
-OpenClaw en una VPS Ubuntu de Oracle Cloud Always Free. La API financiera
-FastAPI y el despliegue actual en Vercel continúan disponibles; este Compose
-no migra automáticamente esas rutas ni conecta Firebase o Notion.
+JARVIS is preparing to run the official OpenClaw Gateway on Koyeb, with
+Telegram as its chat channel and Google Gemini as its model provider. The
+existing FastAPI finance API and Vercel deployment remain separate; deploying
+OpenClaw does not migrate those routes or automatically connect its tools to
+Firebase or Notion.
 
-## OpenClaw en Oracle Cloud
+## Deploy OpenClaw on Koyeb
 
-Instala Docker Engine y el plugin Compose v2 en la VPS:
+1. Push this repository to GitHub and create a Koyeb service from the
+   `main` branch. Select the Dockerfile builder and configure an HTTP service
+   on container port `8080`.
+2. Add these environment variables in the Koyeb service settings:
+   - `OPENCLAW_GATEWAY_TOKEN`: a long, unique random secret.
+   - `TELEGRAM_BOT_TOKEN`: the token from BotFather.
+   - `GEMINI_API_KEY`: a Google AI Studio API key.
+   - `KOYEB_PUBLIC_URL`: the exact HTTPS URL assigned to the Koyeb service,
+     with no trailing slash.
+3. Deploy. When GitHub auto-deploy is enabled for the service, pushes to the
+   selected branch trigger new deployments.
+4. Open the service URL and complete Telegram pairing. The Gateway UI uses
+   token authentication.
 
-```bash
-git clone https://github.com/estudiopoolr-a11y/jarvis.git
-cd jarvis
-sudo bash scripts/setup_oracle_vps.sh
-```
+If a custom tool/plugin is later configured for Firebase or Notion, add its
+credentials separately in Koyeb: `FIREBASE_DATABASE_URL`,
+`FIREBASE_CREDENTIALS`, `NOTION_API_KEY`, and `NOTION_FINANZAS_DB_ID`.
 
-Crea el archivo local de entorno:
+The Dockerfile uses the published OpenClaw image rather than installing this
+repository as an npm package. `openclaw_config/config.json` contains the
+Gateway's real configuration. Firebase and Notion credentials can be added as
+Koyeb environment variables for future custom tools, but environment variables
+alone do not implement or enable those integrations.
 
-```bash
-cp .env.example .env
-openssl rand -hex 32
-```
+I cannot guarantee that a Koyeb deployment is currently free, needs no card,
+or runs continuously: availability, sleep behavior, storage persistence,
+resource limits, and payment-method requirements depend on the current plan
+and account eligibility. Confirm these in the Koyeb dashboard before relying
+on an always-on bot or storing durable Gateway state there. Koyeb may redeploy
+the container without preserving its writable filesystem; a restart can
+therefore require Telegram pairing again.
 
-Guarda el valor generado en `.env` como `OPENCLAW_GATEWAY_TOKEN` y completa
-las credenciales de Telegram y Gemini. Firebase y Notion se pasan al
-contenedor para integraciones personalizadas, pero no activan esas
-integraciones por sí solos. No subas `.env` a Git.
+See [the Koyeb deployment note](Jarvis/despliegue_koyeb_openclaw_engine.md)
+for the full setup and operational boundaries.
 
-El script agrega el usuario al grupo `docker`; cierra la sesión SSH y vuelve
-a conectarte para aplicar el cambio. Luego prepara los directorios
-persistentes, valida Compose e inicia el Gateway:
+## Existing JARVIS API
 
-```bash
-mkdir -p openclaw_config data
-sudo chown -R 1000:1000 openclaw_config data
-docker compose config
-docker compose up -d
-docker compose ps
-```
-
-El Gateway escucha en el puerto interno `18789` y solo se publica en la
-interfaz loopback de la VPS. Para abrir su UI de control desde una estación de
-trabajo, crea un túnel SSH:
-
-```bash
-ssh -L 18789:127.0.0.1:18789 ubuntu@IP_DE_LA_VPS
-```
-
-Abre `http://127.0.0.1:18789/` y autentícate con `OPENCLAW_GATEWAY_TOKEN`.
-No expongas directamente el puerto `18789` a Internet. Para un endpoint HTTPS
-público, configura por separado un proxy inverso y TLS, y permite HTTPS tanto
-en el firewall del host como en las reglas de red de Oracle Cloud.
-
-OpenClaw usa long polling de Telegram por defecto. Una vez configurado
-`TELEGRAM_BOT_TOKEN`, envía un mensaje al bot y aprueba la solicitud de pairing:
-
-```bash
-docker compose exec openclaw-gateway node dist/index.js pairing list telegram
-docker compose exec openclaw-gateway node dist/index.js pairing approve telegram CODIGO
-```
-
-El estado persistente y los datos del workspace se guardan en
-`openclaw_config/` y `data/`. Consulta la
-[nota de arquitectura de Oracle Cloud](Jarvis/arquitectura_openclaw_oracle_cloud.md)
-para conocer los límites de despliegue y detalles operativos.
-
-## API JARVIS existente
-
-La aplicación FastAPI continúa en `app/main.py`. Mantiene las rutas de
-webhook Telegram, finanzas y widget desplegadas actualmente en Vercel. Ejecuta
-sus pruebas con Python 3.12:
+The FastAPI application remains rooted at `app/main.py`, with its existing
+Telegram webhook, finance routes, and widget API deployed separately through
+Vercel. Run its tests with Python 3.12:
 
 ```bash
 python -m unittest discover -v tests
 ```
 
-El contenedor OpenClaw es un despliegue independiente; trasladar el
-comportamiento FastAPI, las herramientas financieras, el acceso a Firebase o
-los webhooks de producción de Telegram requiere una integración y una
-migración explícitas.
+Moving existing FastAPI behavior, finance tools, Firebase access, or
+production Telegram webhooks into OpenClaw requires a separate integration
+and cutover.
+
+Tags: [[OpenClaw]] [[Koyeb]] [[Docker]] [[Gemini API]] [[Telegram]]
