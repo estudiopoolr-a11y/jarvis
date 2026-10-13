@@ -10,6 +10,7 @@ from modules.ai import (  # Importar analizadores NLP y la respuesta conversacio
     pensar_respuesta,
     procesar_intencion_natural,
 )
+from modules.nvidia.think import pensar_respuesta_nvidia  # Importar motor NVIDIA como fallback //
 from modules.intent_handler import ejecutar_intencion_nlp  # Importar enrutador de intenciones asíncrono #
 
 router = APIRouter()  # Instanciar enrutador de FastAPI sin prefijo (el prefijo se aplica en main.py) #
@@ -118,6 +119,16 @@ async def atender_telegram_webhook(request: Request):  # Controlador asíncrono 
                     respuesta = await resolver_llamada_segura(
                         pensar_respuesta, mensaje_texto
                     )
+
+                # Si Gemini está saturado, usar NVIDIA NIM como respaldo
+                if respuesta and "saturados" in str(respuesta).lower() or "alta demanda" in str(respuesta).lower():
+                    logger.info("Gemini saturado, intentando fallback a NVIDIA NIM...")
+                    respuesta_nvidia = await resolver_llamada_segura(
+                        pensar_respuesta_nvidia, mensaje_texto
+                    )
+                    if respuesta_nvidia and "saturados" not in respuesta_nvidia.lower() and "no está configurado" not in respuesta_nvidia.lower():
+                        logger.info("Fallback NVIDIA NIM exitoso.")
+                        respuesta = respuesta_nvidia
 
             # Garantizar que la respuesta sea siempre una cadena de texto //
             if isinstance(respuesta, dict):  # Si la respuesta devuelta es un diccionario #

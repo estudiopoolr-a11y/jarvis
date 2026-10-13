@@ -14,6 +14,7 @@ requiere bloques manuales `builds` o `functions`.
 - Dependencias de `requirements.txt`.
 - Variables de entorno `TELEGRAM_BOT_TOKEN`, `GEMINI_API_KEY` (o
   `GEMINI_API_KEYS`) y `FIREBASE_CREDENTIALS`.
+- Opcional: `NVIDIA_API_KEYS` (múltiples claves separadas por comas) para rotación automática y fallback cuando Gemini está saturado.
 - Para desarrollo local, copia `.env.example` a `.env` y completa valores
   propios. Nunca publiques credenciales.
 

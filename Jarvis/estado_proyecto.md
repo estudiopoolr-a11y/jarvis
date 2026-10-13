@@ -197,3 +197,5 @@
 
 ---
 - **2026-10-13**: Implementado seed de presupuestos mensuales (udgets/{YYYY-MM}/items) para habilitar c醠culo de porcentajes de uso. Normalizado coincidencia de categor韆s con _normalizar_categoria() (min鷖culas, sin acentos). Configurado mes din醡ico por defecto en dashboard que resuelve el 鷏timo mes con transacciones. Todos los meses mayo-agosto 2026 ahora muestran presupuestos asignados y porcentajes de uso correctos. 30 tests pasan. [[Firebase]] [[Python]] [[Dashboard]] [[Finanzas]]
+
+- **2026-10-13 12:54 (UTC-05:00):** Implementado sistema de rotaci贸n de API Keys y motor de inferencia NVIDIA NIM como fallback para Gemini. Creado m贸dulo modules/nvidia/ con cliente HTTP as铆ncrono, rotaci贸n aleatoria de keys y manejo de errores 429/503. Integrado fallback en pp/routes/telegram.py: cuando Gemini responde "alta demanda" o "saturados", se intenta NVIDIA NIM autom谩ticamente. Actualizada documentaci贸n en Jarvis/rotacion_api_nvidia_nim.md y variables de entorno en .env.example. El bot ahora tiene redundancia de proveedores IA para evitar bloqueos por rate limiting. Tecnolog铆as: [[NVIDIA]], [[Python]], [[IA]], [[FastAPI]], [[Telegram]], [[Gemini API]].
