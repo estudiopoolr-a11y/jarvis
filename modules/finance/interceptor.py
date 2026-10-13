@@ -3,12 +3,22 @@ y las resuelve directamente con Firestore antes de que el LLM las alucine.
 """
 import re
 import logging
+import unicodedata
 from datetime import datetime
 
 from modules.finance.dashboard import obtener_resumen_dashboard
 from modules.finance.categories import listar_categorias
 
 logger = logging.getLogger("jarvis.finance.interceptor")
+
+
+def _normalizar_texto(texto: str) -> str:
+    """Normalizar texto: eliminar acentos y convertir a minúsculas para coincidencia robusta."""
+    # Normalizar Unicode para separar caracteres acentuados (é -> e + ́)
+    nfkd = unicodedata.normalize('NFKD', texto)
+    # Eliminar diacríticos (acenta)
+    sin_acentos = ''.join([c for c in nfkd if not unicodedata.combining(c)])
+    return sin_acentos.lower()
 
 # Meses en español mapeados a su número y código YYYY-MM
 _MES_ES_POR_NUM = {
@@ -37,7 +47,7 @@ _KEYWORDS = [
 
 def _detectar_mes_en_texto(texto: str) -> str | None:
     """Extraer un mes YYYY-MM del texto del usuario, o None si no se menciona."""
-    texto_lower = texto.lower()
+    texto_lower = _normalizar_texto(texto)
 
     for nombre_mes, num_mes in _MES_ES_POR_NUM.items():
         if nombre_mes in texto_lower:
@@ -59,7 +69,7 @@ def detectar_e_interactuar_finanzas(texto_usuario: str) -> str | None:
     consulta financiera; retorna None si no aplica (dejar que el LLM la
     responda).
     """
-    texto_lower = texto_usuario.lower()
+    texto_lower = _normalizar_texto(texto_usuario)
 
     # Verificar si alguna palabra clave financiera está presente
     tiene_intencion = any(kw in texto_lower for kw in _KEYWORDS)
@@ -113,7 +123,7 @@ def detectar_e_interactuar_finanzas(texto_usuario: str) -> str | None:
 
 def _es_consulta_categorias(texto: str) -> bool:
     """Verificar si el texto es una consulta sobre categorías."""
-    texto_lower = texto.lower()
+    texto_lower = _normalizar_texto(texto)
     return any(kw in texto_lower for kw in ["categoria", "categorias", "category", "categories"])
 
 
