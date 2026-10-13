@@ -19,13 +19,16 @@ _MES_ES_POR_NUM = {
 # Palabras clave que indican intención financiera obligatoria
 _KEYWORDS = [
     "presupuesto", "presupuestos",
-    "gasto", "gastos",
+    "gasto", "gastos", "gasté", "gaste", "gastado", "gastar",
     "balance", "saldo",
-    "ingreso", "ingresos",
+    "ingreso", "ingresos", "ingrese", "ingresar",
     "cuánto tengo", "cuanto tengo",
     "debo", "deuda", "deudas",
     "prestamo", "prestamos",  # también "préstamo" con acento
     "dinero", "plata",
+    "cuánto cuesta", "cuanto cuesta", "precio", "costo",
+    "cobrar", "cobro", "cobré", "cobre",
+    "pagar", "pago", "pagué", "pague",
 ]
 
 
