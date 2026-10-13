@@ -30,21 +30,13 @@ def inicializar_firebase():
                    (firebase_json_str.startswith('"') and firebase_json_str.endswith('"')):
                     firebase_json_str = firebase_json_str[1:-1].strip()
 
-                with open(cred_path, "w", encoding="utf-8") as f:
-                    f.write(firebase_json_str)
-
-                cred = credentials.Certificate(cred_path)
+                # Vercel serverless tiene filesystem de solo lectura, usar diccionario directo
+                cred_dict = json.loads(firebase_json_str)
+                cred = credentials.Certificate(cred_dict)
                 initialize_app(cred)
-                print("Firebase inicializado con éxito creando archivo de credenciales desde la variable de entorno de Vercel.")
+                print("Firebase inicializado con éxito desde variable de entorno de Vercel.")
             except Exception as e:
                 print(f"Error crítico procesando credenciales desde la variable de entorno: {e}")
-                try:
-                    cred_dict = json.loads(firebase_json_str)
-                    cred = credentials.Certificate(cred_dict)
-                    initialize_app(cred)
-                    print("Firebase inicializado con éxito desde diccionario JSON directo.")
-                except Exception as e2:
-                    print(f"Error secundario al inicializar con diccionario: {e2}")
 
         if not firebase_admin._apps:
             if os.path.exists(cred_path):
