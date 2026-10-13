@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 
 from modules.finance.dashboard import obtener_resumen_dashboard
+from modules.finance.categories import listar_categorias
 
 logger = logging.getLogger("jarvis.finance.interceptor")
 
@@ -29,6 +30,8 @@ _KEYWORDS = [
     "cuánto cuesta", "cuanto cuesta", "precio", "costo",
     "cobrar", "cobro", "cobré", "cobre",
     "pagar", "pago", "pagué", "pague",
+    # Categorias
+    "categoria", "categorias", "category", "categories",
 ]
 
 
@@ -57,6 +60,109 @@ def detectar_e_interactuar_finanzas(texto_usuario: str) -> str | None:
     responda).
     """
     texto_lower = texto_usuario.lower()
+
+    # Verificar si alguna palabra clave financiera está presente
+    tiene_intencion = any(kw in texto_lower for kw in _KEYWORDS)
+
+    if not tiene_intencion:
+        return None
+
+    # Determinar el mes: explícito del usuario o el mes activo por defecto
+    mes = _detectar_mes_en_texto(texto_usuario)
+    if mes is None:
+        # El dashboard usa automáticamente el último mes con datos
+        mes = "2026-08"  # fallback conocido; el dashboard lo sobrescribe si hay datos más recientes
+
+    try:
+        resumen = obtener_resumen_dashboard(mes=mes)
+
+        if resumen.get("status") != "ok":
+            return "⚠️ No hay datos financieros disponibles para el periodo consultado."
+
+        mes_nombre = resumen.get("mes", mes)
+        total_limite = resumen.get("total_limite", 0)
+        gastos = resumen.get("total_gastos", 0)
+        ingresos = resumen.get("total_ingresos", 0)
+        porcentaje = resumen.get("porcentaje_uso", 0)
+        libre = resumen.get("total_libre", 0)
+
+        # Si no hay presupuestos definidos, dar info básica
+        if total_limite == 0:
+            return (
+                f"📊 **Resumen Financiero ({mes_nombre})**\n"
+                f"🟢 Ingresos: ${ingresos:,.0f} COP\n"
+                f"📉 Gastos: ${gastos:,.0f} COP\n"
+                f"💰 Balance neto: ${ingresos - gastos:,.0f} COP\n"
+                f"ℹ️ No hay presupuestos configurados para este mes."
+            )
+
+        # Formato con uso de presupuesto
+        return (
+            f"📊 **Datos Financieros ({mes_nombre})**\n"
+            f"🟢 Ingresos: ${ingresos:,.0f} COP\n"
+            f"📉 Gastos: ${gastos:,.0f} COP\n"
+            f"🎯 Uso del presupuesto: {porcentaje:.1f}% "
+            f"(${gastos:,.0f} / ${total_limite:,.0f} COP)\n"
+            f"✅ Disponible: ${libre:,.0f} COP"
+        )
+
+    except Exception as e:
+        logger.error("Error en interceptor financiero: %s", e)
+        return f"⚠️ No se pudo consultar la base de datos: {str(e)[:80]}"
+
+
+def _es_consulta_categorias(texto: str) -> bool:
+    """Verificar si el texto es una consulta sobre categorías."""
+    texto_lower = texto.lower()
+    return any(kw in texto_lower for kw in ["categoria", "categorias", "category", "categories"])
+
+
+def _obtener_respuesta_categorias() -> str:
+    """Obtener lista de categorías reales desde Firestore."""
+    try:
+        categorias = listar_categorias("default")
+        if not categorias:
+            return "⚠️ No hay categorías configuradas en la base de datos."
+
+        # Agrupar por tipo
+        tipos = {}
+        for cat in categorias:
+            tipo = cat.get("tipo", "variable")
+            if tipo not in tipos:
+                tipos[tipo] = []
+            tipos[tipo].append(cat)
+
+        respuesta = "📊 **Categorías Financieras Reales:**\n\n"
+
+        for tipo, cats in tipos.items():
+            tipo_label = "Fijos" if tipo == "fijo" else "Variables"
+            respuesta += f"**{tipo_label}:**\n"
+            for cat in cats:
+                nombre = cat.get("nombre", "Sin nombre")
+                icono = cat.get("icono", "")
+                respuesta += f"  {icono} {nombre}\n"
+            respuesta += "\n"
+
+        respuesta += f"Total: {len(categorias)} categorías"
+        return respuesta
+
+    except Exception as e:
+        logger.error("Error obteniendo categorías: %s", e)
+        return f"⚠️ No se pudieron cargar las categorías: {str(e)[:80]}"
+
+
+def detectar_e_interactuar_finanzas(texto_usuario: str) -> str | None:
+    """Detectar si el mensaje tiene intención financiera y consultar Firestore.
+
+    Retorna la respuesta formateada con datos reales si se detecta una
+    consulta financiera; retorna None si no aplica (dejar que el LLM la
+    responda).
+    """
+    texto_lower = texto_usuario.lower()
+
+    # Verificar si es una consulta de categorías
+    if _es_consulta_categorias(texto_usuario):
+        return _obtener_respuesta_categorias()
 
     # Verificar si alguna palabra clave financiera está presente
     tiene_intencion = any(kw in texto_lower for kw in _KEYWORDS)
