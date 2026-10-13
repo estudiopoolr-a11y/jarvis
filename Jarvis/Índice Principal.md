@@ -65,3 +65,4 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/resolucion_duplicidad_webhook_y_vercel_config.md|Resolución de duplicidad en Webhook y limpieza de vercel.json]] - Eliminación de respuestas duplicadas y limpieza de configuración.
 - [[Jarvis/arquitectura_paridad_python_y_vercel.md|Arquitectura Paridad Python y Vercel]] - Auditoría de paridad Python 3.12, PYTHONUNBUFFERED y script audit_environment_parity.py.
 - [[Jarvis/consolidacion_vercel_serverless.md|Consolidación Vercel Serverless]] - Reforzamiento de FastAPI, configuración Zero-Config y análisis de intenciones con Gemini.
+- [[Jarvis/integracion_analizador_consciente.md|Integración del Analizador Consciente]] - Enrutamiento de fallback Gemini del webhook Telegram en Vercel.

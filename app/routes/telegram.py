@@ -4,7 +4,12 @@ import inspect  # Cargar módulo inspect para validación de funciones asíncron
 import httpx  # Cargar cliente HTTP asíncrono optimizado para serverless #
 from fastapi import APIRouter, Request  # Cargar clases principales de FastAPI #
 from app.core.templates.telegram_templates import plantilla_comando_balance  # Cargar plantilla atómica de inicio #
-from modules.ai import analizar_intencion_mensaje, procesar_intencion_natural  # Importar analizador NLP/Regex asíncrono //
+from modules.ai import (  # Importar analizadores NLP y la respuesta conversacional //
+    analizar_intencion_mensaje,
+    analizar_solicitud_consciente,
+    pensar_respuesta,
+    procesar_intencion_natural,
+)
 from modules.intent_handler import ejecutar_intencion_nlp  # Importar enrutador de intenciones asíncrono #
 
 router = APIRouter()  # Instanciar enrutador de FastAPI sin prefijo (el prefijo se aplica en main.py) #
@@ -82,10 +87,35 @@ async def atender_telegram_webhook(request: Request):  # Controlador asíncrono 
                 procesar_intencion_natural, mensaje_texto, "default"
             )
 
-            # Si el router determinístico no reconoció la intención, caer en IA general
+            # El analizador consciente solo interviene cuando el router no reconoce el mensaje.
             if not respuesta or not str(respuesta).strip():
-                intent_data = await resolver_llamada_segura(analizar_intencion_mensaje, mensaje_texto)
-                respuesta = await resolver_llamada_segura(ejecutar_intencion_nlp, intent_data)
+                analisis = await resolver_llamada_segura(
+                    analizar_solicitud_consciente, mensaje_texto
+                )
+                intencion = analisis.get("intencion", "CONSULTA_GENERAL")
+                parametros = analisis.get("parametros", {})
+                logger.info(
+                    "[Webhook] Intención: %s | Parámetros detectados: %s",
+                    intencion,
+                    list(parametros),
+                )
+
+                if intencion == "CONSULTAR_FINANZAS":
+                    intent_data = await resolver_llamada_segura(
+                        analizar_intencion_mensaje, mensaje_texto
+                    )
+                    respuesta = await resolver_llamada_segura(
+                        ejecutar_intencion_nlp, intent_data
+                    )
+                elif intencion == "GESTIONAR_TAREAS":
+                    respuesta = (
+                        "No pude identificar una acción de tareas compatible. "
+                        "Reformula la solicitud con más detalles."
+                    )
+                else:
+                    respuesta = await resolver_llamada_segura(
+                        pensar_respuesta, mensaje_texto
+                    )
 
             # Garantizar que la respuesta sea siempre una cadena de texto //
             if isinstance(respuesta, dict):  # Si la respuesta devuelta es un diccionario #
