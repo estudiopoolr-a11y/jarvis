@@ -71,4 +71,5 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/purga_hermes_agent_y_persistencia.md|Purga del agente legado y persistencia]] - Retirada del runtime legado y uso de Firebase/Firestore en Vercel.
 - [[Jarvis/rotacion_api_nvidia_nim.md|Rotación API Keys NVIDIA]] - Sistema de fallback con rotación automática de claves NVIDIA NIM para evitar bloqueos por rate limiting en Gemini.
 - [[Jarvis/prevencion_alucinaciones_financieras.md|Prevención de Alucinaciones Financieras]] - Interceptor heurístico que fuerza lectura directa de Firestore antes de cualquier LLM cuando se detectan palabras clave financieras.
+- [[Jarvis/diagnostico_sistema_jarvis.md|Diagnóstico del Sistema JARVIS]] - Estado actual del sistema, verificaciones de interceptores, datos reales de Firestore y health checks.
 - [[Jarvis/automatizacion_tareas_firebase.md|Automatización de Tareas en Firebase]] - Subsistema de gestión de tareas con estructura tasks/{user_id}/items en Firestore, interceptor directo en Telegram y funciones CRUD completas.
