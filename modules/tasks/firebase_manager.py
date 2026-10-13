@@ -2,14 +2,13 @@
 # Gestor CRUD de tareas en Firebase Firestore.
 # Colección: tasks/{user_id}/items/{task_id}
 
-import firebase_admin  # Importar SDK Firebase Admin para acceso a servicios //
-from firebase_admin import firestore  # Importar cliente de base de datos NoSQL //
+from modules.firestore.client import get_db  # Usar cliente compartido que inicializa Firebase automáticamente //
 from datetime import datetime  # Importar módulo datetime para marcas temporales //
 
 
 def obtener_cliente_firestore():  # Inicializar y retornar cliente Firestore //
     """Retorna la instancia singleton de Firestore del proyecto."""
-    db = firestore.client()  # Instanciar el cliente oficial de Firestore //
+    db = get_db()  # Usar el cliente compartido que maneja la inicialización de Firebase //
     return db  # Retornar instancia lista para consultas //
 
 
