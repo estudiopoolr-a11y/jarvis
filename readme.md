@@ -33,19 +33,20 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 El webhook prioriza el router determinístico y, cuando este no reconoce el
 mensaje, usa `analizar_solicitud_consciente` en `modules/ai.py` para clasificar
 la intención con Gemini. Ejecuta una acción financiera solo si el parser
-detallado devuelve una intención admitida; las consultas generales, las tareas
-no reconocidas y las clasificaciones financieras no concluyentes pasan al
+detallado devuelve una intención admitida; las consultas generales pasan al
 generador conversacional `pensar_respuesta`. El bot no convierte esas consultas
 en mensajes estáticos de inicialización.
 
-El dashboard web (`/api/finanzas/resumen`) y el widget iOS
-(`/api/widget/resumen`, `/api/widget/dashboard`) comparten los agregados
-mensuales de Firestore en `modules/finance/dashboard.py`: transacciones,
-presupuestos y cuentas. Los importes usan los campos Kebo y sus alias legacy.
-Si Firebase no está disponible o falla una lectura, las APIs responden con
-error HTTP en vez de presentar cifras cero como datos exitosos.
+## Interceptores de Seguridad (Anti-Alucinaciones)
 
-## Estructura de Datos Financieros en Firebase
+Dos interceptores se ejecutan ANTES de cualquier LLM (Gemini/NVIDIA):
+
+1. **Financiero** (`modules/finance/interceptor.py`): Detecta palabras clave como presupuesto, gasto, balance, ingreso, deuda. Resuelve directamente desde Firestore sin pasar por IA.
+2. **Tareas** (`app/routes/telegram.py`, función `detectar_e_interactuar_tareas`): Intercepta consultas de tareas ("qué tareas tengo", "anotar tarea", etc.) y las gestiona directamente con Firestore, evitando que los LLM inventen IDs o estados.
+
+## Estructura de Datos en Firebase
+
+### Colecciones Financieras
 
 Los datos del dashboard y los widgets se leen directamente de **Firestore** (proyecto `jarvis-be47a`) desde
 `modules/finance/dashboard.py`. El script `scripts/seed_finanzas_2026.py` ingesta el año 2026 en estas colecciones raíz:
@@ -54,9 +55,22 @@ Los datos del dashboard y los widgets se leen directamente de **Firestore** (pro
 - `categories` — catálogo con `nombre`, `budget`, `tipo`, `icono`, `color`.
 - `loans` — documentos con `persona`, `monto`, `monto_original`, `monto_pagado`, `monto_pendiente`, `fecha`, `status`, `pagos`.
 - `finanzas/2026` — nodo resumen con `ingresos`, `gastos_por categoría` y `prestamos_detalle`.
+- `budgets/{YYYY-MM}/items` — límites presupuestales por categoría para cada mes.
 
-El script es idempotente: salta meses que ya tienen transacciones, no duplica categorías y omite loans que
-coincidan en `(persona, fecha, monto)`. Para re-ejecutarlo, borra los nodos manualmente o modifica los datos fuente.
+### Colección de Tareas
+
+El subsistema de tareas usa la estructura jerárquica `tasks/{user_id}/items/{task_id}` gestionada por
+`modules/tasks/firebase_manager.py`. Cada documento contiene:
+
+- `id` — ID único generado por Firestore.
+- `titulo` — descripción de la tarea.
+- `descripcion` — detalles adicionales (opcional).
+- `completada` — booleano (`false` = pendiente, `true` = completada).
+- `fecha_creacion` — marca temporal ISO 8601.
+- `usuario_id` — referencia al propietario.
+
+El interceptor de tareas en el webhook de Telegram responde a comandos como "qué tareas tengo",
+"anotar tarea X", "todas mis tareas" consultando directamente Firestore sin pasar por ningún LLM.
 
 **Limitaciones:** no se definieron límites de presupuesto, así que `porcentaje_uso` es `0.0` hasta que se
 creen documentos en `budgets/{YYYY-MM}/items`. El dashboard muestra el mes actual por defecto; los meses

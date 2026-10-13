@@ -10,7 +10,7 @@ logger = logging.getLogger("jarvis.nvidia")  # Logger exclusivo para el subsiste
 # URL oficial del endpoint compatible OpenAI de NVIDIA NIM
 _NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 # Modelo por defecto (Llama 3.1 70B Instruct)
-_NIM_MODEL = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct")
+_NIM_MODEL = os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
 
 # Pool de claves — se carga perezosamente para evitar inicialización prematura
 _API_KEYS: list[str] = []
