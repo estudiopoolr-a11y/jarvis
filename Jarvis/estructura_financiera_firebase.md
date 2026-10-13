@@ -46,10 +46,28 @@ Nodo resumen con el esquema de la directiva: `ingresos` (por mes + `total_ingres
 - [`modules/finance/dashboard.py`](../modules/finance/dashboard.py) → `obtener_resumen_dashboard(mes=)` lee `categories`, `transactions/{mes}/items`, `budgets/{mes}/items`, `accounts`.
 - [`modules/finance/loans.py`](../modules/finance/loans.py) → colección `loans`.
 - Endpoints: `/api/finanzas/resumen`, `/api/widget/resumen`, `/api/widget/dashboard`.
+- Parámetro `?mes=YYYY-MM` disponible en todos los endpoints para consultar cualquier mes histórico.
+
+## Presupuestos mensuales (seeded 2026-10-13)
+El script [`scripts/seed_budgets_2026.py`](../scripts/seed_budgets_2026.py) escribe en `budgets/{YYYY-MM}/items` los límites por categoría. Los IDs de documento usan el nombre legible (ej. `Moto`, `Madre`) para facilitar la edición manual desde Firebase console.
+
+| Mes   | Categorías (límite) | Total presupuesto (COP) | Gastos reales | % Uso |
+|-------|---------------------|-------------------------|---------------|-------|
+| 2026-05 | Moto 250k, Madre 200k, Deudas 150k, Alimentación 100k, Fútbol 60k, Gym 40k, Use personal 50k, Gastos tontos 10k | 860.000 | 713.000 | 82,91% |
+| 2026-06 | Madre 150k, Gastos tontos 150k, Deudas 130k, Padre 120k, Use personal 60k, Moto 60k | 670.000 | 616.500 | 92,01% |
+| 2026-07 | Women 300k, Moto 250k, Préstamos 200k, Use personal 150k, Gastos tontos 150k, Alimentación 150k, Fútbol 60k | 1.260.000 | 1.094.776 | 86,89% |
+| 2026-08 | Deudas 250k, Alimentación 180k, Use personal 120k, Madre 60k, Moto 50k, Otros 350k | 1.010.000 | 876.440 | 86,78% |
+
+**Nota:** Existen documentos residuos con IDs alfanuméricos largos que no tienen campo `limite`; el dashboard los ignora al filtrar por `valor > 0`.
+
+## Mes dinámico por defecto
+`obtener_mes_activo_por_defecto(db)` escanea `transactions/{YYYY-MM}/items` buscando el mes más reciente con datos. Fallback: mes del sistema o `"2026-08"` si falla la consulta. Esto permite que el dashboard muestre datos reales sin depender del calendario actual.
+
+## Normalización de categorías
+La función `_normalizar_categoria()` normaliza los nombres a minúsculas y sin acentos, permitiendo que los datos escritos por el NLP coincidan con los nombres del seed. Ejemplo: "Alimentación" → "alimentacion".
 
 ## Limitaciones conocidas
-- **Presupuestos:** no se recibieron límites, así que `porcentaje_uso` / `porcentaje` son `0.0` hasta que se creen docs en `budgets/{YYYY-MM}/items`.
-- **Mes por defecto:** el dashboard muestra el mes actual (2026-10). Los datos de mayo–agosto son visibles pasando `?mes=2026-07` o `mes="2026-07"` en la llamada.
+- **Categorías sin presupuesto:** si una categoría tiene gasto pero no existe documento en `budgets/{mes}/items`, el `porcentaje_uso` no se calcula para esa categoría (aparece con `limite: 0`).
 - **Agosto 2026:** el desglose literal suma 527.540,00 COP; el resto (348.900,00) se registró como categoría `Otros` para cumplir el total de 876.440,00 COP declarado.
 
 Tags: [[Firebase]] [[Python]] [[Dashboard]] [[Finanzas]]
