@@ -343,22 +343,33 @@
             return '$' + Number(num || 0).toLocaleString('es-CO');
         }
 
+        async function fetchJSON(url) {
+            const response = await fetch(url);
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || `HTTP ${response.status}`);
+            }
+            return data;
+        }
+
         // Cargar todos los datos
         async function loadData() {
-            const promises = [
-                fetch(`${BASE_URL}/api/finanzas/resumen?usuario_id=${usuario}`).then(r => r.json()),
-                fetch(`${BASE_URL}/api/kebo/cuentas?usuario_id=${usuario}`).then(r => r.json()),
-                fetch(`${BASE_URL}/api/kebo/alertas?usuario_id=${usuario}`).then(r => r.json()),
-                fetch(`${BASE_URL}/api/kebo/metas?usuario_id=${usuario}`).then(r => r.json()),
-                fetch(`${BASE_URL}/api/kebo/recurrentes?usuario_id=${usuario}`).then(r => r.json()),
-                fetch(`${BASE_URL}/api/kebo/transacciones?usuario_id=${usuario}&limite=15`).then(r => r.json()),
-                fetch(`${BASE_URL}/api/kebo/estadisticas?usuario_id=${usuario}&meses=6`).then(r => r.json()),
-                fetch(`${BASE_URL}/api/kebo/pronostico?usuario_id=${usuario}`).then(r => r.json())
-            ];
-
             try {
-                const [resumen, cuentas, alertas, metas, recurrentes, transacciones, stats, pronostico] = await Promise.all(promises);
+                const resumen = await fetchJSON(`${BASE_URL}/api/finanzas/resumen?usuario_id=${usuario}`);
                 updateResumen(resumen);
+                updateCharts(resumen, { tendencia: [] });
+
+                const promises = [
+                    fetchJSON(`${BASE_URL}/api/kebo/cuentas?usuario_id=${usuario}`),
+                    fetchJSON(`${BASE_URL}/api/kebo/alertas?usuario_id=${usuario}`),
+                    fetchJSON(`${BASE_URL}/api/kebo/metas?usuario_id=${usuario}`),
+                    fetchJSON(`${BASE_URL}/api/kebo/recurrentes?usuario_id=${usuario}`),
+                    fetchJSON(`${BASE_URL}/api/kebo/transacciones?usuario_id=${usuario}&limite=15`),
+                    fetchJSON(`${BASE_URL}/api/kebo/estadisticas?usuario_id=${usuario}&meses=6`),
+                    fetchJSON(`${BASE_URL}/api/kebo/pronostico?usuario_id=${usuario}`)
+                ];
+
+                const [cuentas, alertas, metas, recurrentes, transacciones, stats, pronostico] = await Promise.all(promises);
                 updateCuentas(cuentas);
                 updateAlertas(alertas);
                 updateMetas(metas);
@@ -373,7 +384,9 @@
         }
 
         function updateResumen(data) {
-            if (data.error) return;
+            if (data.error || data.status !== 'ok') {
+                throw new Error(data.message || 'El resumen financiero no está disponible');
+            }
             document.getElementById('balance').textContent = formatMoney(data.balance);
             document.getElementById('ingresos').textContent = formatMoney(data.ingresos);
             document.getElementById('gastos').textContent = formatMoney(data.gastos);

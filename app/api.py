@@ -66,6 +66,8 @@ api_router = APIRouter()  # Crear router central para consolidar todos los endpo
 # Importación diferida/lazy de los endpoints activos en la arquitectura simplificada #
 from app.routes.telegram import router as telegram_router  # Cargar router de Telegram #
 from app.routes.widgets import router as widgets_router  # Cargar router de Widgets iOS #
+from app.routes.dashboard_stats import router as dashboard_stats_router  # Cargar resumen compartido de finanzas #
+from app.routes.dashboard import router as dashboard_router  # Cargar vistas del dashboard web #
 from app.routes.prestamos import router as prestamos_router  # Cargar router de Préstamos #
 from app.routes.kebo.accounts import router as kebo_accounts_router  # Cargar router de Cuentas Kebo #
 from app.routes.kebo.budgets import router as kebo_budgets_router  # Cargar router de Presupuestos Kebo #
@@ -74,6 +76,8 @@ from app.routes.kebo.transactions import router as kebo_transactions_router  # C
 # Registro con prefijo y etiquetas de cada submodulo activo en el router principal #
 api_router.include_router(telegram_router)  # Registrar Webhook de Telegram #
 api_router.include_router(widgets_router)  # Registrar Endpoint de Widgets #
+api_router.include_router(dashboard_stats_router)  # Registrar estadísticas dinámicas del dashboard #
+api_router.include_router(dashboard_router)  # Registrar dashboard web #
 api_router.include_router(prestamos_router, prefix="/v1/prestamos", tags=["Préstamos"])  # Registrar Módulo de Préstamos #
 api_router.include_router(kebo_accounts_router, prefix="/kebo/accounts", tags=["Kebo Cuentas"])  # Registrar Cuentas #
 api_router.include_router(kebo_budgets_router, prefix="/kebo/presupuestos", tags=["Kebo Presupuestos"])  # Registrar Presupuestos #

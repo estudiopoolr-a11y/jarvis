@@ -37,6 +37,13 @@ no reconocidas y las clasificaciones financieras no concluyentes pasan al
 generador conversacional `pensar_respuesta`. El bot no convierte esas consultas
 en mensajes estáticos de inicialización.
 
+El dashboard web (`/api/finanzas/resumen`) y el widget iOS
+(`/api/widget/resumen`, `/api/widget/dashboard`) comparten los agregados
+mensuales de Firestore en `modules/finance/dashboard.py`: transacciones,
+presupuestos y cuentas. Los importes usan los campos Kebo y sus alias legacy.
+Si Firebase no está disponible o falla una lectura, las APIs responden con
+error HTTP en vez de presentar cifras cero como datos exitosos.
+
 ## Despliegue
 
 Conecta el repositorio de GitHub al proyecto Vercel y define las variables
@@ -50,4 +57,7 @@ describen en [[Jarvis/arquitectura_paridad_python_y_vercel.md]]. Consulta
 [[Jarvis/consolidacion_vercel_serverless.md]] para el flujo de análisis
 consciente.
 
-Tags: [[FastAPI]] [[Vercel]] [[Gemini API]] [[Firebase]] [[Python]] [[Telegram]]
+Consulta [[Jarvis/arquitectura_dashboard_y_widgets.md]] para el flujo de datos
+financieros del dashboard y los widgets.
+
+Tags: [[FastAPI]] [[Vercel]] [[Gemini API]] [[Firebase]] [[Python]] [[Telegram]] [[Dashboard]]

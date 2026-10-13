@@ -66,4 +66,5 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/consolidacion_vercel_serverless.md|Consolidación Vercel Serverless]] - Reforzamiento de FastAPI, configuración Zero-Config y análisis de intenciones con Gemini.
 - [[Jarvis/integracion_analizador_consciente.md|Integración del Analizador Consciente]] - Enrutamiento de fallback Gemini del webhook Telegram en Vercel.
 - [[Jarvis/correccion_logica_respuestas_telegram.md|Corrección de respuestas de Telegram]] - Derivación de consultas no resueltas al generador conversacional de Gemini.
+- [[Jarvis/arquitectura_dashboard_y_widgets.md|Arquitectura de datos del dashboard y widgets]] - Agregados mensuales compartidos desde Firestore y rutas del widget.
 - [[Jarvis/purga_hermes_agent_y_persistencia.md|Purga del agente legado y persistencia]] - Retirada del runtime legado y uso de Firebase/Firestore en Vercel.

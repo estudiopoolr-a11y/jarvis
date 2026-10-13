@@ -4,7 +4,7 @@
 // Endpoint actualizado para colecciones raíz de Firestore
 
 const BASE_URL = "https://jarvis-two-pi-13.vercel.app";
-const WIDGET_ENDPOINT = `${BASE_URL}/api/widgets/resumen`;
+const WIDGET_ENDPOINT = `${BASE_URL}/api/widget/resumen`;
 const USER_ID = "default_user";
 const CACHE_KEY = "jarvis_widget_data";
 
@@ -32,10 +32,11 @@ async function fetchJSON(url) {
             "Accept": "application/json"
         }
         const response = await req.loadJSON()
-        // Guardar en caché si la petición es exitosa
-        if (response && response.status === "ok") {
-            Cache.set(CACHE_KEY, JSON.stringify(response))
+        if (!response || response.status !== "ok") {
+            throw new Error(response && response.detail ? response.detail : "Respuesta de datos inválida")
         }
+        // Guardar en caché si la petición es exitosa
+        Cache.set(CACHE_KEY, JSON.stringify(response))
         return response
     } catch (e) {
         console.error("Error conectando a JARVIS: " + url + " -> " + e)
@@ -79,7 +80,14 @@ async function buildWidget() {
     const url = `${WIDGET_ENDPOINT}?usuario_id=${USER_ID}`;
     const data = await fetchJSON(url);
 
-    if (!data || data.error) {
+    if (data && data.offline) {
+        const offline = w.addText("⚠ Sin conexión · datos en caché")
+        offline.font = Font.systemFont(9)
+        offline.textColor = new Color(COLORS.warning)
+        w.addSpacer(3)
+    }
+
+    if (!data || data.error || data.status !== "ok") {
         const errStack = w.addStack()
         errStack.layoutVertically()
 

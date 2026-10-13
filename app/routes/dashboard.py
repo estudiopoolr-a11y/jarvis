@@ -1,18 +1,17 @@
-import os
-import sys
-from pathlib import Path
-
-from fastapi import File, Form, UploadFile
+from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
-from app.api import USUARIO_PRINCIPAL, ComandoPayload, app
-from modules.ai import pensar_respuesta, pensar_respuesta_imagen, procesar_intencion_natural
-from modules.db import obtener_balance_financiero, obtener_resumen_presupuestos, obtener_tareas_pendientes
+from modules.db import obtener_tareas_pendientes
+from modules.finance.dashboard import obtener_resumen_dashboard
 
-@app.get("/dashboard", response_class=HTMLResponse)
-@app.head("/dashboard", response_class=HTMLResponse)
+router = APIRouter()
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+@router.head("/dashboard", response_class=HTMLResponse)
 def render_dashboard(usuario_id: str = "default"):
     """Sirve el dashboard web estático con datos en tiempo real."""
+    del usuario_id
     import os
     template_path = os.path.join(os.path.dirname(__file__), "..", "templates", "dashboard.html")
     try:
@@ -23,14 +22,20 @@ def render_dashboard(usuario_id: str = "default"):
 
 
 # Mantener endpoint legacy (se conserva por compatibilidad)
-@app.get("/dashboard/v1", response_class=HTMLResponse)
+@router.get("/dashboard/v1", response_class=HTMLResponse)
 def render_dashboard_v1(usuario_id: str = "default"):
-    balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
+    resumen = obtener_resumen_dashboard(usuario_id)
+    balance = resumen["balance"]
+    ingresos = resumen["ingresos"]
+    gastos = resumen["gastos"]
+    movimientos = [
+        {"tipo": "gasto", "categoria": categoria, "monto": monto}
+        for categoria, monto in resumen["gastos_por_categoria"].items()
+    ]
     tareas = obtener_tareas_pendientes(usuario_id)
-    presupuestos = obtener_resumen_presupuestos(usuario_id)
-    balance, ingresos, gastos, movimientos = obtener_balance_financiero(usuario_id)
-    tareas = obtener_tareas_pendientes(usuario_id)
-    presupuestos = obtener_resumen_presupuestos(usuario_id)
+    presupuestos = {
+        item["categoria"]: item["limite"] for item in resumen["presupuestos"]
+    }
 
     # Calcular gastos reales por categoría
     gastos_por_categoria = {}
@@ -49,7 +54,6 @@ def render_dashboard_v1(usuario_id: str = "default"):
             gastado = gastos_por_categoria.get(categoria, 0)
             restante = limite - gastado
             excedido = restante < 0
-            porcentaje = min(int((abs(gastado) / limite) * 100) if limite > 0 else 0, 100)
             # Para la barra, mostrar porcentaje del límite usado (hasta 100%)
             porcentaje_barra = min(int((gastado / limite) * 100) if limite > 0 else 0, 100) if gastado >= 0 else 100
             color_barra = "#e74c3c" if excedido else ("#f39c12" if porcentaje_barra > 80 else "#2ecc71")
