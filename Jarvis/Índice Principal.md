@@ -67,4 +67,5 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/integracion_analizador_consciente.md|Integración del Analizador Consciente]] - Enrutamiento de fallback Gemini del webhook Telegram en Vercel.
 - [[Jarvis/correccion_logica_respuestas_telegram.md|Corrección de respuestas de Telegram]] - Derivación de consultas no resueltas al generador conversacional de Gemini.
 - [[Jarvis/arquitectura_dashboard_y_widgets.md|Arquitectura de datos del dashboard y widgets]] - Agregados mensuales compartidos desde Firestore y rutas del widget.
+- [[Jarvis/estructura_financiera_firebase.md|Estructura Financiera 2026 en Firebase]] - Ingesta de ingresos, gastos por categoría y loans 2026 mediante `scripts/seed_finanzas_2026.py`.
 - [[Jarvis/purga_hermes_agent_y_persistencia.md|Purga del agente legado y persistencia]] - Retirada del runtime legado y uso de Firebase/Firestore en Vercel.

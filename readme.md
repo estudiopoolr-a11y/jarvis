@@ -44,6 +44,23 @@ presupuestos y cuentas. Los importes usan los campos Kebo y sus alias legacy.
 Si Firebase no está disponible o falla una lectura, las APIs responden con
 error HTTP en vez de presentar cifras cero como datos exitosos.
 
+## Estructura de Datos Financieros en Firebase
+
+Los datos del dashboard y los widgets se leen directamente de **Firestore** (proyecto `jarvis-be47a`) desde
+`modules/finance/dashboard.py`. El script `scripts/seed_finanzas_2026.py` ingesta el año 2026 en estas colecciones raíz:
+
+- `transactions/{YYYY-MM}/items` — 1 ingreso (`type: "income"`) + N gastos (`type: "expense"`) por mes.
+- `categories` — catálogo con `nombre`, `budget`, `tipo`, `icono`, `color`.
+- `loans` — documentos con `persona`, `monto`, `monto_original`, `monto_pagado`, `monto_pendiente`, `fecha`, `status`, `pagos`.
+- `finanzas/2026` — nodo resumen con `ingresos`, `gastos_por categoría` y `prestamos_detalle`.
+
+El script es idempotente: salta meses que ya tienen transacciones, no duplica categorías y omite loans que
+coincidan en `(persona, fecha, monto)`. Para re-ejecutarlo, borra los nodos manualmente o modifica los datos fuente.
+
+**Limitaciones:** no se definieron límites de presupuesto, así que `porcentaje_uso` es `0.0` hasta que se
+creen documentos en `budgets/{YYYY-MM}/items`. El dashboard muestra el mes actual por defecto; los meses
+anteriores se consultan con `?mes=2026-07` en la API o `mes="2026-07"` en el código.
+
 ## Despliegue
 
 Conecta el repositorio de GitHub al proyecto Vercel y define las variables
