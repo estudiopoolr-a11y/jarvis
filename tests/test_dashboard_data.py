@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -6,7 +7,10 @@ from fastapi import HTTPException
 from app.main import app
 from app.routes.dashboard_stats import api_finanzas_resumen
 from app.routes.widgets import api_widget_dashboard, obtener_resumen_widget
-from modules.finance.dashboard import obtener_resumen_dashboard
+from modules.finance.dashboard import (
+    obtener_mes_activo_por_defecto,
+    obtener_resumen_dashboard,
+)
 
 
 class FakeDocument:
@@ -40,6 +44,21 @@ class FakeCollection:
             FakeDocument(document_id, data)
             for document_id, data in self.db.documents.get(self.path, [])
         ]
+
+    def limit(self, cantidad):
+        return FakeQuery(self, cantidad)
+
+
+class FakeQuery:
+    """Consulta limitada compatible con la detección del mes activo."""
+
+    def __init__(self, coleccion, cantidad):
+        self.coleccion = coleccion
+        self.cantidad = cantidad
+
+    def get(self):
+        documentos = self.coleccion.stream()
+        return documentos[: self.cantidad]
 
 
 class FakeFirestore:
@@ -98,8 +117,8 @@ class TestDashboardData(unittest.TestCase):
         self.assertEqual(result["porcentaje_usado"], 50)
         self.assertEqual(result["porcentaje"], 50)
         self.assertEqual(result["gastos_por_categoria"], {
-            "Comida": 1250,
-            "Transporte": 250,
+            "comida": 1250.0,
+            "transporte": 250.0,
         })
         self.assertEqual(len(result["cuentas"]), 2)
 
@@ -115,6 +134,36 @@ class TestDashboardData(unittest.TestCase):
         with patch("modules.finance.dashboard.get_db", return_value=None):
             with self.assertRaisesRegex(RuntimeError, "Firestore"):
                 obtener_resumen_dashboard("default", "2026-10")
+
+    def test_default_month_uses_latest_month_with_transactions(self):
+        """Sin `mes` se resuelve el último mes que tenga items reales."""
+        self.db.documents[("transactions",)] = [
+            ("2026-05", {}),
+            ("2026-08", {}),
+            ("2026-07", {}),
+            ("borrador", {}),
+        ]
+        # Limpiar octubre de setUp para evitar que sea detectado como activo. #
+        self.db.documents[("transactions", "2026-10", "items")] = []
+        self.db.documents[("transactions", "2026-08", "items")] = []
+        self.db.documents[("transactions", "2026-07", "items")] = [
+            ("g1", {"type": "expense", "amount": 100, "category_name": "Comida"}),
+        ]
+
+        with patch("modules.finance.dashboard.get_db", return_value=self.db):
+            result = obtener_resumen_dashboard("default")
+
+        self.assertEqual(result["mes"], "Julio 2026")
+        self.assertEqual(result["gastos_mes"], 100)
+
+    def test_default_month_falls_back_to_system_month_when_empty(self):
+        """Sin transacciones se conserva el mes actual del sistema."""
+        self.db.documents[("transactions",)] = []
+
+        with patch("modules.finance.dashboard.get_db", return_value=self.db):
+            resultado = obtener_mes_activo_por_defecto(self.db)
+
+        self.assertEqual(resultado, datetime.now().strftime("%Y-%m"))
 
     def test_dashboard_and_widget_endpoints_are_registered_and_share_the_data(self):
         routes = {route.path for route in app.routes}
@@ -139,9 +188,9 @@ class TestDashboardData(unittest.TestCase):
             self.assertEqual(api_widget_dashboard("user-1"), expected)
             self.assertEqual(obtener_resumen_widget(), expected)
 
-        obtener_api.assert_called_once_with("user-1")
-        obtener_widget.assert_any_call("user-1")
-        obtener_widget.assert_any_call("default")
+        obtener_api.assert_called_once_with("user-1", mes=None)
+        obtener_widget.assert_any_call("user-1", mes=None)
+        obtener_widget.assert_any_call("default", mes=None)
 
     def test_api_errors_are_not_converted_to_successful_zero_values(self):
         with patch(
