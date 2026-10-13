@@ -147,7 +147,7 @@ Telegram POST /api/telegram/webhook
 
 ## Integración con otros Módulos
 
-- [[Hermes Agent]] — El motor de inteligencia sigue operando en `modules/ai.py`; los organismos atómicos consumen sus resultados cuando se requiere procesamiento NLP avanzado.
+- [[Gemini API]] ? El webhook usa clasificaci?n NLP y respuestas generativas mediante el cliente compartido; los organismos consumen los resultados necesarios.
 - [[Módulo de Finanzas]] — Los organismos reemplazan gradualmente las llamadas directas a `modules/finance/` en el flujo de Telegram.
 - [[Base de Datos Firestore]] — Los organismos están preparados para inyectar conectores de BD (`db_connector`) para consultar datos reales en producción.
 

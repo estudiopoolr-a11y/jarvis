@@ -1,4 +1,4 @@
-# 🧠 Estado Actual del Proyecto - Hermes Agent / Firebase
+# 🧠 Estado Actual del Proyecto - FastAPI / Firebase
 
 > **Notas de Arquitectura:** 
 > - **Sin anidación de usuarios:** NO se usará la ruta `users/{user_id}/accounts/`. Se trabajará directamente con la colección raíz `accounts` (o `cuentas`) para simplificar lecturas y consultas.
@@ -16,17 +16,17 @@
   - [x] **Efectivo** (tipo: `cash`)
 - [x] Desactivar o eliminar `cuenta_principal` si existía.
 
-### PASO 2: Diagnóstico y Corrección de Skills en Hermes Agent
-- [x] Inspeccionar `_cargar_skills` en [[src/agent/hermes_engine.py]].
+### PASO 2: Diagnóstico y Corrección de Skills en agente anterior
+- [x] Inspeccionar `_cargar_skills` en el motor anterior.
 - [x] Inicializar la colección raíz `skills` en Firestore si no existe.
-- [x] Verificar que [[Hermes Agent]] pueda leer y persistir nuevas *skills*, según lo documentado en [[Hermes Agent]].
+- [x] Verificar que el agente anterior pueda leer y persistir nuevas *skills*, según lo documentado en [[agente anterior]].
 
 ### PASO 3: Integración de Modelos NVIDIA (NIM / API)
 - [x] Validar conector de API de NVIDIA (ej. [[meta/llama-3.1-70b-instruct]]) en la configuración LLM, documentado en [[Integración NVIDIA]].
 - [x] Crear y ejecutar `scripts/test_nvidia_api.py` para probar inferencias sin errores HTTP (404/410), según lo descrito en [[Integración NVIDIA]].
 
 ### PASO 4: Módulo de Metas e Inversión Inteligente
-- [x] Implementar en Hermes el cálculo de balance consolidado (Nu + Nequi + Efectivo) y proyección de deudas vs. ingresos, documentado en [[Estrategia de Inversión]].
+- [x] Implementar en agente anterior el cálculo de balance consolidado (Nu + Nequi + Efectivo) y proyección de deudas vs. ingresos, documentado en [[Estrategia de Inversión]].
 - [x] Crear función/herramienta para recomendaciones de pago de deudas, ahorro e inversión, basada en la lógica de [[Estrategia de Inversión]].
 
 ### PASO 5: Verificación Final y Despliegue
@@ -43,12 +43,12 @@
 - **2026-10-01:** Configuración inicial de la bitácora y definición de arquitectura en Firestore sin subcolección `users`.
 - **2026-10-02:** Ejecución del PASO 1. Se refactorizó [[modules/finance/accounts.py]] para operar sobre la colección raíz `accounts`. Se poblaron las cuentas Nu, Nequi y Efectivo mediante script y se verificó la ausencia de `cuenta_principal`.
 - **2026-10-02:** Creación de notas de documentación en Obsidian: [[Mapa del Sistema]] como nodo central y [[Base de Datos Firestore]] con explicación de colecciones raíz directas.
-- **2026-10-02:** Ampliación de la documentación en Obsidian con las notas [[Módulo de Finanzas]] (refactorización de cuentas y scripts de limpieza) y [[Hermes Agent]] (motor ReAct y sistema de skills).
+- **2026-10-02:** Ampliación de la documentación en Obsidian con las notas [[Módulo de Finanzas]] (refactorización de cuentas y scripts de limpieza) y el agente anterior (motor ReAct y sistema de skills).
 - **2026-10-02:** Finalización de la red de documentación con las notas [[Integración NVIDIA]] y [[Estrategia de Inversión]], y actualización de enlaces wiki en el Roadmap del proyecto.
 
 - **2026-10-10:** Corrección crítica del bot de Telegram + Firebase. Se descubrió que `listar_cuentas` consultaba la colección raíz sin escopo de usuario, causando que las respuestas fueran vacías o incorrectas. También los write functions (`crear_cuenta`, `actualizar_balance_cuenta`, `renombrar_cuenta`, `actualizar_cuenta`) escribían en el root en vez del folder del usuario. Se unificó todo al patrón `_get_user_ref(usuario_id)`. Además se agregaron patrones de consulta ("q cuentas", "cuántas cuentas") al router NLP para que "q cuentas tengo" ya no caiga en el handler legacy con valores mock. Todas las pruebas pasan (6/6).
-- **2026-10-02:** Ejecución del PASO 2: Diagnóstico y Corrección de Skills en Hermes Agent. Se inspeccionó la función _cargar_skills en [[src/agent/hermes_engine.py]], se verificó la colección raíz skills en Firestore (inicializando con una skill de ejemplo si estaba vacía), y se confirmó que Hermes Agent puede leer y persistir nuevas skills correctamente.
-- **2026-10-02:** Ejecución del PASO 3: Integración de Modelos NVIDIA (NIM / API). Se revisó la configuración de LLM en [[src/core/llm_provider.py]] confirmando soporte para NVIDIA NIM, se creó y ejecutó [[scripts/test_nvidia_api.py]] para validar la conectividad (en modo simulación debido a falta de API key), y se confirmó que el conector está listo para usar modelos como [[meta/llama-3.1-70b-instruct]].
+- **2026-10-02:** Ejecución del PASO 2: Diagnóstico y Corrección de Skills en agente anterior. Se inspeccionó la función _cargar_skills en el motor anterior, se verificó la colección raíz skills en Firestore (inicializando con una skill de ejemplo si estaba vacía), y se confirmó que agente anterior puede leer y persistir nuevas skills correctamente.
+- **2026-10-02:** Ejecución del PASO 3: Integración de Modelos NVIDIA (NIM / API). Se revisó la configuración de LLM en el proveedor anterior confirmando soporte para NVIDIA NIM, se creó y ejecutó [[scripts/test_nvidia_api.py]] para validar la conectividad (en modo simulación debido a falta de API key), y se confirmó que el conector está listo para usar modelos como [[meta/llama-3.1-70b-instruct]].
 - **2026-10-02:** Ejecución del PASO 5: Verificación Final y Despliegue. Se realizó la limpieza profunda de archivos obsoletos (eliminación de carpeta `bot/`, scripts de Discord y conectores antiguos). Se ejecutó la suite de pruebas y se consolidó el repositorio mediante Git, completando así el roadmap de JARVIS v1.0.
 - **2026-10-05:** Diagnóstico y corrección de enrutamiento 404 en Vercel. Se analizó la configuración de [[vercel.json]] y se modificó [[app/main.py]] para exportar el handler y agregar rutas de depuración (/debug y catch-all). Se creó nota de diagnóstico [[Jarvis/diagnostico_enrutamiento_vercel_404.md]] detallando los intentos de configuración. Se realizaron despliegues a Vercel mediante Git push y se esperó tiempo de compilación. Se verificó que los despliegues estaban fallando con error DEPLOYMENT_NOT_FOUND, indicando problemas con la creación de despliegues en Vercel más que con el enrutamiento en sí.
 - **2026-10-05 (continuación):** Verificación E2E y documentación de despliegue en Vercel:
@@ -57,8 +57,8 @@
   - Se actualizó [[Jarvis/Índice Principal.md]] con enlace a la nueva nota de despliegue E2E.
   - Se determinó que el próximo paso requiere deshabilitar la autenticación en el panel de Vercel para permitir acceso público a los endpoints.
 - **2026-10-02:** Mantenimiento de Base de Datos: Ejecución de `scripts/deduplicate_accounts.py`. Se detectaron y eliminaron 4 cuentas duplicadas en la colección raíz `accounts`, conservando únicamente los documentos canónicos para Nu, Nequi y Efectivo.
-- **2026-10-02:** Mejora de Inteligencia Conversacional: Agregada función de normalización de texto en `src/agent/tools.py` y actualizada lógica de búsqueda en `modules/finance/accounts.py` para hacer coincidencias insensibles a mayúsculas, minúsculas y tildes. Documentado en [[Módulo de Finanzas]].
-- **2026-10-02:** Implementación de normalización de texto para skills en Hermes Agent: Integrada la función `normalizar_texto` en `src/agent/hermes_engine.py` para hacer la búsqueda y carga de skills insensible a mayúsculas, minúsculas, tildes y espacios extra. Actualizada la herramienta `_guardar_skill` en `src/agent/tools.py` para evitar duplicados al guardar skills. Verificado con `scripts/test_skills_persistence.py`.
+- **2026-10-02:** Mejora de Inteligencia Conversacional: Agregada función de normalización de texto en las herramientas anteriores y actualizada lógica de búsqueda en `modules/finance/accounts.py` para hacer coincidencias insensibles a mayúsculas, minúsculas y tildes. Documentado en [[Módulo de Finanzas]].
+- **2026-10-02:** Implementación de normalización de texto para skills en agente anterior: Integrada la función `normalizar_texto` en el motor anterior para hacer la búsqueda y carga de skills insensible a mayúsculas, minúsculas, tildes y espacios extra. Actualizada la herramienta `_guardar_skill` en las herramientas anteriores para evitar duplicados al guardar skills. Verificado con `scripts/test_skills_persistence.py`.
 - **2026-10-02:** Corrección de múltiples bugs reportados:
   - Normalización estricta de categorías en presupuestos (evitando duplicados por mayúsculas/minúsculas).
   - Priorización de mes especificado en prompts de presupuestos sobre la fecha actual.
@@ -190,3 +190,4 @@
 
 - **2026-10-13 08:00 (UTC-05:00):** Retirados los artefactos de contenedores y las configuraciones de agentes externos. Reforzada la protecci?n de archivos locales en `.gitignore`, preservada la configuraci?n Zero-Config de [[Vercel]] y a?adido `analizar_solicitud_consciente` a [[modules/ai.py]] con an?lisis estructurado mediante [[Gemini API]]. Se document? la consolidaci?n Serverless en [[Jarvis/consolidacion_vercel_serverless.md]]. Tecnolog?as: [[FastAPI]], [[Vercel]], [[Gemini API]], [[Firebase]] y [[Python]].
 - **2026-10-13 08:13 (UTC-05:00):** Conectado `analizar_solicitud_consciente` al fallback del webhook de [[Telegram]] en [[app/routes/telegram.py]], preservando la prioridad del router determinístico. Las consultas financieras reutilizan el parser existente, las generales reciben respuesta de [[Gemini API]] y las tareas no reconocidas no se presentan como ejecutadas. Añadidas pruebas del enrutamiento y documentada la integración en [[Jarvis/integracion_analizador_consciente.md]]. Verificada la suite de pruebas del proyecto. Tecnologías: [[FastAPI]], [[Vercel]], [[Gemini API]] y [[Python]].
+- **2026-10-13 08:20 (UTC-05:00):** Eliminado el runtime de agente legado y trasladado su normalizador de texto a [[modules/nlp/text.py]] para conservar el matching de cuentas. Confirmado [[Firebase]]/Firestore como persistencia usada por el backend [[FastAPI]] en [[Vercel]]; no hay integracion activa con Notion. Retiradas las referencias de configuracion y documentacion activa, y documentado el cambio en [[Jarvis/purga_hermes_agent_y_persistencia.md]]. Pruebas: 20/20 aprobadas. Tecnologias: [[FastAPI]], [[Vercel]], [[Firebase]], [[Gemini API]] y [[Python]].

@@ -23,10 +23,12 @@ compartido y su mecanismo de rotación de claves. Devuelve un objeto con
 y `parametros` extraídos del texto. Un historial opcional aporta contexto
 conversacional.
 
-La función clasifica solicitudes: no ejecuta escrituras de finanzas, no
-reemplaza `analizar_intencion_mensaje` ni el router determinístico actual del
-webhook. Los errores de credenciales/API y respuestas no válidas se propagan
-para no presentarlos como resultados exitosos.
+El webhook conserva el router determinístico como primera etapa e invoca esta
+función solo si no reconoce el mensaje. Las consultas financieras compatibles
+continúan por el parser y ejecutor existentes; las consultas generales reciben
+una respuesta de Gemini. Las solicitudes de tareas no reconocidas no se
+presentan como ejecutadas. Los errores de credenciales/API y respuestas no
+válidas se propagan para no presentarlos como resultados exitosos.
 
 ## Configuración y verificación
 

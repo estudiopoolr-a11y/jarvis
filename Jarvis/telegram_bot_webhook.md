@@ -48,7 +48,7 @@ El bot ya no "pregunta" a Telegram si hay mensajes nuevos. En su lugar, Telegram
 2. El endpoint recibe el JSON, extrae el texto y el `chat_id`.
 3. Se procesa la intención mediante el flujo de IA:
    - **NLP Local**: Parsers determinísticos rápidos.
-   - **Hermes Agent**: Razonamiento ReAct vía LLM (Gemini/Nvidia).
+   - **Fallback Gemini**: Clasificaci?n consciente con `analizar_solicitud_consciente` y respuesta generativa para consultas generales.
 4. La respuesta se envía mediante una petición asíncrona a `sendMessage` de la API de Telegram.
 
 ## Manejo Defensivo en Entornos Serverless

@@ -45,7 +45,7 @@ El bot opera mediante un webhook configurado en `[[Jarvis/telegram_bot_webhook.m
 | `/gasto <monto> <cat>` | Registro | Registra una transacción rápidamente (Ej: `/gasto 15000 comida`). |
 
 ### 🧠 Interacción en Lenguaje Natural
-Cualquier mensaje que no sea un comando es enviado al motor de IA (`[[Hermes Agent]]`). Además, frases en lenguaje natural como las siguientes son procesadas directamente por el motor de clasificación de intenciones NLP:
+El webhook procesa primero cada mensaje con los parsers determin?sticos. Si no reconocen la solicitud, `analizar_solicitud_consciente` clasifica la intenci?n mediante [[Gemini API]]; las consultas financieras compatibles contin?an por el parser y ejecutor existentes, y las consultas generales reciben una respuesta generativa.
 
 - **"Le presté 50k a Carlos"** → Registra un préstamo.
 - **"Gasté 20mil en almuerzo con efectivo"** → Registra un gasto en Kebo.

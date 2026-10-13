@@ -42,8 +42,8 @@ Este módulo se basa en los datos procesados por [[Módulo de Finanzas]]:
 
 ## Estado de Implementación
 
-- [x] **PASO 4 Completado**: Las herramientas `obtener_balance_consolidado` y `generar_recomendaciones_inversion` han sido implementadas en `src/agent/tools.py`.
+- [x] **PASO 4 Completado**: El balance y las recomendaciones se resuelven desde los m?dulos financieros del backend.
 - [x] **Pruebas validadas**: El script `scripts/test_balance_inversion.py` verifica correctamente el cálculo del balance consolidado (Nu + Nequi + Efectivo) y la generación de recomendaciones según los rangos de balance.
-- [x] **Integración con Hermes Agent**: Las herramientas están registradas en `ALL_TOOLS` y disponibles para el motor ReAct del agente.
+- [x] **Integracion financiera**: Las operaciones usan los modulos del backend y Firestore, sin un runtime de agente separado.
 
 49 | *Última actualización: 2026-10-02*

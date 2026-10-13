@@ -7,7 +7,6 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 ## Entidades Core
 - [[Módulo de Finanzas.md|Módulo de Finanzas]] - Gestión de cuentas transacciones y presupuestos.
 - [[modulo_prestamos_y_recordatorios.md|Módulo de Préstamos y Recordatorios]] - Gestión de deudas y alertas de vencimiento.
-- [[Hermes Agent.md|Hermes Agent]] - Motor de orquestación (ReAct) e inteligencia conversacional.
 - [[Base de Datos Firestore.md|Firestore]] - Gestión de bases de datos y persistencia.
 - [[arquitectura_atomic_design_bot.md|Atomic Design Bot]] - Arquitectura de 5 capas (Atoms, Molecules, Organisms, Templates, Routes).
 - [[limpieza_y_estructura_simplificada.md|Limpieza y Estructura Simplificada]] - Purga de código legado y topología final.
@@ -66,3 +65,5 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/arquitectura_paridad_python_y_vercel.md|Arquitectura Paridad Python y Vercel]] - Auditoría de paridad Python 3.12, PYTHONUNBUFFERED y script audit_environment_parity.py.
 - [[Jarvis/consolidacion_vercel_serverless.md|Consolidación Vercel Serverless]] - Reforzamiento de FastAPI, configuración Zero-Config y análisis de intenciones con Gemini.
 - [[Jarvis/integracion_analizador_consciente.md|Integración del Analizador Consciente]] - Enrutamiento de fallback Gemini del webhook Telegram en Vercel.
+- [[Jarvis/integracion_analizador_consciente.md|Integración del Analizador Consciente]] - Enrutamiento de fallback Gemini del webhook Telegram en Vercel.
+- [[Jarvis/purga_hermes_agent_y_persistencia.md|Purga del agente legado y persistencia]] - Retirada del runtime legado y uso de Firebase/Firestore en Vercel.

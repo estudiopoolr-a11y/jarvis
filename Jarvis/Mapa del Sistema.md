@@ -5,7 +5,7 @@ Este es el nodo central (Hub) de la documentación del proyecto Jarvis. Desde aq
 ## Módulos Principales
 - [[Base de Datos Firestore]] - Gestión de persistencia y estructura de datos.
 - [[Módulo de Finanzas]] - Lógica de cuentas, transacciones y presupuestos.
-- [[Hermes Agent]] - Motor de razonamiento y orquestación del agente.
+- [[Jarvis/consolidacion_vercel_serverless.md|FastAPI, Gemini y Vercel]] - Procesamiento serverless de solicitudes y acceso a Firestore.
 - [[Integración NVIDIA]] - Implementación de modelos y servicios de NVIDIA NIM.
 - [[Estrategia de Inversión]] - Lógica y análisis para la gestión de inversiones.
 

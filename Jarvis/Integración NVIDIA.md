@@ -1,11 +1,11 @@
 # Integración NVIDIA
 
-Esta nota documenta la integración de los servicios y modelos de NVIDIA, particularmente mediante NVIDIA NIM (NVIDIA Inference Microservices), para potenciar las capacidades de razonamiento y generación del agente Hermes.
+Esta nota conserva el registro hist?rico de la evaluaci?n de NVIDIA NIM (NVIDIA Inference Microservices). NVIDIA no forma parte del flujo activo de [[FastAPI]] en [[Vercel]], que usa [[Gemini API]].
 
 ## Configuración de la API NIM
-El sistema está configurado para utilizar modelos de lenguaje grandes (LLMs) proporcionados por NVIDIA NIM, como:
+La evaluacion historica considero modelos de lenguaje como:
 - **Llama 3.1 70B Instruct** ([[meta/llama-3.1-70b-instruct]])
-Estos modelos se integran a través del proveedor LLM centralizado en [[src/core/llm_provider.py]].
+La integracion con un proveedor centralizado descrita en las notas antiguas fue retirada; el backend actual usa el cliente compartido de Gemini.
 
 ## Prueba de Conectividad
 Se ha creado el script [[scripts/test_nvidia_api.py]] para validar la conectividad y funcionalidad de la API de NVIDIA:
@@ -13,14 +13,10 @@ Se ha creado el script [[scripts/test_nvidia_api.py]] para validar la conectivid
 - Prueba inferencias básicas para asegurar que no se produzcan errores HTTP como 404 (Not Found) o 410 (Gone).
 - Confirma que el modelo especificado en la configuración esté disponible y genere respuestas coherentes.
 
-## Integración con Hermes Agent
-La salida de los modelos NVIDIA es consumida por [[Hermes Agent]] como parte de su proceso de razonamiento ReAct:
-- El LLM provider selecciona el modelo NVIDIA configurado.
-- Las respuestas del modelo son procesadas dentro del bucle de Reasoning-Acting-Observing.
-- Se mantiene el flujo de control explícito donde las herramientas (no el LLM autónomo) realizan mutaciones en Firestore.
+## Estado actual
+Esta exploraci?n no configura un proveedor NVIDIA ni altera la persistencia en [[Firebase]]/Firestore. El webhook activo se describe en [[Jarvis/integracion_analizador_consciente]].
 
 ## Navegación
-- [[Hermes Agent]] - Detalles del motor agéntico que utiliza estos modelos.
 - [[Mapa del Sistema]] - Volver al nodo central de documentación.
 
 ---
@@ -28,10 +24,10 @@ La salida de los modelos NVIDIA es consumida por [[Hermes Agent]] como parte de 
 ## Avances del PASO 3
 
 - **2026-10-02:** Verificación completa del PASO 3 (Integración de Modelos NVIDIA):
-  - Configuración de LLM revisada en [[src/core/llm_provider.py]] confirmando soporte para NVIDIA NIM
+  - El soporte de NVIDIA NIM se documento de forma historica; no esta activo en el backend actual
   - Script de prueba creado y ejecutado: [[scripts/test_nvidia_api.py]]
   - Conectividad validada (modo simulación debido a falta de API key)
-  - Conector listo para usar modelos como [[meta/llama-3.1-70b-instruct]]
+  - La evaluacion es historica; NVIDIA no se usa en el despliegue actual.
 
 ---
 *Última actualización: 2026-10-02*

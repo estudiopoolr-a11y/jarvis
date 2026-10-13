@@ -33,7 +33,7 @@ Required (set in Vercel dashboard + local `.env`):
 - `GEMINI_API_KEY` (or `GEMINI_API_KEYS` comma‑separated)
 - `FIREBASE_CREDENTIALS` (JSON string of service account key)
 
-Optional: `HERMES_STORAGE_PATH`, `PORT`, `VERCEL_URL`, `DISCORD_WEBHOOK_URL`
+Optional: `PORT`, `VERCEL_URL`, `DISCORD_WEBHOOK_URL`
 
 `.env` is gitignored. Never commit secrets.
 

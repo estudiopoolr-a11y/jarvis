@@ -2,8 +2,9 @@
 
 JARVIS es una API [[FastAPI]] desplegada como funciones Python Serverless en
 [[Vercel]]. Integra un bot de [[Telegram]], análisis de lenguaje natural con
-[[Gemini API]], persistencia financiera en [[Firebase]]/Firestore y endpoints
-para el widget. `vercel.json` conserva la configuración Zero-Config con
+[[Gemini API]], persistencia en [[Firebase]]/Firestore y endpoints para el
+widget. El backend usa `modules/firestore/client.py` como cliente compartido
+de persistencia. `vercel.json` conserva la configuración Zero-Config con
 `PYTHONUNBUFFERED=1`; el enrutamiento se descubre desde la aplicación y no
 requiere bloques manuales `builds` o `functions`.
 

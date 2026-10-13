@@ -121,12 +121,12 @@ def renombrar_cuenta(usuario_id, cuenta_id_o_nombre, nuevo_nombre):
             target_id = cuenta_id_o_nombre
         else:
             # Buscar por nombre (insensible a mayúsculas, minúsculas y tildes)
-            from src.agent.tools import _normalizar_texto
-            nombre_buscado_norm = _normalizar_texto(cuenta_id_o_nombre)
+            from modules.nlp.text import normalizar_texto
+            nombre_buscado_norm = normalizar_texto(cuenta_id_o_nombre)
             docs = accounts_ref.stream()
             for d in docs:
                 data = d.to_dict()
-                nombre_cuenta_norm = _normalizar_texto(data.get("nombre", ""))
+                nombre_cuenta_norm = normalizar_texto(data.get("nombre", ""))
                 if nombre_buscado_norm in nombre_cuenta_norm:
                     target_id = d.id
                     break
@@ -165,4 +165,3 @@ def actualizar_cuenta(usuario_id, cuenta_id, data):
     except Exception as e:
         print(f"Error actualizando cuenta: {e}")
         return False
-
