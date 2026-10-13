@@ -7,6 +7,8 @@ const BASE_URL = "https://jarvis-two-pi-13.vercel.app";
 const WIDGET_ENDPOINT = `${BASE_URL}/api/widget/resumen`;
 const USER_ID = "default_user";
 const CACHE_KEY = "jarvis_widget_data";
+const fileManager = FileManager.local();
+const cachePath = fileManager.joinPath(fileManager.documentsDirectory(), `${CACHE_KEY}.json`);
 
 // Colores tema oscuro
 const COLORS = {
@@ -35,22 +37,21 @@ async function fetchJSON(url) {
         if (!response || response.status !== "ok") {
             throw new Error(response && response.detail ? response.detail : "Respuesta de datos inválida")
         }
-        // Guardar en caché si la petición es exitosa
-        Cache.set(CACHE_KEY, JSON.stringify(response))
+        try {
+            fileManager.writeString(cachePath, JSON.stringify(response))
+        } catch (cacheError) {
+            console.error("Error guardando caché:", cacheError)
+        }
         return response
     } catch (e) {
         console.error("Error conectando a JARVIS: " + url + " -> " + e)
-        // Intentar obtener datos de caché
-        const cached = Cache.get(CACHE_KEY)
-        if (cached) {
-            try {
-                const cachedData = JSON.parse(cached)
-                // Añadir indicador de modo offline
-                cachedData.offline = true
-                return cachedData
-            } catch (parseError) {
-                console.error("Error parseando caché:", parseError)
-            }
+        try {
+            if (!fileManager.fileExists(cachePath)) return null
+            const cachedData = JSON.parse(fileManager.readString(cachePath))
+            cachedData.offline = true
+            return cachedData
+        } catch (cacheError) {
+            console.error("Error leyendo caché:", cacheError)
         }
         return null
     }
@@ -96,7 +97,7 @@ async function buildWidget() {
         errMsg.textColor = new Color(COLORS.danger)
 
         errStack.addSpacer(4)
-        const hint = errStack.addText("Revisa el servidor /api/widget/dashboard")
+        const hint = errStack.addText("Revisa el servidor /api/widget/resumen")
         hint.font = Font.systemFont(9)
         hint.textColor = new Color(COLORS.subtitle)
         return w
