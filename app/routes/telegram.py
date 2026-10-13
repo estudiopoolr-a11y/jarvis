@@ -12,6 +12,7 @@ from modules.ai import (  # Importar analizadores NLP y la respuesta conversacio
 )
 from modules.nvidia.think import pensar_respuesta_nvidia  # Importar motor NVIDIA como fallback //
 from modules.intent_handler import ejecutar_intencion_nlp  # Importar enrutador de intenciones asíncrono #
+from modules.finance.interceptor import detectar_e_interactuar_finanzas  # Interceptar consultas financieras para evitar alucinaciones LLM //
 
 router = APIRouter()  # Instanciar enrutador de FastAPI sin prefijo (el prefijo se aplica en main.py) #
 logger = logging.getLogger("jarvis.telegram")  # Crear logger exclusivo para Telegram #
@@ -80,6 +81,14 @@ async def atender_telegram_webhook(request: Request):  # Controlador asíncrono 
 
         if chat_id and mensaje_texto:  # Validar presencia de ID de chat y texto #
             print(f"🔍 [VERCEL PROCESSING] Chat ID: {chat_id} - Texto: '{mensaje_texto}'", flush=True)  # Log de procesamiento #
+
+            # PASO 0: Interceptar consultas financieras ANTES de cualquier LLM para evitar alucinaciones
+            # Si el mensaje contiene palabras clave financieras, consultar Firestore directamente
+            respuesta_financiera = detectar_e_interactuar_finanzas(mensaje_texto)
+            if respuesta_financiera:
+                print(f"🛡️ [INTERCEPTOR] Consulta financiera detectada, usando datos reales de Firestore", flush=True)
+                await despachar_respuesta_telegram(chat_id, respuesta_financiera)
+                return {"status": "ok"}
 
             # Ejecución segura con wrapper universal (evita TypeError: object dict can't be used in 'await') #
             # Usar el router NLP completo (procesar_intencion_natural) que consulta Firebase directamente

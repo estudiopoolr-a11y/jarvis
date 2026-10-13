@@ -70,3 +70,4 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 - [[Jarvis/estructura_financiera_firebase.md|Estructura Financiera 2026 en Firebase]] - Ingesta de ingresos, gastos por categoría y loans 2026 mediante `scripts/seed_finanzas_2026.py`.
 - [[Jarvis/purga_hermes_agent_y_persistencia.md|Purga del agente legado y persistencia]] - Retirada del runtime legado y uso de Firebase/Firestore en Vercel.
 - [[Jarvis/rotacion_api_nvidia_nim.md|Rotación API Keys NVIDIA]] - Sistema de fallback con rotación automática de claves NVIDIA NIM para evitar bloqueos por rate limiting en Gemini.
+- [[Jarvis/prevencion_alucinaciones_financieras.md|Prevención de Alucinaciones Financieras]] - Interceptor heurístico que fuerza lectura directa de Firestore antes de cualquier LLM cuando se detectan palabras clave financieras.
