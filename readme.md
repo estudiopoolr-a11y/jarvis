@@ -44,6 +44,19 @@ Dos interceptores se ejecutan ANTES de cualquier LLM (Gemini/NVIDIA):
 1. **Financiero** (`modules/finance/interceptor.py`): Detecta palabras clave como presupuesto, gasto, balance, ingreso, deuda. Resuelve directamente desde Firestore sin pasar por IA.
 2. **Tareas** (`app/routes/telegram.py`, función `detectar_e_interactuar_tareas`): Intercepta consultas de tareas ("qué tareas tengo", "anotar tarea", etc.) y las gestiona directamente con Firestore, evitando que los LLM inventen IDs o estados.
 
+## Asesoría Financiera (Propuestas Históricas)
+
+El módulo `modules/finance/advisor.py` genera propuestas de presupuesto para
+consultas como “¿qué presupuesto debería asignar en octubre?”. Calcula ingresos
+promedio y topes por categoría con los agregados reales de
+`modules/finance/dashboard.py`, usando hasta cuatro meses anteriores que tengan
+actividad y omitiendo meses vacíos. Si no existe historial, informa que no puede
+proyectar; no sustituye datos faltantes por un ingreso predeterminado.
+
+La propuesta es informativa, no guarda presupuestos ni ejecuta inversiones, y
+no garantiza ingresos futuros. La persistencia activa es Firestore; el asesor
+no consulta Notion. Véase [[Jarvis/motor_asesoria_financiera_inteligente.md]].
+
 ## Estructura de Datos en Firebase
 
 ### Colecciones Financieras
