@@ -14,6 +14,13 @@ Desde aquí puedes navegar a todos los componentes principales, arquitecturas y 
 ## Integraciones y Arquitectura
 - [[Integración NVIDIA.md|NVIDIA NIM]] - Conectores hacia modelos LLM de NVIDIA.
 - [[Estrategia de Inversión.md|Inversión y Metas]] - Lógica algorítmica para pago de deudas y proyecciones.
+
+
+
+
+
+
+- [[Jarvis/motor_asesoria_financiera_inteligente.md|Asesoría Financiera Inteligente]] - Propuestas presupuestales basadas en promedios históricos reales de Firestore.
 - [[FastAPI.md|FastAPI]] - API principal alojada en servidor web.
 - [[Vercel.md|Vercel]] - Infraestructura para serverless deployment.
 - [[Jarvis/telegram_bot_webhook.md|Telegram Bot Webhook]] - Integración serverless con Telegram vía Vercel (con arquitectura Atomic Design).
