@@ -193,6 +193,7 @@ def generar_mensaje_propuesta(propuesta: dict[str, Any]) -> str:
         f"📈 **Recomendación general:** {propuesta['recomendacion']}\n\n"
         "Esta es una estimación basada en el historial, no una garantía de "
         "ingresos futuros ni asesoría financiera personalizada. "
-        "No se guardó ningún presupuesto. ¿Deseas que lo guardemos?"
+        "No se guardó ningún presupuesto; este asesor aún no tiene habilitada "
+        "la acción de guardado."
     )
     return mensaje
